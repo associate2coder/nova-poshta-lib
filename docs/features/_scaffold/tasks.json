@@ -1,0 +1,73 @@
+{
+  "slug": "_scaffold",
+  "tasks": [
+    {
+      "id": "S1",
+      "title": "Create the module structure, package.json, tsconfig, and tsup build config",
+      "layer": "scaffold",
+      "deps": [],
+      "acs": [],
+      "dod": "project builds (empty): `npm run build` succeeds and emits dual ESM+CJS output to dist/",
+      "files_hint": [
+        "package.json",
+        "tsconfig.json",
+        "tsup.config.ts",
+        "src/index.ts",
+        "src/client.ts",
+        "src/modules/.gitkeep",
+        "src/types/.gitkeep"
+      ]
+    },
+    {
+      "id": "S2",
+      "title": "Wire the Vitest test harness plus a boot smoke test",
+      "layer": "scaffold",
+      "deps": ["S1"],
+      "acs": [],
+      "dod": "empty/smoke test suite runs green via `npm test`; a smoke test asserts the package entry point imports and exports a client factory without throwing",
+      "files_hint": [
+        "vitest.config.ts",
+        "test/unit/smoke.test.ts",
+        "test/integration/.gitkeep"
+      ]
+    },
+    {
+      "id": "S3",
+      "title": "Set up ESLint + Prettier",
+      "layer": "scaffold",
+      "deps": ["S1"],
+      "acs": [],
+      "dod": "`npm run lint` runs clean against the scaffolded skeleton",
+      "files_hint": [
+        "eslint.config.js",
+        ".prettierrc"
+      ]
+    },
+    {
+      "id": "S4",
+      "title": "Add GitHub Actions CI (build+test+lint) and a Changesets release workflow",
+      "layer": "scaffold",
+      "deps": ["S2", "S3"],
+      "acs": [],
+      "dod": "CI workflow config is valid YAML and its commands match build_cmd/test_cmd/lint_cmd in docs/architecture-map.md; release workflow is wired to run `changeset publish` on merge to main",
+      "files_hint": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml",
+        ".changeset/config.json"
+      ]
+    },
+    {
+      "id": "S5",
+      "title": "Write README, CONTRIBUTING, and CLAUDE.md from the fixed conventions",
+      "layer": "scaffold",
+      "deps": ["S1"],
+      "acs": [],
+      "dod": "README documents install + basic usage (placeholder example) + how to run tests/lint/build; CONTRIBUTING documents the changeset-per-PR requirement and that main is protected (PR + passing CI required, no direct pushes); CLAUDE.md reflects the module/domain layout, error convention, and test convention from docs/architecture-map.md",
+      "files_hint": [
+        "README.md",
+        "CONTRIBUTING.md",
+        "CLAUDE.md"
+      ]
+    }
+  ]
+}

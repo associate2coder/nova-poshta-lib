@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createClient } from "../../../src/index.js";
 import { createCounterpartyModule } from "../../../src/modules/counterparty/index.js";
+import type { SavedAddress } from "../../../src/types/address.js";
 
 function mockFetchOnce(handler: (body: unknown) => { ok: boolean; status?: number; json: () => Promise<unknown> }) {
   const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
@@ -92,6 +93,41 @@ describe("counterparty module — lookups (T2, AC-01/AC-02)", () => {
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(sentBody.modelName).toBe("Counterparty");
     expect(sentBody.calledMethod).toBe("getCounterpartyContactPersons");
+    expect(sentBody.methodProperties).toEqual({ Ref: "cp-1" });
+  });
+});
+
+describe("counterparty module — cross-module address + options lookups (T3, AC-01/AC-02)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("getCounterpartyAddresses sends calledMethod getCounterpartyAddresses and resolves address's own SavedAddress shape", async () => {
+    const fetchMock = mockFetchOnce(() =>
+      successEnvelope([{ Ref: "addr-1", CounterpartyRef: "cp-1", StreetRef: "street-1", BuildingNumber: "12" }]),
+    );
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    const result: SavedAddress[] = await counterparty.getCounterpartyAddresses({ Ref: "cp-1" });
+    expect(result).toEqual([
+      { Ref: "addr-1", CounterpartyRef: "cp-1", StreetRef: "street-1", BuildingNumber: "12" },
+    ]);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("Counterparty");
+    expect(sentBody.calledMethod).toBe("getCounterpartyAddresses");
+    expect(sentBody.methodProperties).toEqual({ Ref: "cp-1" });
+  });
+
+  it("getCounterpartyOptions sends calledMethod getCounterpartyOptions and returns the typed array unmodified", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([{ someOption: true }]));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(counterparty.getCounterpartyOptions({ Ref: "cp-1" })).resolves.toEqual([{ someOption: true }]);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("Counterparty");
+    expect(sentBody.calledMethod).toBe("getCounterpartyOptions");
     expect(sentBody.methodProperties).toEqual({ Ref: "cp-1" });
   });
 });

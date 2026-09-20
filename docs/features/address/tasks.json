@@ -1,0 +1,95 @@
+{
+  "slug": "address",
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Define address domain types",
+      "layer": "domain",
+      "deps": [],
+      "acs": ["AC-01", "AC-02", "AC-03", "AC-04", "AC-05", "AC-06", "AC-07"],
+      "dod": "src/types/address.ts compiles with zero any, UpdateAddressPayload is derived from SaveAddressPayload via a utility type, tsc --noEmit and lint pass",
+      "files_hint": ["src/types/address.ts"]
+    },
+    {
+      "id": "T2",
+      "title": "Implement plain lookup methods",
+      "layer": "app",
+      "deps": ["T1"],
+      "acs": ["AC-01", "AC-02"],
+      "dod": "getCities/getSettlements/getAreas/getWarehouseTypes each have a mocked-fetch unit test asserting the request shape and unmodified pass-through of filters/results",
+      "files_hint": ["src/modules/address/index.ts"]
+    },
+    {
+      "id": "T3",
+      "title": "Implement filtered directory lookups",
+      "layer": "app",
+      "deps": ["T1"],
+      "acs": ["AC-01", "AC-02"],
+      "dod": "getStreet/getWarehouses each have a mocked-fetch unit test asserting filter fields reach methodProperties verbatim with no re-filtering",
+      "files_hint": ["src/modules/address/index.ts"]
+    },
+    {
+      "id": "T4",
+      "title": "Implement search-wrapper lookups",
+      "layer": "app",
+      "deps": ["T1"],
+      "acs": ["AC-01", "AC-02", "AC-03"],
+      "dod": "searchSettlements/searchSettlementStreets return the SearchWrapper object verbatim (not just Addresses) and resolve undefined on an empty envelope, each asserted by a unit test",
+      "files_hint": ["src/modules/address/index.ts"]
+    },
+    {
+      "id": "T5",
+      "title": "Implement write methods",
+      "layer": "app",
+      "deps": ["T1"],
+      "acs": ["AC-04", "AC-05", "AC-06", "AC-07"],
+      "dod": "save/update/delete each have a happy-path test (returns the record) and an empty-on-success test (resolves undefined, does not throw); a compile-time test proves an incomplete UpdateAddressPayload fails to compile",
+      "files_hint": ["src/modules/address/index.ts"]
+    },
+    {
+      "id": "T6",
+      "title": "Implement findCityByName convenience method",
+      "layer": "app",
+      "deps": ["T2"],
+      "acs": ["AC-11"],
+      "dod": "findCityByName makes exactly one call to getCities with FindByString set, and resolves undefined on an empty result, both asserted by a unit test",
+      "files_hint": ["src/modules/address/index.ts"]
+    },
+    {
+      "id": "T7",
+      "title": "Wire address module into the public package surface",
+      "layer": "wiring",
+      "deps": ["T2", "T3", "T4", "T5", "T6"],
+      "acs": ["AC-12"],
+      "dod": "createAddressModule and its types import and type-check from nova-poshta-lib's public entry point, with no caching/memoization added",
+      "files_hint": ["src/index.ts"]
+    },
+    {
+      "id": "T8",
+      "title": "Unit test suite for address",
+      "layer": "tests",
+      "deps": ["T7"],
+      "acs": ["AC-01", "AC-02", "AC-03", "AC-04", "AC-05", "AC-06", "AC-07", "AC-08", "AC-09", "AC-10", "AC-11"],
+      "dod": "npm test passes with every AC-01..AC-11 covered by a named/tagged test, including the shared error-contract block and the <=5ms overhead benchmark",
+      "files_hint": ["test/unit/modules/address.test.ts"]
+    },
+    {
+      "id": "T9",
+      "title": "Extend published-build type-surface check",
+      "layer": "tests",
+      "deps": ["T7"],
+      "acs": ["AC-13"],
+      "dod": "test/unit/build-surface.test.ts fails if any of address's 12 identifiers is missing from dist/index.d.ts or dist/index.d.cts, and passes after npm run build",
+      "files_hint": ["test/unit/build-surface.test.ts"]
+    },
+    {
+      "id": "T10",
+      "title": "Update README usage example",
+      "layer": "docs",
+      "deps": ["T7"],
+      "acs": ["AC-13"],
+      "dod": "README's Usage section shows a real, type-checked address call and no longer contains the placeholder comment",
+      "files_hint": ["README.md"]
+    }
+  ]
+}

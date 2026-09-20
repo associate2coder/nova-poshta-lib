@@ -20,14 +20,55 @@ const METHOD_NAMES = [
   "getTypesOfCounterparties",
 ];
 
+const ADDRESS_METHOD_NAMES = [
+  "getCities",
+  "getSettlements",
+  "searchSettlements",
+  "getAreas",
+  "getStreet",
+  "searchSettlementStreets",
+  "getWarehouses",
+  "getWarehouseTypes",
+  "save",
+  "update",
+  "delete",
+  "findCityByName",
+];
+
 function declarationPath(relativePath: string): string {
-  return fileURLToPath(new URL(`../../${relativePath}`, import.meta.url));
+  return fileURLToPath(new URL(`../../${relativePath.replace(/^\.\//, "")}`, import.meta.url));
 }
+
+interface PackageJsonExportsCondition {
+  import?: { types?: string };
+  require?: { types?: string };
+}
+
+function resolvedTypesPaths(): { esm: string; cjs: string } {
+  const packageJson = JSON.parse(readFileSync(declarationPath("package.json"), "utf8")) as {
+    exports: { ".": PackageJsonExportsCondition };
+  };
+  const condition = packageJson.exports["."];
+  const esm = condition.import?.types;
+  const cjs = condition.require?.types;
+  if (!esm || !cjs) {
+    // A regression class AC-13 exists to catch: e.g. collapsing "exports['.']" back to flat
+    // import/require strings silently drops the CJS "types" condition, leaving CJS consumers
+    // unable to resolve a .d.cts at all even though the file is still built.
+    throw new Error(
+      "package.json exports['.'] must declare both import.types and require.types (AC-13) — got: " +
+        JSON.stringify(condition),
+    );
+  }
+  return { esm, cjs };
+}
+
+const { esm: ESM_TYPES_PATH, cjs: CJS_TYPES_PATH } = resolvedTypesPaths();
 
 describe("published build surface (AC-07)", () => {
   it.each([
-    ["dist/index.d.ts", "ESM"],
-    ["dist/index.d.cts", "CJS"],
+    [ESM_TYPES_PATH, "ESM"],
+    [CJS_TYPES_PATH, "CJS"],
   ])("%s (%s) declares createCommonModule and all 15 reference-list methods as distinct identifiers", (relativePath) => {
     let contents: string;
     try {
@@ -41,6 +82,27 @@ describe("published build surface (AC-07)", () => {
       // A word-boundary match, not a substring check — "getTypesOfPayers" is itself a
       // substring of "getTypesOfPayersForRedelivery", so a plain `.toContain` would still
       // pass even if the shorter method were deleted entirely.
+      expect(contents, `expected ${relativePath} to declare ${method} as its own identifier`).toMatch(
+        new RegExp(`\\b${method}\\b`),
+      );
+    }
+  });
+
+  it.each([
+    [ESM_TYPES_PATH, "ESM"],
+    [CJS_TYPES_PATH, "CJS"],
+  ])("%s (%s) declares createAddressModule and all 12 address identifiers (AC-13)", (relativePath) => {
+    let contents: string;
+    try {
+      contents = readFileSync(declarationPath(relativePath), "utf8");
+    } catch {
+      throw new Error(`${relativePath} is missing — run "npm run build" before this test`);
+    }
+
+    expect(contents).toMatch(/\bcreateAddressModule\b/);
+    for (const method of ADDRESS_METHOD_NAMES) {
+      // Word-boundary match — "update"/"save"/"delete" are common enough identifiers that a
+      // loose substring check could false-positive against unrelated declarations.
       expect(contents, `expected ${relativePath} to declare ${method} as its own identifier`).toMatch(
         new RegExp(`\\b${method}\\b`),
       );

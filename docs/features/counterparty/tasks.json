@@ -1,0 +1,98 @@
+{
+  "slug": "counterparty",
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Define counterparty domain types",
+      "layer": "domain",
+      "deps": [],
+      "acs": ["AC-03", "AC-04", "AC-05", "AC-06", "AC-07", "AC-08", "AC-09", "AC-10"],
+      "dod": "src/types/counterparty.ts compiles with zero any; SaveCounterpartyPayload/UpdateCounterpartyPayload are three hand-written per-variant interfaces unioned (ADR-0001), never collapsed to shared fields; UpdateContactPersonPayload is derived from SaveContactPersonPayload via Required<Omit<>>; tsc --noEmit and lint pass",
+      "files_hint": ["src/types/counterparty.ts"]
+    },
+    {
+      "id": "T2",
+      "title": "Implement counterparty and contact-person lookup methods",
+      "layer": "app",
+      "deps": ["T1"],
+      "acs": ["AC-01", "AC-02"],
+      "dod": "getCounterparties/getCounterpartiesCatalog/getCounterpartyContactPersons each have a mocked-fetch unit test asserting the request shape, unmodified pass-through of filters/results, and no auto-paging when Page is omitted",
+      "files_hint": ["src/modules/counterparty/index.ts"]
+    },
+    {
+      "id": "T3",
+      "title": "Implement cross-module address lookup and options lookup",
+      "layer": "app",
+      "deps": ["T1"],
+      "acs": ["AC-01", "AC-02"],
+      "dod": "getCounterpartyAddresses resolves address's own SavedAddress[] type (imported, not redefined) and getCounterpartyOptions resolves CounterpartyOptions[], each asserted by a mocked-fetch unit test",
+      "files_hint": ["src/modules/counterparty/index.ts"]
+    },
+    {
+      "id": "T4",
+      "title": "Implement counterparty write methods",
+      "layer": "app",
+      "deps": ["T1"],
+      "acs": ["AC-03", "AC-04", "AC-05", "AC-06", "AC-07"],
+      "dod": "save/update/delete each have a happy-path test per counterparty type (returns the discriminated record incl. its Ref) and an empty-on-success test (resolves undefined, does not throw); a compile-time test proves an incomplete or mixed-type UpdateCounterpartyPayload fails to compile",
+      "files_hint": ["src/modules/counterparty/index.ts"]
+    },
+    {
+      "id": "T5",
+      "title": "Implement contact-person write methods",
+      "layer": "app",
+      "deps": ["T1"],
+      "acs": ["AC-07", "AC-08", "AC-09", "AC-10"],
+      "dod": "saveContactPerson/updateContactPerson/deleteContactPerson each have a happy-path test and an empty-on-success test (resolves undefined); a compile-time test proves an incomplete UpdateContactPersonPayload fails to compile",
+      "files_hint": ["src/modules/counterparty/index.ts"]
+    },
+    {
+      "id": "T6",
+      "title": "Implement findCounterparty convenience method",
+      "layer": "app",
+      "deps": ["T2"],
+      "acs": ["AC-11"],
+      "dod": "findCounterparty makes exactly one call to getCounterparties with FindByString set (and an optional CounterpartyProperty passed through), performs no post-call re-filtering, and returns the same typed array the raw method would, asserted by a unit test",
+      "files_hint": ["src/modules/counterparty/index.ts"]
+    },
+    {
+      "id": "T7",
+      "title": "Wire counterparty module into the public package surface",
+      "layer": "wiring",
+      "deps": ["T2", "T3", "T4", "T5", "T6"],
+      "acs": ["AC-17"],
+      "dod": "createCounterpartyModule and its types import and type-check from nova-poshta-lib's public entry point, with no caching/memoization added",
+      "files_hint": ["src/index.ts"]
+    },
+    {
+      "id": "T8",
+      "title": "Unit test suite for counterparty",
+      "layer": "tests",
+      "deps": ["T7"],
+      "acs": [
+        "AC-01", "AC-02", "AC-03", "AC-04", "AC-05", "AC-06", "AC-07", "AC-08", "AC-09", "AC-10",
+        "AC-11", "AC-12", "AC-13", "AC-14", "AC-15", "AC-16", "AC-17"
+      ],
+      "dod": "npm test passes with every AC-01..AC-17 covered by a named/tagged test, including the shared error-contract block (AC-14/AC-15/AC-16), the no-cross-context-enforcement check (AC-13), and the <=5ms overhead benchmark",
+      "files_hint": ["test/unit/modules/counterparty.test.ts"]
+    },
+    {
+      "id": "T9",
+      "title": "Extend published-build type-surface check",
+      "layer": "tests",
+      "deps": ["T7"],
+      "acs": ["AC-17"],
+      "dod": "test/unit/build-surface.test.ts fails if any of counterparty's 12 identifiers (11 raw + findCounterparty) is missing from dist/index.d.ts or dist/index.d.cts, and passes after npm run build",
+      "files_hint": ["test/unit/build-surface.test.ts"]
+    },
+    {
+      "id": "T10",
+      "title": "Update README usage example",
+      "layer": "docs",
+      "deps": ["T7"],
+      "acs": [],
+      "dod": "README's Usage section shows a real, type-checked counterparty call and no longer contains the placeholder comment",
+      "files_hint": ["README.md"]
+    }
+  ]
+}

@@ -35,6 +35,21 @@ const ADDRESS_METHOD_NAMES = [
   "findCityByName",
 ];
 
+const COUNTERPARTY_METHOD_NAMES = [
+  "getCounterparties",
+  "getCounterpartiesCatalog",
+  "getCounterpartyContactPersons",
+  "getCounterpartyAddresses",
+  "getCounterpartyOptions",
+  "save",
+  "update",
+  "delete",
+  "saveContactPerson",
+  "updateContactPerson",
+  "deleteContactPerson",
+  "findCounterparty",
+];
+
 function declarationPath(relativePath: string): string {
   return fileURLToPath(new URL(`../../${relativePath.replace(/^\.\//, "")}`, import.meta.url));
 }
@@ -104,6 +119,35 @@ describe("published build surface (AC-07)", () => {
       // Word-boundary match — "update"/"save"/"delete" are common enough identifiers that a
       // loose substring check could false-positive against unrelated declarations.
       expect(contents, `expected ${relativePath} to declare ${method} as its own identifier`).toMatch(
+        new RegExp(`\\b${method}\\b`),
+      );
+    }
+  });
+
+  it.each([
+    [ESM_TYPES_PATH, "ESM"],
+    [CJS_TYPES_PATH, "CJS"],
+  ])("%s (%s) declares createCounterpartyModule and all 12 counterparty identifiers (AC-17)", (relativePath) => {
+    let contents: string;
+    try {
+      contents = readFileSync(declarationPath(relativePath), "utf8");
+    } catch {
+      throw new Error(`${relativePath} is missing — run "npm run build" before this test`);
+    }
+
+    expect(contents).toMatch(/\bcreateCounterpartyModule\b/);
+
+    // Sliced to the CounterpartyModule interface body — several of its method names
+    // ("save"/"update"/"delete") are shared with AddressModule, so matching against the
+    // whole file would still pass even if these were deleted from CounterpartyModule itself.
+    const interfaceMatch = contents.match(/interface CounterpartyModule \{([\s\S]*?)\n\}/);
+    expect(interfaceMatch, `expected ${relativePath} to declare a CounterpartyModule interface`).not.toBeNull();
+    const interfaceBody = interfaceMatch![1];
+
+    for (const method of COUNTERPARTY_METHOD_NAMES) {
+      // Word-boundary match — "update"/"save"/"delete" are common enough identifiers that a
+      // loose substring check could false-positive against unrelated declarations.
+      expect(interfaceBody, `expected ${relativePath}'s CounterpartyModule to declare ${method}`).toMatch(
         new RegExp(`\\b${method}\\b`),
       );
     }

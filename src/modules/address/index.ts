@@ -40,6 +40,7 @@ export interface AddressModule {
    */
   update(payload: UpdateAddressPayload): Promise<SavedAddress | undefined>;
   delete(payload: DeleteAddressPayload): Promise<DeletedAddress | undefined>;
+  findCityByName(name: string): Promise<City | undefined>;
 }
 
 async function firstOrUndefined<T>(
@@ -52,7 +53,7 @@ async function firstOrUndefined<T>(
 }
 
 export function createAddressModule(client: NovaPoshtaClient): AddressModule {
-  return {
+  const module: AddressModule = {
     getCities: (filters?: GetCitiesFilters) =>
       client.request<City>("Address", "getCities", filters as Record<string, unknown>),
     getSettlements: (filters?: GetSettlementsFilters) =>
@@ -81,5 +82,10 @@ export function createAddressModule(client: NovaPoshtaClient): AddressModule {
       firstOrUndefined<SavedAddress>(client, "update", payload as unknown as Record<string, unknown>),
     delete: (payload: DeleteAddressPayload) =>
       firstOrUndefined<DeletedAddress>(client, "delete", payload as unknown as Record<string, unknown>),
+    findCityByName: async (name: string) => {
+      const cities = await module.getCities({ FindByString: name });
+      return cities[0];
+    },
   };
+  return module;
 }

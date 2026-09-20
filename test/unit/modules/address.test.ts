@@ -252,6 +252,31 @@ describe("address module — write methods (T5, AC-04/AC-05/AC-06/AC-07)", () =>
   });
 });
 
+describe("address module — findCityByName convenience method (T6, AC-11)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("makes exactly one call to getCities with FindByString set to the given name", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([{ Ref: "city-1", Description: "Київ" }]));
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(address.findCityByName("Київ")).resolves.toEqual({ Ref: "city-1", Description: "Київ" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.calledMethod).toBe("getCities");
+    expect(sentBody.methodProperties).toEqual({ FindByString: "Київ" });
+  });
+
+  it("resolves undefined when the result is empty", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(address.findCityByName("Nonexistent")).resolves.toBeUndefined();
+  });
+});
+
 describe("address module — decline error branch", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

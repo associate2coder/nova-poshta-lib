@@ -3,7 +3,7 @@ id: T10
 title: "Update README usage example"
 layer: "docs"
 deps: ["T7"]
-acs: ["AC-17"]
+acs: []
 files_hint: ["README.md"]
 owner: "associate2coder"
 estimate: "S"
@@ -14,8 +14,11 @@ status: "todo"
 
 ## Why
 
-Discoverability (AC-17/US-10) extends beyond editor autocomplete to the README's own Usage section,
-matching `address`'s precedent of replacing its placeholder comment with a real, type-checked call.
+Discoverability (US-10) matters beyond editor autocomplete too — the README's own Usage section
+should show a real `counterparty` call, matching `address`'s precedent of replacing its placeholder
+comment with a type-checked example. Unlike AC-17 (which specifically gates the *published*
+`.d.ts`/`.d.cts` declaration files, verified in CI), no acceptance criterion covers the README itself —
+this task isn't part of that gate.
 
 ## What
 

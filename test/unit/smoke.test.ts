@@ -12,7 +12,7 @@ describe("package entry point", () => {
     expect(() => createAddressModule(createClient("test-api-key"))).not.toThrow();
   });
 
-  it("imports and exports createCounterpartyModule, type-checked against a real client (T7, AC-12)", () => {
+  it("imports and exports createCounterpartyModule, type-checked against a real client (T7, AC-17)", () => {
     expect(typeof createCounterpartyModule).toBe("function");
     expect(() => createCounterpartyModule(createClient("test-api-key"))).not.toThrow();
   });

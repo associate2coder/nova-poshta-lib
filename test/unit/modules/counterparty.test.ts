@@ -64,13 +64,13 @@ describe("counterparty module — lookups (T2, AC-01/AC-02)", () => {
     const counterparty = createCounterpartyModule(createClient("test-api-key"));
 
     await expect(
-      counterparty.getCounterpartiesCatalog({ Phone: "380500000000", LastName: "Fra" }),
+      counterparty.getCounterpartiesCatalog({ Phone: "380500000000", LastName: "Fra", Page: 2 }),
     ).resolves.toEqual([{ Ref: "cp-2", CounterpartyType: "PrivatePerson", LastName: "Franko" }]);
 
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(sentBody.modelName).toBe("Counterparty");
     expect(sentBody.calledMethod).toBe("getCounterpartiesCatalog");
-    expect(sentBody.methodProperties).toEqual({ Phone: "380500000000", LastName: "Fra" });
+    expect(sentBody.methodProperties).toEqual({ Phone: "380500000000", LastName: "Fra", Page: 2 });
   });
 
   it("getCounterpartiesCatalog resolves an empty array, not an error, when no match is found", async () => {
@@ -86,14 +86,14 @@ describe("counterparty module — lookups (T2, AC-01/AC-02)", () => {
     );
     const counterparty = createCounterpartyModule(createClient("test-api-key"));
 
-    await expect(counterparty.getCounterpartyContactPersons({ Ref: "cp-1" })).resolves.toEqual([
+    await expect(counterparty.getCounterpartyContactPersons({ Ref: "cp-1", Page: 3 })).resolves.toEqual([
       { Ref: "contact-1", FirstName: "Petro", LastName: "Ivanenko" },
     ]);
 
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(sentBody.modelName).toBe("Counterparty");
     expect(sentBody.calledMethod).toBe("getCounterpartyContactPersons");
-    expect(sentBody.methodProperties).toEqual({ Ref: "cp-1" });
+    expect(sentBody.methodProperties).toEqual({ Ref: "cp-1", Page: 3 });
   });
 });
 
@@ -329,7 +329,7 @@ describe("counterparty module — contact-person write methods (T5, AC-07/AC-08/
     ).resolves.toBeUndefined();
   });
 
-  it("updateContactPerson sends modelName ContactPerson / calledMethod update and resolves the updated record's own Ref (AC-10)", async () => {
+  it("updateContactPerson sends modelName ContactPerson / calledMethod update and resolves the updated record's own Ref (AC-09)", async () => {
     const fetchMock = mockFetchOnce(() =>
       successEnvelope([{ Ref: "contact-1", FirstName: "Petro", LastName: "Ivanenko" }]),
     );
@@ -451,21 +451,25 @@ describe("counterparty module — authoritative Ref source, no caching (T8, AC-1
     vi.unstubAllGlobals();
   });
 
-  it("issues an independent request on every call — nothing memoized or stale", async () => {
-    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
-      const body = JSON.parse(init.body as string) as { methodProperties?: { FindByString?: string } };
-      const lastName = body.methodProperties?.FindByString === "Franko" ? "Franko" : "Kovalenko";
-      return successEnvelope([{ Ref: `cp-${lastName}`, CounterpartyType: "PrivatePerson", LastName: lastName }]);
+  it("issues an independent request on every call — nothing memoized or stale, even for the identical input", async () => {
+    // Same call, same arguments, twice — an argument-keyed cache would return the first
+    // response again; only a genuinely uncached call issues a second fetch and can surface
+    // Nova Poshta's second, different answer.
+    let callCount = 0;
+    const fetchMock = vi.fn(async () => {
+      callCount += 1;
+      const lastName = callCount === 1 ? "Franko" : "Franko-Updated";
+      return successEnvelope([{ Ref: `cp-${callCount}`, CounterpartyType: "PrivatePerson", LastName: lastName }]);
     });
     vi.stubGlobal("fetch", fetchMock);
     const counterparty = createCounterpartyModule(createClient("test-api-key"));
 
     const first = await counterparty.getCounterparties({ FindByString: "Franko" });
-    const second = await counterparty.getCounterparties({ FindByString: "Kovalenko" });
+    const second = await counterparty.getCounterparties({ FindByString: "Franko" });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(first).toEqual([{ Ref: "cp-Franko", CounterpartyType: "PrivatePerson", LastName: "Franko" }]);
-    expect(second).toEqual([{ Ref: "cp-Kovalenko", CounterpartyType: "PrivatePerson", LastName: "Kovalenko" }]);
+    expect(first).toEqual([{ Ref: "cp-1", CounterpartyType: "PrivatePerson", LastName: "Franko" }]);
+    expect(second).toEqual([{ Ref: "cp-2", CounterpartyType: "PrivatePerson", LastName: "Franko-Updated" }]);
   });
 });
 

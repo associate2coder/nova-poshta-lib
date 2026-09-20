@@ -60,7 +60,7 @@
       "title": "Wire counterparty module into the public package surface",
       "layer": "wiring",
       "deps": ["T2", "T3", "T4", "T5", "T6"],
-      "acs": ["AC-12"],
+      "acs": ["AC-17"],
       "dod": "createCounterpartyModule and its types import and type-check from nova-poshta-lib's public entry point, with no caching/memoization added",
       "files_hint": ["src/index.ts"]
     },
@@ -90,7 +90,7 @@
       "title": "Update README usage example",
       "layer": "docs",
       "deps": ["T7"],
-      "acs": ["AC-17"],
+      "acs": [],
       "dod": "README's Usage section shows a real, type-checked counterparty call and no longer contains the placeholder comment",
       "files_hint": ["README.md"]
     }

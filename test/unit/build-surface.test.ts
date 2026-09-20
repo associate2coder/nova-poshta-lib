@@ -136,10 +136,18 @@ describe("published build surface (AC-07)", () => {
     }
 
     expect(contents).toMatch(/\bcreateCounterpartyModule\b/);
+
+    // Sliced to the CounterpartyModule interface body — several of its method names
+    // ("save"/"update"/"delete") are shared with AddressModule, so matching against the
+    // whole file would still pass even if these were deleted from CounterpartyModule itself.
+    const interfaceMatch = contents.match(/interface CounterpartyModule \{([\s\S]*?)\n\}/);
+    expect(interfaceMatch, `expected ${relativePath} to declare a CounterpartyModule interface`).not.toBeNull();
+    const interfaceBody = interfaceMatch![1];
+
     for (const method of COUNTERPARTY_METHOD_NAMES) {
       // Word-boundary match — "update"/"save"/"delete" are common enough identifiers that a
       // loose substring check could false-positive against unrelated declarations.
-      expect(contents, `expected ${relativePath} to declare ${method} as its own identifier`).toMatch(
+      expect(interfaceBody, `expected ${relativePath}'s CounterpartyModule to declare ${method}`).toMatch(
         new RegExp(`\\b${method}\\b`),
       );
     }

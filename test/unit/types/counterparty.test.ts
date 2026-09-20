@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   Counterparty,
   DeleteContactPersonPayload,
+  GetCounterpartyAddressesFilters,
   OrganizationCounterparty,
   PrivatePersonCounterparty,
   SaveContactPersonPayload,
@@ -14,6 +15,7 @@ import type {
   UpdatePrivatePersonPayload,
 } from "../../../src/types/counterparty.js";
 import type { SavedAddress } from "../../../src/types/address.js";
+import type { CounterpartyModule } from "../../../src/modules/counterparty/index.js";
 
 describe("counterparty domain types (T1)", () => {
   it("Counterparty discriminates on CounterpartyType — a mismatched field access fails to compile (AC-03)", () => {
@@ -144,9 +146,13 @@ describe("counterparty domain types (T1)", () => {
   });
 
   it("getCounterpartyAddresses's response type is address's own SavedAddress, not a local redefinition", () => {
-    const address: SavedAddress = { Ref: "addr-1", CounterpartyRef: "cp-1" };
-    const addresses: SavedAddress[] = [address];
+    // Unlike a bare `SavedAddress[]` value assertion (which any structurally matching shape would
+    // satisfy), this pins the actual method signature: if getCounterpartyAddresses's return type
+    // ever diverges in shape from address's own SavedAddress (wrong/renamed/extra fields), this
+    // assignment stops compiling.
+    const getCounterpartyAddresses: (filters: GetCounterpartyAddressesFilters) => Promise<SavedAddress[]> =
+      undefined as unknown as CounterpartyModule["getCounterpartyAddresses"];
 
-    expect(addresses).toHaveLength(1);
+    expect(getCounterpartyAddresses).toBeUndefined();
   });
 });

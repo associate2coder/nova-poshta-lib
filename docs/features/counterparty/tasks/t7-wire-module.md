@@ -3,7 +3,7 @@ id: T7
 title: "Wire counterparty module into the public package surface"
 layer: "wiring"
 deps: ["T2", "T3", "T4", "T5", "T6"]
-acs: ["AC-12"]
+acs: ["AC-17"]
 files_hint: ["src/index.ts"]
 owner: "associate2coder"
 estimate: "S"
@@ -16,8 +16,10 @@ status: "todo"
 
 `src/index.ts` re-exports `createCounterpartyModule` and its types alongside `createCommonModule`/
 `createAddressModule` (`sad.md` §5), so the module is importable from the package's public entry
-point. This is also the one place a caching shortcut could slip in — AC-12 requires every `Ref`
-returned to be read fresh from Nova Poshta, never memoized here.
+point — the mechanism AC-17/US-10 depends on for editor autocomplete discoverability. This is also
+one place a caching shortcut could slip in — AC-12 (tested separately in
+`test/unit/modules/counterparty.test.ts`, not this task) requires every `Ref` returned to be read
+fresh from Nova Poshta, never memoized here.
 
 ## What
 

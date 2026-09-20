@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createClient } from "../../../src/index.js";
+import { createClient, NovaPoshtaApiError } from "../../../src/index.js";
 import { createCounterpartyModule } from "../../../src/modules/counterparty/index.js";
 import type { SavedAddress } from "../../../src/types/address.js";
 
@@ -443,5 +443,170 @@ describe("counterparty module — findCounterparty convenience method (T6, AC-11
       { Ref: "cp-1", CounterpartyType: "PrivatePerson", LastName: "Franko" },
       { Ref: "cp-2", CounterpartyType: "Organization", EDRPOU: "12345678" },
     ]);
+  });
+});
+
+describe("counterparty module — authoritative Ref source, no caching (T8, AC-12)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("issues an independent request on every call — nothing memoized or stale", async () => {
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string) as { methodProperties?: { FindByString?: string } };
+      const lastName = body.methodProperties?.FindByString === "Franko" ? "Franko" : "Kovalenko";
+      return successEnvelope([{ Ref: `cp-${lastName}`, CounterpartyType: "PrivatePerson", LastName: lastName }]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    const first = await counterparty.getCounterparties({ FindByString: "Franko" });
+    const second = await counterparty.getCounterparties({ FindByString: "Kovalenko" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(first).toEqual([{ Ref: "cp-Franko", CounterpartyType: "PrivatePerson", LastName: "Franko" }]);
+    expect(second).toEqual([{ Ref: "cp-Kovalenko", CounterpartyType: "PrivatePerson", LastName: "Kovalenko" }]);
+  });
+});
+
+describe("counterparty module — no cross-context enforcement (T8, AC-13)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("update issues exactly one call — no additional check of contact persons or saved addresses", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([{ Ref: "cp-1", CounterpartyType: "Organization" }]));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await counterparty.update({
+      Ref: "cp-1",
+      CounterpartyType: "Organization",
+      CounterpartyProperty: "Sender",
+      EDRPOU: "12345678",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("delete issues exactly one call — no additional check of contact persons or saved addresses", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([{ Ref: "cp-1" }]));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await counterparty.delete({ Ref: "cp-1" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("counterparty module — shared error contract (T8, AC-14/AC-15/AC-16)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("throws NovaPoshtaApiError when declined for a non-authorization reason (AC-14)", async () => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: false,
+          data: [],
+          errors: ["Unsupported filter value"],
+          errorCodes: ["400"],
+          warnings: [],
+        }),
+    }));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    const err = await counterparty.getCounterparties().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Unsupported filter value"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["400"]);
+  });
+
+  it("throws NovaPoshtaApiError when success is true but data isn't array-shaped (AC-14)", async () => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () => Promise.resolve({ success: true, data: { not: "a list" }, errors: [], warnings: [] }),
+    }));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(counterparty.getCounterparties()).rejects.toThrow(NovaPoshtaApiError);
+  });
+
+  it("throws NovaPoshtaApiError with Nova Poshta's own message on a write outside the caller's scope (AC-15)", async () => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () =>
+        Promise.resolve({ success: false, data: [], errors: ["Invalid API key"], errorCodes: ["401"], warnings: [] }),
+    }));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    const err = await counterparty
+      .update({ Ref: "cp-other", CounterpartyType: "Organization", CounterpartyProperty: "Sender", EDRPOU: "1" })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Invalid API key"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["401"]);
+  });
+
+  it("throws NovaPoshtaApiError when a private-individual key attempts a restricted contact-person op (AC-15)", async () => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: false,
+          data: [],
+          errors: ["Operation not allowed for this API key type"],
+          errorCodes: ["403"],
+          warnings: [],
+        }),
+    }));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    const err = await counterparty
+      .saveContactPerson({ CounterpartyRef: "cp-1", FirstName: "Petro", LastName: "Ivanenko", Phone: "1" })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Operation not allowed for this API key type"]);
+  });
+
+  it("throws NovaPoshtaApiError (not a raw error) on a network/transport failure (AC-16)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(counterparty.getCounterparties()).rejects.toThrow(NovaPoshtaApiError);
+  });
+
+  it("throws NovaPoshtaApiError (not a raw error) when the response body isn't valid JSON (AC-16)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: () => Promise.reject(new SyntaxError("Unexpected token")) }),
+    );
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(counterparty.getCounterparties()).rejects.toThrow(NovaPoshtaApiError);
+  });
+});
+
+describe("counterparty module — overhead benchmark (spec §6 NFR row 4)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("median library-added overhead is <=5ms across >=30 stubbed calls", async () => {
+    mockFetchOnce(() => successEnvelope([{ Ref: "cp-1", CounterpartyType: "PrivatePerson" }]));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    const samples: number[] = [];
+    const runs = 30;
+    for (let i = 0; i < runs; i++) {
+      const start = performance.now();
+      await counterparty.getCounterparties();
+      samples.push(performance.now() - start);
+    }
+
+    samples.sort((a, b) => a - b);
+    const median = samples[Math.floor(runs / 2)];
+    expect(median).toBeLessThanOrEqual(5);
   });
 });

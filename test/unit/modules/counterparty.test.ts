@@ -131,3 +131,161 @@ describe("counterparty module — cross-module address + options lookups (T3, AC
     expect(sentBody.methodProperties).toEqual({ Ref: "cp-1" });
   });
 });
+
+describe("counterparty module — write methods (T4, AC-03/AC-04/AC-05/AC-06/AC-07)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("save resolves the saved PrivatePerson counterparty including its own Ref (AC-04)", async () => {
+    const fetchMock = mockFetchOnce(() =>
+      successEnvelope([{ Ref: "cp-1", CounterpartyType: "PrivatePerson", FirstName: "Ivan", LastName: "Franko" }]),
+    );
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(
+      counterparty.save({
+        CounterpartyType: "PrivatePerson",
+        CounterpartyProperty: "Recipient",
+        FirstName: "Ivan",
+        LastName: "Franko",
+        Phone: "380500000000",
+      }),
+    ).resolves.toEqual({ Ref: "cp-1", CounterpartyType: "PrivatePerson", FirstName: "Ivan", LastName: "Franko" });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("Counterparty");
+    expect(sentBody.calledMethod).toBe("save");
+  });
+
+  it("save resolves the saved Organization counterparty including its own Ref (AC-04)", async () => {
+    mockFetchOnce(() => successEnvelope([{ Ref: "cp-2", CounterpartyType: "Organization", EDRPOU: "12345678" }]));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(
+      counterparty.save({ CounterpartyType: "Organization", CounterpartyProperty: "Sender", EDRPOU: "12345678" }),
+    ).resolves.toEqual({ Ref: "cp-2", CounterpartyType: "Organization", EDRPOU: "12345678" });
+  });
+
+  it("save resolves the saved ThirdParty counterparty including its own Ref (AC-04)", async () => {
+    mockFetchOnce(() =>
+      successEnvelope([{ Ref: "cp-3", CounterpartyType: "ThirdParty", EDRPOU: "87654321", CityRef: "city-1" }]),
+    );
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(
+      counterparty.save({
+        CounterpartyType: "ThirdParty",
+        CounterpartyProperty: "ThirdParty",
+        EDRPOU: "87654321",
+        CityRef: "city-1",
+      }),
+    ).resolves.toEqual({ Ref: "cp-3", CounterpartyType: "ThirdParty", EDRPOU: "87654321", CityRef: "city-1" });
+  });
+
+  it("save resolves undefined when Nova Poshta reports success with an empty data array (AC-07)", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(
+      counterparty.save({
+        CounterpartyType: "PrivatePerson",
+        CounterpartyProperty: "Recipient",
+        FirstName: "Ivan",
+        LastName: "Franko",
+        Phone: "380500000000",
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("update resolves the updated PrivatePerson counterparty including its own Ref (AC-05 happy path)", async () => {
+    const fetchMock = mockFetchOnce(() =>
+      successEnvelope([{ Ref: "cp-1", CounterpartyType: "PrivatePerson", FirstName: "Ivanko" }]),
+    );
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(
+      counterparty.update({
+        Ref: "cp-1",
+        CounterpartyType: "PrivatePerson",
+        CounterpartyProperty: "Recipient",
+        FirstName: "Ivanko",
+        MiddleName: "Stepanovych",
+        LastName: "Franko",
+        Phone: "380500000000",
+        Email: "ivan@example.com",
+      }),
+    ).resolves.toEqual({ Ref: "cp-1", CounterpartyType: "PrivatePerson", FirstName: "Ivanko" });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.calledMethod).toBe("update");
+  });
+
+  it("update resolves undefined when Nova Poshta reports success with an empty data array (AC-07)", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(
+      counterparty.update({
+        Ref: "cp-1",
+        CounterpartyType: "Organization",
+        CounterpartyProperty: "Sender",
+        EDRPOU: "12345678",
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("delete resolves the deleted counterparty's own Ref (AC-06)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([{ Ref: "cp-1" }]));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(counterparty.delete({ Ref: "cp-1" })).resolves.toEqual({ Ref: "cp-1" });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("Counterparty");
+    expect(sentBody.calledMethod).toBe("delete");
+    expect(sentBody.methodProperties).toEqual({ Ref: "cp-1" });
+  });
+
+  it("delete resolves undefined when Nova Poshta reports success with an empty data array (AC-07)", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(counterparty.delete({ Ref: "cp-1" })).resolves.toBeUndefined();
+  });
+
+  it("rejects an UpdateCounterpartyPayload missing a required field at compile time (AC-05)", () => {
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    // @ts-expect-error — Email/MiddleName are optional on SavePrivatePersonPayload but mandatory on update.
+    void counterparty.update({
+      Ref: "cp-1",
+      CounterpartyType: "PrivatePerson",
+      CounterpartyProperty: "Recipient",
+      FirstName: "Ivan",
+      LastName: "Franko",
+      Phone: "380500000000",
+    });
+
+    expect(true).toBe(true);
+  });
+
+  it("rejects an UpdateCounterpartyPayload mixing fields from more than one counterparty type at compile time (AC-05)", () => {
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    void counterparty.update({
+      Ref: "cp-1",
+      CounterpartyType: "PrivatePerson",
+      CounterpartyProperty: "Recipient",
+      FirstName: "Ivan",
+      MiddleName: "Stepanovych",
+      LastName: "Franko",
+      Phone: "380500000000",
+      Email: "ivan@example.com",
+      // @ts-expect-error — EDRPOU belongs to Organization/ThirdParty, not PrivatePerson.
+      EDRPOU: "12345678",
+    });
+
+    expect(true).toBe(true);
+  });
+});

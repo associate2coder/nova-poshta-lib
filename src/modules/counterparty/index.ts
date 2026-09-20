@@ -3,6 +3,7 @@ import type { SavedAddress } from "../../types/address.js";
 import type {
   Counterparty,
   CounterpartyOptions,
+  CounterpartyProperty,
   ContactPerson,
   DeleteContactPersonPayload,
   DeleteCounterpartyPayload,
@@ -38,6 +39,9 @@ export interface CounterpartyModule {
    *  mandatory — no partial update, no "leave unchanged". */
   updateContactPerson(payload: UpdateContactPersonPayload): Promise<ContactPerson | undefined>;
   deleteContactPerson(payload: DeleteContactPersonPayload): Promise<DeletedContactPerson | undefined>;
+  /** Narrows `getCounterparties` by `FindByString` (and an optional `CounterpartyProperty`) — one
+   *  call, same shape `getCounterparties` returns, no post-call re-filtering (AC-11). */
+  findCounterparty(searchString: string, property?: CounterpartyProperty): Promise<Counterparty[]>;
 }
 
 async function firstOrUndefined<T>(
@@ -115,6 +119,8 @@ export function createCounterpartyModule(client: NovaPoshtaClient): Counterparty
         "delete",
         payload as unknown as Record<string, unknown>,
       ),
+    findCounterparty: (searchString: string, property?: CounterpartyProperty) =>
+      module.getCounterparties({ FindByString: searchString, CounterpartyProperty: property }),
   };
   return module;
 }

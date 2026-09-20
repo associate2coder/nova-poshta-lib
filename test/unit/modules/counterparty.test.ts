@@ -398,3 +398,50 @@ describe("counterparty module — contact-person write methods (T5, AC-07/AC-08/
     expect(true).toBe(true);
   });
 });
+
+describe("counterparty module — findCounterparty convenience method (T6, AC-11)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("makes exactly one call to getCounterparties with FindByString set to the given search string", async () => {
+    const fetchMock = mockFetchOnce(() =>
+      successEnvelope([{ Ref: "cp-1", CounterpartyType: "PrivatePerson", LastName: "Franko" }]),
+    );
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(counterparty.findCounterparty("Franko")).resolves.toEqual([
+      { Ref: "cp-1", CounterpartyType: "PrivatePerson", LastName: "Franko" },
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.calledMethod).toBe("getCounterparties");
+    expect(sentBody.methodProperties).toEqual({ FindByString: "Franko" });
+  });
+
+  it("passes the optional CounterpartyProperty through when supplied, and omits it when not (AC-11)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([]));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await counterparty.findCounterparty("Franko", "Recipient");
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.methodProperties).toEqual({ FindByString: "Franko", CounterpartyProperty: "Recipient" });
+  });
+
+  it("returns every match unmodified, without reshaping to a single record (AC-11)", async () => {
+    mockFetchOnce(() =>
+      successEnvelope([
+        { Ref: "cp-1", CounterpartyType: "PrivatePerson", LastName: "Franko" },
+        { Ref: "cp-2", CounterpartyType: "Organization", EDRPOU: "12345678" },
+      ]),
+    );
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(counterparty.findCounterparty("Fra")).resolves.toEqual([
+      { Ref: "cp-1", CounterpartyType: "PrivatePerson", LastName: "Franko" },
+      { Ref: "cp-2", CounterpartyType: "Organization", EDRPOU: "12345678" },
+    ]);
+  });
+});

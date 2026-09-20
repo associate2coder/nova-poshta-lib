@@ -238,3 +238,53 @@ Decision override: client-side pagination/warnings gap — the shared core clien
 - [ ] Re-verify the 11-method Address surface (§1) against Nova Poshta's live/official documentation once it's reachable — the SDK cross-check is strong but is still a third-party source. Default now: proceed on the SDK-verified list. — owner: Tech Lead, due: before `sdd:implement address`
 - [ ] Which specific convenience methods (US-07) should ship in v1 — the exact set of single-call raw methods worth wrapping? Default now: TBD, decided during `sdd:design`/`sdd:tasks` based on which raw lookups see the most friction in practice. — owner: Tech Lead, due: before `sdd:tasks address`
 - [ ] Should the update full-replace guard (AC-05) be documented with a runtime warning/doc-comment in addition to the compile-time type enforcement? Default now: compile-time only, matching the library's convention of no added runtime validation beyond the shared error contract. — owner: Tech Lead, due: before `sdd:design address`
+
+## Test plan
+
+> Size S / route `quick` — plan kept inline per the size matrix, not a separate `test-plan.md`.
+> Levels used: **unit** (mocked `fetch`, no real network — covers all 13 ACs) and **integration**
+> (one opt-in real-API smoke test, gated by `NOVA_POSHTA_TEST_API_KEY`, matching the existing
+> `test/integration/` convention — never blocks CI without a key configured). AC-13 is a
+> **contract** check (the published-build type-surface test already used for `common`). No **e2e**,
+> **load-as-throughput**, **component**, **visual-regression**, or **e2e-through-UI** apply — no UI
+> surface, no server of its own to load-test; the one numeric NFR is handled under Load below.
+
+### AC coverage
+
+| AC (spec.md §5) | Test name (intent-based) | Level | Expected outcome |
+|---|---|---|---|
+| AC-01 lookup happy path | lookup passes pagination params through unmodified and never injects a default when the caller omits one | unit + integration | typed array matching the response exactly, no auto-paging |
+| AC-02 filtered lookup | a filter/search param reaches Nova Poshta unmodified and the response is returned without client-side re-filtering | unit | typed array unchanged from the response — nothing dropped, reordered, or added |
+| AC-03 irregular response shape | `searchSettlements`/`searchSettlementStreets` resolve the `TotalCount`/`Addresses` wrapper object itself, not the inner array alone | unit | returned value has both `TotalCount` and `Addresses`, `Addresses` left exactly as received |
+| AC-04 save happy path | `save` resolves the newly saved address including its own `Ref` | unit | returned object carries the `Ref` Nova Poshta assigned |
+| AC-05 update full-replace guard | an `update` payload missing any field fails to compile | unit (compile-time fixture) | the incomplete payload is rejected by the type checker, never reaches runtime |
+| AC-06 delete happy path | `delete` resolves the deleted address's own `Ref` | unit | returned object carries the `Ref` of the removed address |
+| AC-07 empty-on-success write | `save`/`update`/`delete` resolve to no value, not an error, when Nova Poshta reports success with an empty result | unit | call resolves `undefined`; no exception thrown |
+| AC-08 declined for a reason | a non-authorization decline (invalid `Ref`, missing field, business-rule rejection) throws the library's standard error | unit | standard error thrown, carrying Nova Poshta's own explanation |
+| AC-09 authorization / bad key | a write on a `Ref` outside the caller's counterparty, or any call with an invalid/expired key, is denied with the same standard error | unit | standard error thrown with Nova Poshta's message; nothing performed or revealed |
+| AC-10 network/transport failure | a timeout, dropped connection, or non-JSON response throws the standard error instead of propagating unhandled or returning an empty-looking success | unit | standard error thrown; the call never resolves as if it had succeeded |
+| AC-11 convenience method | `findCityByName` makes exactly one call and returns what the equivalent raw `getCities` call would, with no extra filtering afterward | unit | exactly one call recorded; result matches the equivalent raw-method call |
+| AC-12 authoritative Ref source | the same lookup called twice issues two independent requests — nothing is cached or invented locally | unit | two separate calls recorded; no memoized or stale value returned on the second call |
+| AC-13 published-build discoverability | every in-scope method (raw + convenience) is declared as its own identifier in both the ESM and CJS published output | contract | both built declaration files list all 12 identifiers |
+
+### Edge cases / error paths
+
+- A lookup's response comes back successful but `data` isn't array-shaped → standard error thrown (the array-shape check, inherited unchanged from `common`; same code path as AC-08, listed separately here because it's a distinct trigger condition).
+- `searchSettlements`/`searchSettlementStreets`'s outer envelope itself is empty (before unwrapping to the wrapper) → resolves `undefined`, mirroring AC-07's write behavior, not an error.
+- The opt-in real-API integration smoke test runs against an unreachable/rate-limited Nova Poshta sandbox → the test fails or is skipped locally; it is never wired into a CI job that lacks the key, so this can't block a merge.
+
+### Test data
+
+- Seed strategy: none — `address` holds no local entities (`data-model.md`: no schema change); unit tests build request/response fixtures inline, shaped like Nova Poshta's documented envelopes (matching `docs/adr/0003-testing-strategy.md`).
+- Integration dependency: the one opt-in smoke test (AC-01/AC-02, `getCities`) calls the real Nova Poshta API directly — not a throwaway container, since Nova Poshta is a third-party API this library doesn't own, not a datastore. Gated by `NOVA_POSHTA_TEST_API_KEY`, same as the existing (currently empty) `test/integration/` folder.
+- Cleanup boundary: none needed — the smoke test only performs a read (`getCities`); no write/state to clean up.
+
+### NFR validation (load)
+
+- `spec.md` §6 NFR row 4 — library-added overhead per call, median ≤5ms beyond the network round trip → scenario: 30+ repeated calls to a representative method (`getCities`) with `fetch` stubbed to near-zero latency, assert the median added overhead ≤5ms. Runs in the project's existing test runner — no separate load tool needed, since this measures in-process timing, not network throughput.
+- No other §6 NFR carries a number that implies sustained rate/duration load — the remaining rows (type-safety coverage, error-contract coverage, update guard, method-surface completeness, published-build check) are static/CI checks already captured in the AC coverage table above, not load scenarios.
+
+### CI placement
+
+- Every PR: all unit tests (all 13 ACs) + the AC-13 contract check — fast, fully deterministic, no live API key required.
+- Opt-in only, never blocking CI: the real-API integration smoke test — runs manually or on a schedule wherever `NOVA_POSHTA_TEST_API_KEY` is configured.

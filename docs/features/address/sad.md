@@ -4,302 +4,393 @@ owner: "Architect"
 reviewers: ["Tech Lead", "Security Lead"]
 updated_at: "2026-09-20"
 feature_size: "S"
-target_surfaces: []  # filled in §4 — subset of: backend-service | web-frontend | mobile-app | desktop-app | cli | worker | library-sdk. Read (never re-derived) by api/sequences/tasks/plan-tests/review → _shared/surfaces.md
+target_surfaces: ["library-sdk"]
 ---
 
 # Software Architecture Document — address
 
-<!-- 12 Arc42 sections. Empty section → <!-- N/A: <one-line reason> -->. -->
-<!-- C4 Context (L1) lives inline in §3. C4 Container (L2) lives inline in §5. -->
-<!-- Numbers in §10 come VERBATIM from spec.md §6 NFR — no inventing, no rounding. -->
-
 ## 1. Introduction and goals
 
-<!-- 🎯 Why: durable memory of «what + the three dominant qualities + who cares». A year from
-     now nobody recalls which three qualities were critical for this system.
-     📋 Write: 1 ¶ intent + 3 lines of top-3 quality goals + a stakeholders table.
-     ¶4 is the override slot — critic `Override` resolutions emit «Decision override: <headline>
-     — rationale: <reason>» bullets here so downstream skills see the deliberate choice. -->
-
-**Intent.** <One paragraph from spec §2 Goals — what we're building and for whom.>
+**Intent.** `address` gives every consuming developer typed, discoverable access to Nova Poshta's
+Address domain — 8 read-only lookups (cities, settlements, streets, warehouses, areas, warehouse
+types) plus 3 writes on a counterparty's saved address book (`save`/`update`/`delete`) — so they can
+resolve human-readable input into the `Ref` values other Nova Poshta calls need, and manage a saved
+address, without hand-rolling untyped calls (`spec.md` §2). It is the first module in the library with
+write operations and the first to touch personal/business address data, building directly on the
+structural and error-handling precedent `common` established.
 
 **Top-3 quality goals (1-liners; full scenarios in §10):**
 
-1. <e.g. "Availability under partial failure of a downstream module">
-2. <e.g. "Read performance for the dashboard under data-scale growth">
-3. <e.g. "Recoverability with <30 min RTO">
+1. Type-safety — all 11 in-scope Address methods (lookups + writes) fully typed, zero `any` in public
+   signatures, including the two response shapes that are structurally different from the rest.
+2. Error-contract correctness — every declined, malformed, or network-failed call throws the same
+   `NovaPoshtaApiError`, including the write-specific "success but no record" case, which must
+   resolve as success, not an error.
+3. Write-safety — the `update` method can never silently drop a previously-saved field; the compiler
+   rejects a partial payload.
 
 **Stakeholders.**
 
 | Role | Interest | Sign-off owner? |
 |---|---|---|
-| <author role from glossary> | <feature usage> | No |
-| <consumer role from glossary> | <read usage> | No |
-| Tech Lead | SAD approval | Yes |
+| Consuming developer | Calls the 11 typed methods to resolve `Ref` values and manage a saved address | No |
+| Tech Lead | SAD approval; owns the remaining `spec.md` §8 open questions | Yes |
+| Security Lead | Reviews the module before release — first write-capable, personal-data-touching module (`spec.md` §6.1) | Yes |
 
-<!-- Decision overrides (¶4) — populated by the critic resolution loop, empty otherwise. -->
+<!-- Decision overrides (¶4) — none raised during this design pass. -->
 
 ## 2. Constraints
 
-<!-- 🎯 Why: §4 strategy only works when §2 has fixed WHAT IS ALREADY FIXED — stack, versions,
-     deadline, regulatory. This is an input, not an output.
-     📋 Write: four blocks — Technical / Organisational / Conventions / Regulatory.
-     📌 Pin versions («<datastore> 18», not «<datastore>»); «Q3 deadline — hard», not «ideally».
-     Never N/A — every feature inherits at least Conventions + Technical. -->
-
 **Technical.**
-- <Language + version>
-- <Framework(s) + version>
-- <Datastore(s) + version>
-- <Architecture convention — e.g. the layering style from the project convention file>
+- TypeScript, Node.js ≥18 (native `fetch`, no HTTP client dependency)
+- No framework — this is a library, not an application
+- No datastore — `address` is stateless; the Nova Poshta API is the sole backing store
+- Architecture convention: one folder per Nova Poshta model (`src/modules/<domain>/`), dual ESM+CJS
+  build via `tsup` (project-level ADR-0002)
 
 **Organisational.**
-- <Effort budget — e.g. 3 person-weeks>
-- <Deadline — e.g. 2026-Q3 hard>
-- <Team composition>
+- Effort budget: sized S (2–5 PRs, ~1 week) per `classify-size`
+- No hard deadline stated in `spec.md`
+- Team: single maintainer (project owner)
 
 **Conventions.**
-- <Link to the project's convention file>
-- <Naming, ID strategy, error-handling pattern>
+- Convention file: `CLAUDE.md` + `docs/architecture-map.md`
+- Error handling: a single `NovaPoshtaApiError`, no subclassing (project-level convention), reused
+  unchanged for both lookups and writes
+- `src/types/address.ts` holds this feature's request/response interfaces, per the
+  `src/types/<domain>.ts`-per-model convention already established by `common`
 
 **Regulatory / external.**
-- <e.g. data-retention / deletion behaviour per ADR-NNNN>
-- <e.g. applicable compliance controls, or N/A with a reason>
+- `spec.md` §6.1: data classification confidential — write methods and saved-address data concern a
+  counterparty's address book (street, building number, flat, counterparty `Ref`), qualifying as
+  personal/business address data when the counterparty is a private individual. Security review
+  required before release (first write-capable, personal-data-touching module) — tracked as an open
+  risk in §11, not performed in this design session.
+- AuthZ/AuthN: none beyond the existing single-API-key model; cross-counterparty write protection is
+  enforced by Nova Poshta itself, not independently verified by this library (`spec.md` §6.1).
 
 ## 3. Context and scope
 
-<!-- 🎯 Why: draws the SYSTEM BOUNDARY — who talks to it from outside, where the trust zone ends.
-     Without §3, §5 and §8 (authorization) blur — unclear what's «inside» vs «outside».
-     📋 Write: 2–3 sentences of business context + an external-systems table + a C4Context block.
-     📌 «External: none (deliberate, no third-party in v1)» is itself a decision worth stating.
-     Trust boundary — the line past which you don't trust data without checking it.
-     Never N/A — greenfield still draws the planned actors + external systems. -->
+`address` gives a consuming developer typed access to Nova Poshta's location/address directory
+(cities, settlements, streets, warehouses, areas) and to a counterparty's saved address book, so they
+can resolve `Ref` values and manage saved pickup/return addresses without hardcoding values or
+guessing response shapes. It ships inside the existing `nova-poshta-lib` npm package, alongside the
+shared core client and the already-shipped `common` module.
 
-<Business context in 2–3 sentences. What the system does for whom.>
-
-<!-- brownfield: <one-line scan summary> (or «N/A — greenfield repo» if no source existed) -->
+<!-- brownfield: read directly (src/client.ts, src/index.ts, src/modules/common/index.ts,
+     src/types/common.ts, src/types/envelope.ts — trivial codebase size, no Explore subagent needed).
+     docs/architecture-map.md (reflects_commit 94201ac) is stale relative to current HEAD (common is
+     now implemented) but its target conventions still match what's on disk — no drift found in the
+     conventions that matter to this feature (module wiring, error handling, test layout). -->
 
 **External systems (in / out):**
 
 | Actor or system | Type | Interaction |
 |---|---|---|
-| <author role> | Person | <what they do> |
-| <external service> | System (internal/external) | <interaction> |
-| <identity provider> | System (external) | <provides auth tokens> |
+| Consuming developer | Person | Installs `nova-poshta-lib`, calls `address`'s typed lookup and write methods |
+| Nova Poshta API | System (external) | HTTPS POST, `apiKey` auth — the sole backing store for address/location data and the counterparty's saved address book |
 
-**C4 Context (L1):** <!-- syntax → references/c4-mermaid-syntax.md. Real names, no <placeholder> stubs. -->
+**C4 Context (L1):**
 
 ```mermaid
 C4Context
-    title <feature> — System Context
+    title address — System Context
 
-    Person(actor, "<Actor role>", "<intent>")
-    System(app, "<Our system>", "<one-sentence description>")
-    System_Ext(ext, "<External system>", "<one-sentence description>")
+    Person(dev, "Consuming developer", "Installs nova-poshta-lib, calls its typed methods")
+    System(lib, "nova-poshta-lib", "Typed TypeScript client for the Nova Poshta API")
+    System_Ext(np_api, "Nova Poshta API", "External REST/JSON-RPC-style API — the sole backing store, including the counterparty's saved address book")
 
-    Rel(actor, app, "<interaction>", "<protocol>")
-    Rel(app, ext, "<interaction>", "<protocol>")
+    Rel(dev, lib, "imports, calls address's lookup and write methods")
+    Rel(lib, np_api, "HTTPS POST, apiKey auth")
 ```
+
+*The Context is identical in shape to `common`'s: the consuming developer talks only to
+`nova-poshta-lib`, and the library itself is the only thing that talks to the external Nova Poshta
+API. No new external system — `address`'s writes still land on the same single external API, just a
+different `modelName`/`calledMethod` pair per call.*
 
 ## 4. Solution strategy
 
-<!-- 🎯 Why: the 3–4 STRATEGIC PILLARS every ADR grows from. Without §4 each ADR looks random —
-     there's no umbrella. ⭐ The densest section — the blast-radius gate fires almost always here
-     (decisions are irreversible + multi-module).
-     📋 Write: 3–4 choices; each a heading + 2–3 sentences of rationale.
-     📌 «Store content as a table of typed blocks» is a pillar — ADR-0001 grows from it. -->
-
 **Top strategic choices (the seeds for ADRs):**
 
-1. **<e.g. Module isolation through events>** — <2–3 sentences citing quality goals + constraints>.
-2. **<e.g. Single-store persistence>** — <2–3 sentences>.
-3. **<e.g. Server-rendered read side>** — <2–3 sentences>.
+1. **Target surface: `library-sdk`.** Same single-surface shape `common` already established and the
+   only fit for this repo (no server, no UI). Written to this document's frontmatter
+   (`target_surfaces: ["library-sdk"]`); §5 draws one container for it, alongside the already-shipped
+   `common` module.
+2. **Synchronous, direct calls into the existing core client — unchanged.** `address`'s methods call
+   `NovaPoshtaClient.request()` directly, exactly like `common`. No client-level change: the
+   pagination/warnings gap noted in `spec.md` §1's Decision override stays a known limitation for this
+   feature, not fixed here.
+3. **Stateless — no persistence, no caching.** Per the non-goal fixed in `spec.md` §3.
+4. **Inherit `common`'s array-shape check unchanged (`common` ADR-0001).** The check — "is the
+   response's `data` array-shaped at all" — already tolerates an empty array on success, which is
+   exactly what AC-07's "successful write, no record" case needs. No new validation logic in the
+   shared core client.
+5. **Write-return shape: `T | undefined` on `save`/`update`/`delete` (ADR-0001, this feature).** The
+   first write-capable module has to decide how "successful write, no record returned" (AC-07)
+   surfaces in the public TypeScript signature; `T | undefined` was chosen over an always-array
+   return, becoming the library's standard for every future write module with the same pattern.
+6. **Two response shapes stay verbatim, never unwrapped (AC-03).** `searchSettlements` and
+   `searchSettlementStreets` return Nova Poshta's own `TotalCount`/`Addresses`-style wrapper record,
+   typed as a shared generic wrapper shape reused by both methods — not unwrapped to a plain array,
+   per the spec's explicit invariant. This is a spec-locked shape (AC-03 leaves no legitimate
+   alternative), so it stays an inline decision, not an ADR.
+7. **`update`'s full-replace guard is compile-time only (AC-05, closes `spec.md` §8 OQ-4).** The
+   `update` payload type makes every field mandatory, derived from the `save` payload type via a
+   TypeScript utility type so the two can't drift apart. No added runtime validation — matching the
+   library's existing convention (`common`, `spec.md` §3 non-goal) — plus a doc comment on `update()`
+   explaining the full-replace semantics for anyone reading the source.
+8. **Convenience methods sit flat on the same module object as the raw methods.** No sub-namespace,
+   matching how `common` already flattened all 15 of its methods. The exact convenience-method set
+   stays open per `spec.md` §8 OQ-3, resolved at `tasks`, not here.
 
-Each tactical decision in later sections should trace to one of these seeds. Tactical decisions that *contradict* a strategic choice are red flags — surface them in §11.
+Each tactical decision in later sections traces to one of these eight. Decisions 4, 5, and 6 are
+paired: the shared client's tolerant array-shape check (4) is what makes AC-07's empty-success case
+possible in the first place; decision 5 is how that possibility surfaces in the public type; decision
+6 is the other place a documented Nova Poshta response shape must be modeled exactly, not smoothed
+over.
 
 ## 5. Building block view
 
-<!-- 🎯 Why: INTERNAL DECOMPOSITION — modules, containers, datastores. The static topology: who
-     may talk to whom. Without §5, §6 (the flows) has no vocabulary of participants.
-     📋 Write: 1 ¶ on the style (layered / hexagonal / clean / event-driven) + a folder tree + a
-     C4Container block.
-     📌 Draw ONE Container per declared `target_surface` (frontmatter): a fullstack
-     [backend-service, web-frontend] = a backend-API container + a web/SPA container; a
-     [backend-service, mobile-app] = the API + the mobile app. The Container(web, …) line below is
-     just one surface's container — swap/add per what was declared in §4. → _shared/surfaces.md
-     📌 e.g. «web app, content API, media worker, datastore, object store, CDN». -->
-
-<One paragraph: layered / hexagonal / clean / event-driven, and why.>
+Layered per the existing modular-domain convention (project-level ADR-0002): a thin `address` domain
+module sits on top of the shared core client, exactly like `common`. No new layering style —
+`address` follows the same shape every `src/modules/<domain>/` folder does.
 
 **Internal decomposition:**
 
 ```
-<e.g. modules/<feature>/>
-├── domain/       <entities + sentinel errors>
-├── app/          <use cases / services>
-├── infra/        <repository + integration impl>
-├── ports/        <handlers, DTOs, error mapping>
-└── wiring        <self-wiring entry point>
+src/
+├── client.ts                   # core: request(), NovaPoshtaApiError — unchanged by this feature
+├── modules/
+│   ├── common/
+│   │   └── index.ts             # existing — 15 typed reference-list methods
+│   └── address/
+│       └── index.ts             # NEW — factory: createAddressModule(client) → 11 typed methods
+│                                 #   (8 lookups + 3 writes), plus convenience methods (set TBD at tasks)
+├── types/
+│   ├── envelope.ts               # existing — shared envelope/request types
+│   ├── common.ts                 # existing — common's 15 reference-list interfaces
+│   └── address.ts                # NEW — Address request/response interfaces, incl. the AC-03
+│                                  #   search-wrapper type and the AC-05 full-replace update type
+└── index.ts                     # public re-exports (client + common + address + types)
 ```
 
-**C4 Container (L2):** <!-- syntax → references/c4-mermaid-syntax.md. Real names, no <placeholder> stubs. ONE Container per declared target_surface (frontmatter); the web container below is one example surface. -->
+`tsup`'s existing dual ESM+CJS build (project-level ADR-0002) already emits matching
+`.d.ts`/`.d.cts` declarations for whatever `src/index.ts` re-exports — no new build step is needed to
+satisfy AC-13 (every method discoverable via autocomplete in both published formats); `tasks`/
+`plan-tests` verify the *published* output, not just the source, exactly as `common` already does.
+
+**C4 Container (L2):**
 
 ```mermaid
 C4Container
-    title <feature> — Containers
+    title address — Containers
 
-    Person(actor, "<Actor>")
+    Person(dev, "Consuming developer")
 
-    Container_Boundary(app, "<Our system>") {
-        Container(web, "<Web/UI>", "<technology>", "<purpose>")
-        Container(api, "<API/handler>", "<technology>", "<purpose>")
-        ContainerDb(db, "<Datastore>", "<technology>", "<purpose>")
+    Container_Boundary(lib, "nova-poshta-lib") {
+        Container(client, "Core client", "TypeScript", "Builds/sends requests, unwraps the envelope, checks data is array-shaped, throws NovaPoshtaApiError")
+        Container(common, "common module", "TypeScript", "15 typed reference-list methods (existing, unchanged)")
+        Container(address, "address module", "TypeScript", "11 typed lookup + write methods, plus convenience methods, built on the core client")
     }
 
-    System_Ext(ext, "<External>", "<purpose>")
+    System_Ext(np_api, "Nova Poshta API", "External REST/JSON-RPC-style API")
 
-    Rel(actor, web, "<interaction>", "<protocol>")
-    Rel(web, api, "<calls>")
-    Rel(api, db, "<reads/writes>", "<driver>")
-    Rel(api, ext, "<emits>", "<protocol>")
+    Rel(dev, address, "imports, calls typed lookup and write methods")
+    Rel(address, client, "delegates the HTTP call, receives typed + array-checked data")
+    Rel(client, np_api, "HTTPS POST, apiKey auth")
 ```
+
+*The Containers view draws the one declared surface (`library-sdk`, the whole `nova-poshta-lib`
+package) as a boundary holding three pieces: the existing core client (fully unchanged by this
+feature), the existing `common` module, and the new `address` module the developer imports directly.
+All three stay inside the same package — there's no second deployable, no new process, and `address`
+never talks to `common` or vice versa — each domain module only ever talks down to the shared core
+client.*
 
 ## 6. Runtime view
 
-<!-- 🎯 Why: the RUNTIME FLOW of 1–2 critical scenarios — who talks to whom, when, in what order.
-     Without §6, §5 is just boxes with no life.
-     📋 Write: a Mermaid sequenceDiagram. Participants are names from §5 (don't invent new ones).
-     Messages are semantic («saves a draft»), NO HTTP verbs / paths / status codes — endpoint-level
-     sequences arrive at the `api` stage.
-     📌 e.g. «author → web: composes draft → web → content API: save». Seed the primary flow(s) here;
-     the `sequences` stage then covers every §5 AC (no cap). Never N/A for M+; XS/S keeps ≥1 happy-path flow. -->
-
-**Critical flow 1: <flow name>**
+**Critical flow 1: fetch a lookup — happy path + every error branch**
 
 ```mermaid
 sequenceDiagram
-    actor Actor
-    participant Web
-    participant Service
-    participant Store
-    Actor->>Web: <action>
-    Web->>Service: <call>
-    Service->>Store: <write>
-    Store-->>Service: ok
-    Service-->>Web: result
-    Web-->>Actor: confirmation
+    actor Dev as Consuming developer
+    participant Address as address module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>Address: getWarehouses(filters?)
+    Address->>Client: request("Address", "getWarehouses", filters)
+    Client->>NP: HTTPS POST (apiKey, modelName, calledMethod, methodProperties)
+
+    alt network/transport failure (AC-10)
+        NP--xClient: timeout / dropped connection / non-JSON body
+        Client-->>Address: throws NovaPoshtaApiError
+        Address-->>Dev: propagates NovaPoshtaApiError
+    else declined — bad key or any other reason (AC-08 / AC-09)
+        NP-->>Client: success:false, error
+        Client-->>Address: throws NovaPoshtaApiError (Nova Poshta's message passed through)
+        Address-->>Dev: propagates NovaPoshtaApiError
+    else success but data isn't array-shaped (AC-08)
+        NP-->>Client: success:true, data is not a list
+        Client-->>Address: throws NovaPoshtaApiError (array-shape check, common ADR-0001)
+        Address-->>Dev: propagates NovaPoshtaApiError
+    else happy path (AC-01 / AC-02)
+        NP-->>Client: success:true, data is array-shaped
+        Client-->>Address: typed T[]
+        Address-->>Dev: typed lookup values
+    end
 ```
 
-**Critical flow 2: <e.g. async event propagation>** — <if applicable, otherwise N/A>.
+**Critical flow 2: save a new address — happy path + the empty-on-success branch**
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant Address as address module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>Address: save(payload)
+    Address->>Client: request("Address", "save", payload)
+    Client->>NP: HTTPS POST (apiKey, modelName, calledMethod, methodProperties)
+
+    alt declined — invalid Ref, missing field, wrong counterparty (AC-08 / AC-09)
+        NP-->>Client: success:false, error
+        Client-->>Address: throws NovaPoshtaApiError (Nova Poshta's message passed through)
+        Address-->>Dev: propagates NovaPoshtaApiError
+    else success but data is empty (AC-07)
+        NP-->>Client: success:true, data: []
+        Client-->>Address: typed [] (array-shape check passes — empty is still array-shaped)
+        Address-->>Dev: undefined (ADR-0001, this feature) — a valid success, not an error
+    else happy path (AC-04)
+        NP-->>Client: success:true, data: [savedRecord]
+        Client-->>Address: typed [savedRecord]
+        Address-->>Dev: the saved record, incl. its own Ref
+    end
+```
+
+*Flow 1 mirrors `common`'s already-established lookup pattern exactly — every lookup method
+(`getCities`, `getSettlements`, `searchSettlements`, `getAreas`, `getStreet`,
+`searchSettlementStreets`, `getWarehouses`, `getWarehouseTypes`) and every convenience method takes
+this same shape, just with a different `calledMethod` and typed result (AC-03's two search methods
+return the wrapper type instead of a plain array, but the branch structure is identical). Flow 2 shows
+what's new for this feature: a three-way split instead of the lookup's four-way one, because writes
+add the empty-on-success branch (AC-07) that lookups never see — `update` and `delete` follow the
+identical shape, just with `update`/`delete` as the `calledMethod` and their own Ref values.*
+
+**Coverage check — user stories and acceptance criteria against the runtime view above:**
+
+| Item | Covered by |
+|---|---|
+| US-01 Fetch address lookup data | Flow 1, happy-path branch |
+| US-02 Filter a lookup | Flow 1, happy-path branch (`filters?` parameter) |
+| US-03 Get typed results | Flow 1, happy-path branch (`typed T[]` return); AC-03's wrapper shape is a type-level concern, not a distinct runtime path — same Flow 1 shape |
+| US-04 Save a new address | Flow 2 |
+| US-05 Update a saved address | Flow 2 (identical shape, `update` in place of `save`) |
+| US-06 Delete a saved address | Flow 2 (identical shape, `delete` in place of `save`) |
+| US-07 Use a convenience method | Flow 1 (identical shape — a convenience method narrows input then makes one call, per AC-11) |
+| US-08 Get a clear error on failure | Flow 1 + Flow 2, all error branches |
+| US-09 Discover the full set of available methods | N/A — not a runtime path; satisfied by published `.d.ts`/`.d.cts` autocomplete (§5), verified by AC-13 |
+| US-10 Rely on Address as the authoritative Ref source | N/A — not a distinct runtime path; the same Flow 1 call is what any future module would make. The invariant itself is a cross-cutting concept (§8), not a sequence |
+| AC-01 happy-path lookup | Flow 1 |
+| AC-02 filtered lookup | Flow 1 |
+| AC-03 irregular response shape | N/A — non-runtime, type-level concern (§4 decision 6, §5 `src/types/address.ts`) |
+| AC-04 save happy path | Flow 2 |
+| AC-05 update full-replace guard | N/A — non-runtime, compile-time type concern (§4 decision 7) |
+| AC-06 delete happy path | Flow 2 (identical shape) |
+| AC-07 empty-on-success write | Flow 2, "success but data is empty" branch |
+| AC-08 declined for a reason | Flow 1 + Flow 2, "declined" branches |
+| AC-09 authorization / bad key | Flow 1 + Flow 2, "declined" branches (same code path as AC-08) |
+| AC-10 network/transport failure | Flow 1, "network/transport failure" branch (identical for Flow 2, omitted there for diagram brevity) |
+| AC-11 convenience method | Flow 1 (identical shape) |
+| AC-12 authoritative cross-context Ref | N/A — non-runtime; the invariant is cross-cutting (§8), not a sequence |
+| AC-13 published-build discoverability | N/A — non-runtime, build-time/tooling concern; §5 explains the `.d.ts`/`.d.cts` mechanism |
+
+No user story and no acceptance criterion is left uncovered.
 
 ## 7. Deployment view
 
-<!-- 🎯 Why: the TOPOLOGY DevOps must know without reading the deploy charts — how many replicas,
-     where the background worker lives, AT WHAT NUMBERS we scale.
-     📋 Write: 2–3 sentences on topology + monitoring + concrete threshold numbers.
-     📌 e.g. «500 authors → partition by quarter» (not «we'll think about scale later»).
-     🎯 N/A allowed for XS/S that reuses an existing deployment unit with no change.
-     Deployment-diagram scaffold → templates/deployment.md. -->
-
-<Topology in 2–3 sentences. Where it runs, replicas, scaling thresholds.>
-
-**Monitoring:**
-- <Metrics — e.g. `<metric_name>`>
-- <Alerts — e.g. «worker lag > 10 min → page on-call»>
-- <Tracing — e.g. spans on the request boundary>
-
-**Scaling thresholds:**
-- <e.g. comfortable in one table up to N rows/year>
-- <e.g. partition by quarter above N rows/year>
-
-<!-- For XS/S with no deployment change: <!-- N/A: reuses existing deployment unit, no infra change --> -->
+<!-- N/A: this feature ships inside the existing npm package publish process (project-level ADR-0004,
+     release strategy via changesets) — no new infrastructure, no new deployment unit, no server to
+     operate. Identical reasoning to common's §7. -->
 
 ## 8. Crosscutting concepts
 
-<!-- 🎯 Why: CROSS-CUTTING PATTERNS spanning several modules: logging, errors, authorization, ID
-     strategy, events, caching. ⭐ The second-densest section. A pattern inside one module is NOT
-     here; a project-wide convention belongs in the convention file.
-     📋 Write: a table — concept / convention / where defined. One row per concept.
-     📌 e.g. «sortable time-based IDs generated in the app layer» as a default from the convention file. -->
-
 | Concept | Convention | Where defined |
 |---|---|---|
-| Logging | <e.g. structured, fields `module=<name>`> | <convention file §X or here> |
-| Authentication | <e.g. token-based via middleware> | <convention file §X> |
-| Error handling | <e.g. domain sentinel → ports error mapping → JSON> | <convention file §X> |
-| ID strategy | <e.g. sortable time-based ID in the app layer> | <convention file §X> |
-| Internationalisation | <e.g. N/A, single language> | — |
-| Observability | <e.g. tracing on the request boundary> | — |
-| Events | <module-specific patterns, if any> | <here> |
+| Logging | None — the library emits no logs of its own | — (repo default, undocumented) |
+| Authentication | Caller-supplied `apiKey`, unchanged by this feature | `architecture-map.md` |
+| Error handling | Single `NovaPoshtaApiError`; array-shape check only, no per-field validation; identical for lookups and writes | `src/client.ts`; `common` ADR-0001 |
+| Write-return shape | `T \| undefined` when a successful write's data is empty | `address` ADR-0001 |
+| ID strategy | N/A — the library holds no persistent IDs of its own | `architecture-map.md` |
+| Internationalisation | N/A — pass-through of Nova Poshta's own language fields, no library-side selection | `spec.md` §8 (common's open question, inherited, not `address`-specific) |
+| Observability | None new — no metrics/tracing added by this feature | — |
+| Events | N/A — synchronous request/response only | `architecture-map.md` |
+| Rate-limiting | None of our own — Nova Poshta's own throttling governs | `spec.md` §6.1 |
+| Testing | Mocked unit suite required in CI (`test/unit/modules/address`) + opt-in integration suite against the real API, unchanged by this feature | `docs/adr/0003-testing-strategy.md` |
+| API documentation | `update()` carries a doc comment explaining the full-replace semantics (AC-05) — documentation only, no runtime check. Closes `spec.md` §8 OQ-4 | `src/modules/address/index.ts` |
+| Cross-module value consistency | `address` is the sole source of truth for location/address `Ref` values; it enforces nothing about how another module later uses one — that check, if any, belongs to the receiving module | `spec.md` AC-12 / US-10 |
 
 ## 9. Architecture decisions
 
-<!-- 🎯 Why: the REVERSE INDEX onto the adr/ folder. `ls adr/` gives the files; §9 gives the
-     semantics — why they exist, which SAD section they attach to, what status.
-     📋 Write: a 4-column table, one row per ADR. Mixed status is fine.
-     📌 e.g. «0001 | Store content as a table of typed blocks | Accepted | §4». -->
-
 | # | Title | Status | Section |
 |---|---|---|---|
-| <NNNN> | <imperative — e.g. "Use a sliding-window counter for rate limiting"> | Accepted | §<N> |
-| <NNNN> | <imperative — e.g. "Co-locate the worker in the API process"> | Accepted | §<N> |
+| 0001 | Return `T \| undefined` from a write method when the success response carries no record | Accepted | §4 |
 
-ADR files live under `docs/features/<slug>/adr/NNNN-<title>.md`.
+ADR files live under `docs/features/address/adr/`. This feature also relies on `common`'s
+already-Accepted `0001-array-shape-only-validation.md` and `0002-open-value-typing-with-fallback.md`
+(unchanged, inherited — no new client-level ADR needed here).
 
 ## 10. Quality requirements
 
-<!-- 🎯 Why: the QUALITY TREE — take a goal from §1 and break it into concrete leaves: tests,
-     metrics, configs, drills. ⭐ Without §10, §1 is a manifesto. With §10 each declaration maps
-     to something PROVABLE.
-     📋 Write: per §1 goal — When / Then / How-verify. Numbers from spec §6 NFR VERBATIM (don't
-     round ≤250ms to ≤300ms — that's a critic F6 hit).
-     📌 e.g. «p95 ≤ 500 ms on a block update, verified by a 100 req/s load test». -->
-
 Each top-3 goal from §1 expanded into a full scenario:
 
-**QG-1. <quality attribute>**
-- **When:** <trigger condition>
-- **Then:** <expected behaviour with numbers from spec §6 NFR>
-- **How verify:** <test / chaos drill / load test / metric>
+**QG-1. Type-safety**
+- **When:** any of the 11 in-scope Address methods (8 lookups + 3 writes) is exported from `address`.
+- **Then:** 100% of in-scope methods have zero `any` in their public signatures — including
+  `searchSettlements`/`searchSettlementStreets`'s wrapper shape and `update`'s full-replace payload.
+- **How verify:** static check in CI (`spec.md` §6, row 1).
 
-**QG-2. <quality attribute>**
-- **When:** <trigger>
-- **Then:** <expected>
-- **How verify:** <how>
+**QG-2. Error-contract correctness**
+- **When:** an Address call is declined by Nova Poshta, its response isn't array-shaped, or a write
+  succeeds with an empty data array.
+- **Then:** 100% of in-scope methods throw `NovaPoshtaApiError` on a decline or non-array-shaped
+  response; 0% throw on a successful write with empty data — that resolves to `undefined`, not an
+  error (AC-07, ADR-0001).
+- **How verify:** unit test suite `test/unit/modules/address` (`spec.md` §6, row 2).
 
-**QG-3. <quality attribute>**
-- **When:** <trigger>
-- **Then:** <expected>
-- **How verify:** <how>
+**QG-3. Write-safety**
+- **When:** a consuming developer calls `update` with an incomplete payload.
+- **Then:** 100% of such calls fail to compile — the full-replace type accepts nothing less than every
+  field.
+- **How verify:** static check in CI, type-level test (`spec.md` §6, row 3).
 
 ## 11. Risks and technical debt
 
-<!-- 🎯 Why: ⭐ collects EVERYTHING that can break — not only the technical. Without §11 risks get
-     discussed at standups and lost; debt lives only in the head of whoever accepted it.
-     📋 Write: a risk/debt table — severity — mitigation — owner. Accepted debt in its own block.
-     📌 The first risk is often a product risk, not a technical one. That's normal. -->
-
-<!-- Severity literals: Low / Medium / High for regular risks; "Open question" for rows created by
-     a Save-as-OQ resolution during the Socratic walk (see references/socratic.md). -->
-
 | Risk / debt | Severity | Mitigation | Owner |
 |---|---|---|---|
-| <e.g. Worker lag may reach hours during a downstream outage> | Medium | <alert >10 min, on-call playbook, retry backoff> | <DevOps> |
-| <e.g. No event-schema versioning in v1> | Medium | <ADR-NNNN planned for v2, tolerate unknown fields> | <Backend> |
-| Open architectural decision: <decision-headline> | Open question | Resolve before <stage trigger or YYYY-MM-DD>; <inline rationale from the Save-as-OQ> | <owner> |
+| Security review required before release — first write-capable, personal-data-touching module (`spec.md` §6.1) | High | Schedule and complete a security review before `sdd:ship address`; not performed in this design session | Security Lead |
+| The §1 in-scope 11-method list was cross-checked against a third-party SDK, not Nova Poshta's own docs portal (blocks automated fetches) | Medium | Re-verify against Nova Poshta's live/official docs before release (`spec.md` §8 OQ-2) | Tech Lead |
+| Cross-counterparty write enforcement (AC-09) is trusted from Nova Poshta's own documented behavior, not independently verified by this library's test suite | Medium | Unit tests confirm the library surfaces whatever decline Nova Poshta sends back (mocked), not that Nova Poshta's own enforcement holds in production (`spec.md` §6.1) | Tech Lead |
+| Open architectural decision: should the shared core client be extended to expose pagination metadata (`totalCount`) and success-path warnings — `address` is the first module where their absence materially bites (large city/warehouse lists can silently truncate; a `save`/`update` warning, e.g. a normalized building number, is never surfaced) | Open question | Resolve before `sdd:design` of any future module whose lookups depend on complete, multi-page Address results (`spec.md` §8 OQ-1, kept as a known limitation for this feature per the §1 Decision override) | Tech Lead |
+| Open architectural decision: which specific convenience methods (US-07) ship in v1 | Open question | Resolve before `sdd:tasks address`, based on which raw lookups see the most friction in practice (`spec.md` §8 OQ-3) | Tech Lead |
 
 **Accepted debt (acceptable in v1, plan to fix later):**
-- <e.g. the entity is immutable / unversioned — OK for v1, may need audit versioning in v2>
+- No client-side pagination walking and no surfaced success-path warnings (`spec.md` §1 Decision
+  override) — the project owner's deliberate choice to keep the shared core client's scope unchanged
+  for this S-sized feature, not a shortcut awaiting cleanup by default. Revisit only when a future
+  module's lookups genuinely need complete multi-page results (§8 OQ-1 above).
 
 ## 12. Glossary
 
-<!-- 🎯 Why: ⭐ the DOMAIN GLOSSARY that ends arguments a year later («checkpoint — weekly or
-     biweekly? quarter — calendar or fiscal?»).
-     📋 Write: a term / meaning table. Business + technical terms mixed.
-     📌 e.g. «Lesson | a unit inside a course made of blocks (text, video)». -->
-
 | Term | Meaning |
 |---|---|
-| <e.g. domain object A> | <its meaning in this domain> |
-| <e.g. domain object B> | <its meaning> |
-| <e.g. domain invariant name> | <the rule, in plain language> |
+| Consuming developer | A developer who installs and calls this library's typed methods from their own Node.js/TypeScript project. NOT Nova Poshta itself, and NOT an end customer or shipment recipient. |
+| Counterparty | A legal entity or private individual Nova Poshta associates with a shipment (sender, recipient, or the API key holder's own registered entity), used to scope which saved addresses belong to whom. NOT the consuming developer. |
+| `Ref` | A UUID Nova Poshta assigns to identify a specific record (a city, street, warehouse, settlement, address, or counterparty) so it can be passed into later API calls. NOT a human-readable name or address string. |
+| Settlement | Nova Poshta's broader directory of Ukrainian localities (cities, towns, villages) reachable for delivery, independent of whether Nova Poshta has a branch there. NOT city — a city is the narrower subset where Nova Poshta actually operates a branch. |
+| Warehouse | A Nova Poshta branch, depot, or parcel locker where a shipment can be picked up or dropped off. NOT the consuming developer's or their customer's own storage space. |
+| `NovaPoshtaApiError` | The library's single standard error class (extends `Error`), carrying `errors[]`/`errorCodes[]`/`warnings[]` — thrown on any declined call or transport failure, for both lookups and writes. |
+| Array-shape check | The one runtime check the shared core client performs (`common` ADR-0001): confirming a response's `data` is actually an array before it's returned as typed data. An empty array still passes — this is what makes AC-07's "successful write, no record" possible. |
+| Search-wrapper shape | The `TotalCount`/`Addresses`-style record `searchSettlements` and `searchSettlementStreets` return instead of a plain list (AC-03) — modeled verbatim, never unwrapped. |

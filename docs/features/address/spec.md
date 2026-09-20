@@ -129,19 +129,19 @@ Decision override: client-side pagination/warnings gap — the shared core clien
 
 **Given** a consuming developer holds a valid API key
 **When** they request address lookup data (for example, the list of cities or warehouses)
-**Then** the system returns exactly the page of Nova Poshta's documented data for that lookup as typed values — for methods whose documented parameters include pagination, the library passes those parameters through when supplied but does not automatically walk multiple pages to assemble a complete list (see §1 Decision override)
+**Then** the system returns exactly the page of Nova Poshta's documented data for that lookup as typed values — for methods whose documented parameters include pagination, the library passes those parameters through when supplied but does not automatically walk multiple pages to assemble a complete list (see §1 Decision override); when the developer supplies no pagination parameter at all, the library never injects one on their behalf — the request goes to Nova Poshta exactly as given, and Nova Poshta's own default applies
 
 ### AC-02 (US-02) — happy path
 
 **Given** a consuming developer holds a valid API key
 **When** they request a lookup using one of that method's documented filter or search parameters
-**Then** the system passes the filter to Nova Poshta and returns exactly what Nova Poshta responds with, typed the same as the unfiltered lookup — the library performs no client-side re-filtering of results
+**Then** the system passes the filter to Nova Poshta and returns exactly what Nova Poshta responds with, typed the same as the unfiltered lookup — the library performs no client-side re-filtering of results; this rule applies to every method that reaches Nova Poshta, raw or convenience (see AC-11)
 
 ### AC-03 (US-03) — domain invariant
 
-**Given** a consuming developer calls a lookup method whose Nova Poshta response is structured differently from the library's other lookup methods (for example, a settlement or street search grouped under a result count rather than returned as a plain list)
+**Given** a consuming developer calls a lookup method whose Nova Poshta response is structured differently from the library's other lookup methods — specifically `searchSettlements` and `searchSettlementStreets`, whose documented response nests the matches under a result-count wrapper (e.g. `TotalCount`/`Addresses`) rather than returning a plain list
 **When** they use that method's typed result
-**Then** the shape they receive accurately reflects what Nova Poshta actually documents for that specific method, rather than being coerced to look like every other lookup's shape — a consuming developer never has to guess whether "the list" is the top-level result or nested inside it
+**Then** the shape they receive accurately reflects what Nova Poshta actually documents for that specific method, wrapper included — the library never unwraps it to just the inner array, so a consuming developer never has to guess whether "the list" is the top-level result or nested inside it
 
 ### AC-04 (US-04) — happy path
 
@@ -153,13 +153,13 @@ Decision override: client-side pagination/warnings gap — the shared core clien
 
 **Given** a consuming developer wants to update an existing saved address
 **When** they call the update method
-**Then** the system requires them to supply the complete set of fields the update needs, at compile time — a partial payload that omits a field (for example, an apartment/flat note) is not accepted as "only change what I specified," preventing a previously-saved field from being silently wiped by an incomplete update
+**Then** the system requires them to supply the complete set of fields the update needs, at compile time — a partial payload that omits a field (for example, an apartment/flat note) is not accepted as "only change what I specified," preventing a previously-saved field from being silently wiped by an incomplete update. This includes fields that are optional on `save` (for example, flat/note): the update payload type makes every field mandatory to supply, even when the developer's intent is "no value" — an omitted key is never treated as "leave unchanged."
 
 ### AC-06 (US-06) — happy path
 
 **Given** a consuming developer holds the `Ref` of a saved address
 **When** they delete it
-**Then** the system removes it from the counterparty's saved addresses and confirms to the developer
+**Then** the system removes it from the counterparty's saved addresses and returns the deleted address's own `Ref` to the developer, mirroring how `save` returns the saved address's `Ref` (AC-04)
 
 ### AC-07 (US-04) — domain invariant
 
@@ -177,7 +177,7 @@ Decision override: client-side pagination/warnings gap — the shared core clien
 
 **Given** a consuming developer calls a write method for an address `Ref` that doesn't belong to their own API key's counterparty, or calls any Address method with an invalid or expired API key
 **When** the request reaches Nova Poshta
-**Then** the system denies the call by raising the library's standard error, passing through Nova Poshta's own message as-is, rather than performing or revealing the operation
+**Then** the system denies the call by raising the library's standard error, passing through Nova Poshta's own message as-is, rather than performing or revealing the operation. AC-08 and AC-09 share one code path — every decline raises the same `NovaPoshtaApiError` shape regardless of cause; the only difference a developer sees is Nova Poshta's own message text inside it. The library performs no inspection of `errorCodes[]` to distinguish an authorization failure from any other decline.
 
 ### AC-10 (US-08) — error
 
@@ -189,7 +189,7 @@ Decision override: client-side pagination/warnings gap — the shared core clien
 
 **Given** a consuming developer holds a valid API key
 **When** they call a convenience method for a common single-call lookup (friendlier parameters or defaults over one raw method)
-**Then** the system makes exactly one call to Nova Poshta and returns the same typed data the corresponding raw method would return for the equivalent input
+**Then** the system makes exactly one call to Nova Poshta and returns the same typed data the corresponding raw method would return for the equivalent input — a convenience method may narrow that input into Nova Poshta's own filter parameters (so the single call itself returns fewer or more specific results, for example one exact match), but it never re-filters, sorts, or otherwise post-processes the response after Nova Poshta returns it, matching AC-02's no-client-side-re-filtering rule for raw lookups
 
 ### AC-12 (US-10) — cross-context
 
@@ -201,7 +201,7 @@ Decision override: client-side pagination/warnings gap — the shared core clien
 
 **Given** a consuming developer wants to know which Address methods are available
 **When** they browse the library's exported `address` module methods via their editor's autocomplete against the library's *published* package output — the type declaration files shipped in both the ESM and CJS builds
-**Then** every in-scope method (lookups, writes, and convenience methods) appears as its own distinctly named, typed method in both published builds
+**Then** every in-scope method (lookups, writes, and convenience methods) appears as its own distinctly named, typed method in both published builds — verified automatically in CI by a post-build step that imports the built package output (not the source) in both module formats and type-checks the method surface against this list, so a misconfigured `package.json` `exports`/`types` field is caught before release, not just a missing method
 
 ## 6. Non-functional requirements
 
@@ -211,13 +211,14 @@ Decision override: client-side pagination/warnings gap — the shared core clien
 | Error-contract coverage | 100% of in-scope methods throw the standard error (`NovaPoshtaApiError`) on any declined response, malformed response, or network failure; 0% throw an unhandled error type | unit test suite (`test/unit/modules/address`) |
 | Update full-replace guard | 100% of calls to the update method fail to compile if any field the full-replace payload requires is omitted | static check in CI (type-level test) |
 | Library-added overhead per call | Median ≤ 5ms beyond the underlying network round-trip (no client-side caching, retries, or heavy parsing) | median across ≥30 repeated calls, benchmarked inside `test/unit/modules/address` with `fetch` stubbed to near-zero latency (always runs in CI) |
-| Method-surface completeness | 100% of the 11 methods enumerated in §1 have a corresponding typed method | manual audit against Nova Poshta docs before release |
+| Method-surface completeness | 100% of the 11 methods enumerated in §1 have a corresponding typed method | manual audit against the `platx/go-nova-poshta` SDK's method list (the same cross-check source §1 used to build the 11-method list) before release; §8 OQ-2 separately tracks re-verifying against Nova Poshta's official docs once reachable |
+| Published-build type-surface check | 100% of in-scope methods (lookups, writes, convenience) importable and typed from the built ESM and CJS output, not just the source (see AC-13) | automated post-build step that imports the built package output in both module formats and type-checks the method surface; always runs in CI |
 
 ## 6.1 Security / privacy
 
 - **Data classification:** confidential — unlike `common`'s public reference catalog, this module's write methods and saved-address data concern a specific counterparty's address book (street, building number, flat, counterparty `Ref`), which is business/personal address data, not public catalog data.
 - **Personal data touched:** yes — a saved address's fields (street, building number, flat/note, and the counterparty `Ref` it belongs to) qualify as personal or business address data when the counterparty is a private individual.
-- **AuthZ/AuthN impact:** none beyond what's already fixed for the whole library — every call authenticates via the caller's own Nova Poshta API key; `address` introduces no new permission tiers or roles. Write methods only ever act within the scope of the calling API key's own counterparty, enforced by Nova Poshta itself.
+- **AuthZ/AuthN impact:** none beyond what's already fixed for the whole library — every call authenticates via the caller's own Nova Poshta API key; `address` introduces no new permission tiers or roles. Write methods only ever act within the scope of the calling API key's own counterparty, enforced by Nova Poshta itself. This cross-counterparty enforcement is trusted from Nova Poshta's own documented behavior, not independently verified by this library's test suite — the unit tests confirm the library correctly surfaces whatever decline Nova Poshta sends back (mocked), not that Nova Poshta's own enforcement holds in production.
 - **Abuse cases:**
   - Attempting to update or delete an address `Ref` belonging to a different counterparty than the caller's own: denied by Nova Poshta, surfaced as the standard error (see AC-09).
   - Excessive/automated polling of a lookup method to work around Nova Poshta's own rate limits: the library adds no rate-limiting or retry of its own — Nova Poshta's own throttling governs, and the standard error surfaces any rejection.

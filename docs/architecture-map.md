@@ -48,7 +48,7 @@ C4Container
 | Module | Path | Layers | Wired at | Responsibility |
 |---|---|---|---|---|
 | Core client | `src/client.ts` | infra | `src/index.ts` | Builds requests (`apiKey`/`modelName`/`calledMethod`/`methodProperties` envelope), sends via `fetch`, unwraps `success`/`errors`/`data`, throws typed errors |
-| Domain modules | `src/modules/<domain>/` (address, counterparty, internet-document, tracking-document, common, …) | domain | `src/index.ts` | One typed method-set per Nova Poshta API model, each built on the core client |
+| Domain modules | `src/modules/<domain>/` (address, counterparty, internet-document, tracking-document, common, scan-sheet, additional-service) | domain | `src/index.ts` | One typed method-set per Nova Poshta API model, each built on the core client |
 | Types | `src/types/` | domain | imported by modules | Request/response interfaces per model, plus shared envelope + error types |
 | Public surface | `src/index.ts` | app | package `main`/`module`/`types` entry | Re-exports the client factory + all domain modules + public types |
 
@@ -81,6 +81,7 @@ C4Container
 
 - No code exists yet — this map describes the target the `scaffold` skill will materialize, not something already built.
 - The Nova Poshta API's actual request/response shapes (field names, required properties per model) are external and must be verified against https://developers.novaposhta.ua/documentation while building each domain module — the API is not versioned in this repo and can change independently.
+- The 7-domain target list above (address, counterparty, internet-document, tracking-document, common, scan-sheet, additional-service) is closed as of 2026-09-21, cross-checked against two independent community SDKs — [`platx/go-nova-poshta`](https://pkg.go.dev/github.com/platx/go-nova-poshta) (`api/` sub-packages) and [`maddsua/NovaPoshtaREST`](https://github.com/maddsua/NovaPoshtaREST) — since Nova Poshta's own documentation portal again returned 403 on every automated fetch attempted (same blocker every module spec in this repo has hit). Should be re-verified against the live/official docs once reachable, same open question every shipped spec already carries.
 - Repo governance (branch protection on `main`, required CI status checks, npm publish token) is a GitHub-settings task, not a code task — done once the repo exists on GitHub, outside `scaffold`.
 
 ## Reconciliation with the authored architecture doc

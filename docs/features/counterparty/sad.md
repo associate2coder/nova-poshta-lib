@@ -24,9 +24,10 @@ than the single flat shape `address` got away with.
 
 **Top-3 quality goals (1-liners; full scenarios in §10):**
 
-1. Type-safety — all 11 in-scope Counterparty/ContactPerson methods (5 lookups + 6 writes) fully
-   typed, zero `any` in public signatures, with a counterparty's result shape narrowed to its actual
-   type — never a shared loose shape where every type-specific field is merely optional.
+1. Type-safety — all 11 in-scope Counterparty/ContactPerson methods (5 lookups + 6 writes), plus any
+   shipped convenience method, fully typed, zero `any` in public signatures, with a counterparty's
+   result shape narrowed to its actual type — never a shared loose shape where every type-specific
+   field is merely optional.
 2. Error-contract correctness — every declined, malformed, or network-failed call throws the same
    `NovaPoshtaApiError`, including the write-specific "success but no record" case (AC-07), matching
    `address`'s already-proven convention.
@@ -359,7 +360,7 @@ No user story and no acceptance criterion is left uncovered.
 |---|---|---|
 | Logging | None — the library emits no logs of its own | — (repo default, undocumented) |
 | Authentication | Caller-supplied `apiKey`, unchanged by this feature | `architecture-map.md` |
-| Error handling | Single `NovaPoshtaApiError`; array-shape check only, no per-field validation; identical for lookups and writes, and for the Counterparty and ContactPerson domains | `src/client.ts`; `common` ADR-0001 |
+| Error handling | Single `NovaPoshtaApiError`; array-shape check only, no per-field validation; identical for lookups and writes, and for the Counterparty and ContactPerson domains. `errors`/`warnings` pass through Nova Poshta's own response text verbatim, which can echo submitted personal data (a name, phone, or EDRPOU) — the library performs no redaction of its own; a consuming developer forwarding a caught error to a third-party logging service should treat its contents as potentially carrying personal data | `src/client.ts`; `common` ADR-0001; `spec.md` §6.1 |
 | Write-return shape | `T \| undefined` when a successful write's data is empty | `address` ADR-0001 (reused unchanged) |
 | Discriminated-type modeling | Three hand-written per-variant `Save`/`Update` interfaces (`PrivatePerson`/`Organization`/`ThirdParty`), unioned into one payload type per method — a new pattern this feature introduces | `counterparty` ADR-0001 |
 | Cross-module type reuse | A domain module may import another domain module's *type* (never call it at runtime) when the API response genuinely shares that shape — first instance: `getCounterpartyAddresses` imports `address`'s `SavedAddress` | this document, §4 decision 8, §5 |
@@ -387,17 +388,20 @@ either here).
 Each top-3 goal from §1 expanded into a full scenario:
 
 **QG-1. Type-safety**
-- **When:** any of the 11 in-scope Counterparty/ContactPerson methods (5 lookups + 6 writes) is
-  exported from `counterparty`.
-- **Then:** 100% of in-scope methods have zero `any` in their public signatures, and a counterparty's
-  typed result narrows to its actual `PrivatePerson`/`Organization`/`ThirdParty` shape — never a
-  shared loose type where a type-specific field is merely optional (`spec.md` §6 rows 1 and 3, AC-03).
+- **When:** any of the 11 in-scope Counterparty/ContactPerson methods (5 lookups + 6 writes), or any
+  shipped convenience method, is exported from `counterparty`.
+- **Then:** 100% of in-scope methods — raw and convenience alike — have zero `any` in their public
+  signatures, and a counterparty's typed result narrows to its actual
+  `PrivatePerson`/`Organization`/`ThirdParty` shape — never a shared loose type where a type-specific
+  field is merely optional (`spec.md` §6 rows 1 and 3, AC-03; convenience-method scope matches
+  `spec.md` §6 row 1's "lookups, writes, convenience" wording — measured against whichever set §8
+  OQ-3 fixes, zero convenience methods in v1 satisfies this vacuously).
 - **How verify:** static check in CI, plus a type-level test asserting the discriminated narrowing
   (`spec.md` §6, rows 1 and 3).
 
 **QG-2. Error-contract correctness**
-- **When:** a Counterparty or ContactPerson call is declined by Nova Poshta, its response isn't
-  array-shaped, or a write succeeds with an empty data array.
+- **When:** a Counterparty or ContactPerson call — raw or convenience — is declined by Nova Poshta,
+  its response isn't array-shaped, or a write succeeds with an empty data array.
 - **Then:** 100% of in-scope methods throw `NovaPoshtaApiError` on a decline or non-array-shaped
   response; 0% throw on a successful write with empty data — that resolves to `undefined`, not an
   error (AC-07, `address` ADR-0001 reused).
@@ -416,8 +420,8 @@ Each top-3 goal from §1 expanded into a full scenario:
 | Risk / debt | Severity | Mitigation | Owner |
 |---|---|---|---|
 | Security review required before release — write operations on personal/business identity data, plus a PII-bearing lookup (the phone+last-name catalog search) (`spec.md` §6.1) | High | Schedule and complete a security review before `sdd:ship counterparty`; not performed in this design session | Security Lead |
-| Open architectural decision: the §1 in-scope 11-method list, incl. `getCounterpartiesCatalog`'s exact method name, was cross-checked against a third-party SDK, not Nova Poshta's own docs portal (blocks automated fetches) — re-verification is still pending | Open question | Resolve before `sdd:implement counterparty` (`spec.md` §8 OQ-2); default now — proceed on the SDK-verified list | Tech Lead |
-| Open architectural decision: should the shared core client be extended to expose pagination metadata (`totalCount`) and success-path warnings — more urgent here than for `address`, since `getCounterparties` is a growing transactional list, not a semi-static reference list | Open question | Resolve before `sdd:design` of any future module whose lookups depend on complete, multi-page counterparty results (`spec.md` §8 OQ-1, kept as a known limitation for this feature per the §1 Decision override) | Tech Lead |
+| Open architectural decision: the §1 in-scope 11-method list, incl. `getCounterpartiesCatalog`'s exact method name, was cross-checked against a third-party SDK, not Nova Poshta's own docs portal (blocks automated fetches) — re-verification is still pending. This also covers a second, more consequential unverified assumption ADR-0001 rests on: that Nova Poshta's lookup responses actually carry a real, runtime-checkable field identifying a counterparty's type at all (`spec.md` §1, ¶ below the method list) — if that assumption proves false, ADR-0001's discriminated-union mechanism (§4 decision 6, AC-03) needs rework, not just a method-name fix | Open question | Resolve before `sdd:implement counterparty` (`spec.md` §8 OQ-2); default now — proceed on the SDK-verified list and the discriminant-field assumption both unverified | Tech Lead |
+| `sdd:design counterparty`'s own gate for OQ-1 (pagination/warnings) was reached in this design pass and resolved via the spec's own stated default — known limitation, not fixed in this feature (§4 decision 2, and the matching Accepted-debt bullet below). The remaining, still-open half is whether a *future* module's lookups will need the shared core client extended | Open question | Resolve before `sdd:design` of any future module whose lookups depend on complete, multi-page counterparty results (`spec.md` §8 OQ-1) | Tech Lead |
 | Open architectural decision: which specific convenience method(s) (US-08) ship in v1 | Open question | Resolve before `sdd:tasks counterparty`, based on which raw lookups see the most friction in practice (`spec.md` §8 OQ-3) | Tech Lead |
 | Cross-account write-decline behavior (AC-15) is trusted from Nova Poshta's own documented behavior, inferred from secondary/community sources, not confirmed against a live API response (`spec.md` §6.1) | Medium | Unit tests confirm the library surfaces whatever decline Nova Poshta sends back (mocked), not that Nova Poshta's own enforcement holds in production; the security review above should confirm this against a live call before sign-off | Security Lead |
 

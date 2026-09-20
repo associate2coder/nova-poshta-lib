@@ -29,6 +29,12 @@ the `Update` type for each variant is generated from its `Save` counterpart*. Th
 surface — changing the mechanism later is a breaking change for anyone importing the payload types
 directly.
 
+This whole mechanism rests on one unverified premise, carried in `spec.md` §1: that Nova Poshta's
+lookup responses actually carry a real, runtime-checkable field identifying which counterparty type a
+given record is. `spec.md` §8 OQ-2 schedules re-verifying this against the live API before
+implementation; if it proves false, this decision needs rework, not just the method-name spelling
+that OQ-2 also covers (`sad.md` §11).
+
 ## Decision drivers
 
 - `spec.md` AC-03 — a counterparty's typed shape must discriminate to its real type, never a shared

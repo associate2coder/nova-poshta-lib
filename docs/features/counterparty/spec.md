@@ -25,10 +25,10 @@ Cross-checked against the `platx/go-nova-poshta` SDK's `api/counterparty` and `a
 
 **Lookups (read-only):**
 
-1. `getCounterparties` — list counterparties by property (`Sender`/`Recipient`/`ThirdParty`), filterable by search string, paginated
+1. `getCounterparties` — list counterparties by property (`Sender`/`Recipient`/`ThirdParty`), filterable by search string, paginated (see the property-vs-type note below the list)
 2. `getCounterpartiesCatalog` — look up existing counterparties by phone number + a partial last name, ahead of creating a new one (exact method name subject to the §8 re-verification — sources spell it inconsistently)
 3. `getCounterpartyContactPersons` — the contact persons saved under a given counterparty
-4. `getCounterpartyAddresses` — the saved addresses (per `address`) registered under a given counterparty
+4. `getCounterpartyAddresses` — the saved addresses (per `address`) registered under a given counterparty; the response type is imported directly from `address`'s own saved-address type rather than duplicated here, so the two modules share one definition of that shape
 5. `getCounterpartyOptions` — a counterparty's own configuration/options
 
 **Writes (a developer's own counterparties):**
@@ -42,6 +42,10 @@ Cross-checked against the `platx/go-nova-poshta` SDK's `api/counterparty` and `a
 9. `save` (contact person) — create a new contact person under an existing counterparty
 10. `update` (contact person) — replace an existing contact person's fields in full
 11. `delete` (contact person) — remove a contact person by its `Ref`
+
+Two distinct axes share overlapping names here and must not be collapsed into one enum: a **counterparty property** (`Sender`/`Recipient`/`ThirdParty`) used only to filter `getCounterparties` results, and a **counterparty type** (`PrivatePerson`/`Organization`/`ThirdParty`) used only for `save`/`update` and AC-03's discriminated result shape. `ThirdParty` is the one value legitimately shared by both axes; `Sender`/`Recipient` never appear as a save-time type, and `PrivatePerson`/`Organization` never appear as a filter property. (`PrivatePerson` and `Organization` are now defined in `CONTEXT.md`'s glossary alongside the existing `ThirdParty` entry.)
+
+This spec assumes Nova Poshta's lookup responses (`getCounterparties` and related) carry a real, runtime-checkable discriminant field identifying which counterparty type a given record actually is — the mechanism AC-03's discriminated-result guarantee depends on. This assumption rides on the same live-API re-verification §8 OQ-2 already schedules before implementation; if it proves false, AC-03's guarantee needs rework at that point.
 
 Every §5 acceptance criterion, the §6 "Method-surface completeness" row, and §7's matching KPI resolve against this list. Convenience methods (§4 US-08) are additive on top of it, not a replacement for any raw method.
 
@@ -131,8 +135,8 @@ Decision override: the discriminated `save` payload (`PrivatePerson` / `Organiza
 ### US-11: Rely on counterparty as the authoritative Ref source
 
 **As a** consuming developer
-**I want** every future domain module that accepts a counterparty `Ref` to expect the same `Ref` values `counterparty` resolves, not maintain its own lookup
-**So that** the `Ref` I resolve through `counterparty` is the same one every other module expects, without `counterparty` itself checking or enforcing how another module uses it
+**I want** `counterparty` to always return Nova Poshta's own live, current `Ref` value — never cached or invented locally
+**So that** any future domain module that later accepts that same `Ref` can treat it as authoritative, without `counterparty` itself checking or enforcing how another module uses it
 
 ## 5. Acceptance criteria
 
@@ -142,7 +146,7 @@ Decision override: the discriminated `save` payload (`PrivatePerson` / `Organiza
 
 **Given** a consuming developer holds a valid API key
 **When** they request counterparty-domain lookup data (for example, the list of their counterparties or a counterparty's contact persons)
-**Then** the system returns exactly the page of Nova Poshta's documented data for that lookup as typed values — for methods whose documented parameters include pagination, the library passes those parameters through when supplied but does not automatically walk multiple pages to assemble a complete list (see §1 decision override); when the developer supplies no pagination parameter at all, the library never injects one on their behalf
+**Then** the system returns exactly the page of Nova Poshta's documented data for that lookup as a typed array — every documented lookup method, including `getCounterpartyOptions`, returns its result this way, one consistent shape regardless of whether Nova Poshta's own concept of that data is singular or plural — for methods whose documented parameters include pagination, the library passes those parameters through when supplied but does not automatically walk multiple pages to assemble a complete list (see §1 decision override); when the developer supplies no pagination parameter at all, the library never injects one on their behalf; the developer receives no indication, explicit or implicit, of whether more results exist beyond the returned page — not a count, not a boolean, not a signal inferred from page size
 
 ### AC-02 (US-02) — happy path
 
@@ -160,19 +164,19 @@ Decision override: the discriminated `save` payload (`PrivatePerson` / `Organiza
 
 **Given** a consuming developer holds a valid API key and the fields their intended counterparty type requires
 **When** they save a new counterparty as a private person, organization, or third party
-**Then** the system records it with Nova Poshta and returns the saved counterparty's own `Ref` to the developer
+**Then** the system records it with Nova Poshta and returns the saved counterparty's own `Ref` to the developer — or nothing, per AC-07, when Nova Poshta reports success but returns no record. At compile time, the payload's fields must all belong to one counterparty type — the type system rejects a payload mixing fields from more than one type — though it cannot verify the payload matches whichever type was previously saved under an existing `Ref`; see AC-05's identical scoping for `update`
 
 ### AC-05 (US-05) — domain invariant
 
 **Given** a consuming developer wants to update an existing counterparty
 **When** they call the update method
-**Then** the system requires them to supply the complete set of fields that counterparty's own type needs, at compile time, matching the original type it was saved as — a partial payload that omits a required field is rejected, and so is a payload shaped for a different counterparty type than the one being updated (for example, submitting organization fields against a private-person counterparty); an omitted key is never treated as "leave unchanged"
+**Then** the system requires them to supply the complete set of fields that counterparty's own type needs, at compile time — a partial payload that omits a required field is rejected, and so is a payload mixing fields from more than one counterparty type (for example, an organization's EDRPOU field together with a private person's first/last name in one payload); an omitted key is never treated as "leave unchanged". This compile-time guard checks the payload's own internal consistency only — a bare `Ref` carries no compile-time information about which type was actually saved under it, so a payload that is internally consistent but shaped for the wrong counterparty (e.g. a well-formed `Organization` payload submitted against a `Ref` that was actually saved as a `PrivatePerson`) is not caught by the type system; that mismatch surfaces instead as Nova Poshta's own runtime decline (AC-14/AC-15). The call resolves the updated counterparty's own `Ref` — or nothing, per AC-07, when Nova Poshta reports success but returns no record
 
 ### AC-06 (US-06) — happy path
 
 **Given** a consuming developer holds the `Ref` of a counterparty
 **When** they delete it
-**Then** the system removes it and returns the deleted counterparty's own `Ref` to the developer, mirroring how `save` returns the saved counterparty's `Ref` (AC-04)
+**Then** the system removes it and returns the deleted counterparty's own `Ref` to the developer — or nothing, per AC-07, when Nova Poshta reports success but returns no record — mirroring how `save` returns the saved counterparty's `Ref` (AC-04)
 
 ### AC-07 (US-04) — domain invariant
 
@@ -184,19 +188,19 @@ Decision override: the discriminated `save` payload (`PrivatePerson` / `Organiza
 
 **Given** a consuming developer holds the `Ref` of one of their own counterparties
 **When** they save a new contact person under it
-**Then** the system records it with Nova Poshta and returns the saved contact person's own `Ref` to the developer
+**Then** the system records it with Nova Poshta and returns the saved contact person's own `Ref` to the developer — or nothing, per AC-07, when Nova Poshta reports success but returns no record
 
 ### AC-09 (US-07) — domain invariant
 
 **Given** a consuming developer wants to update an existing contact person
 **When** they call the update method
-**Then** the system requires them to supply the complete set of fields the update needs, at compile time — an omitted field (for example, a middle name) is never treated as "leave unchanged," preventing a previously-saved field from being silently wiped by an incomplete update
+**Then** the system requires them to supply every field ContactPerson documents, required and optional alike (for example, a middle name that may not apply to every contact person), at compile time — there is no partial update and no way to represent "leave this field as it was"; an omitted field is never treated as "leave unchanged," preventing a previously-saved field from being silently wiped by an incomplete update
 
 ### AC-10 (US-07) — happy path
 
 **Given** a consuming developer holds the `Ref` of a contact person
 **When** they delete it
-**Then** the system removes it and returns the deleted contact person's own `Ref` to the developer
+**Then** the system removes it and returns the deleted contact person's own `Ref` to the developer — or nothing, per AC-07, when Nova Poshta reports success but returns no record
 
 ### AC-11 (US-08) — happy path
 
@@ -244,18 +248,19 @@ Decision override: the discriminated `save` payload (`PrivatePerson` / `Organiza
 
 | Aspect | Target | Measurement |
 |---|---|---|
-| Type-safety coverage | 100% of in-scope Counterparty/ContactPerson methods (lookups, writes, convenience) have zero `any` in public signatures | static check in CI |
+| Type-safety coverage | 100% of in-scope Counterparty/ContactPerson methods (lookups, writes; convenience methods measured against whichever set §8 OQ-3 fixes at design/tasks time — shipping zero convenience methods in v1 satisfies this at 100% of that set) have zero `any` in public signatures | static check in CI |
 | Error-contract coverage | 100% of in-scope methods throw the standard error (`NovaPoshtaApiError`) on any declined response, malformed response, or network failure; 0% throw an unhandled error type | unit test suite (`test/unit/modules/counterparty`) |
-| Update full-replace + discriminant guard | 100% of calls to the counterparty update method fail to compile if any field its own type requires is omitted, OR if the payload is shaped for a different counterparty type than the one being updated | static check in CI (type-level test) |
-| Library-added overhead per call | Median ≤ 5ms beyond the underlying network round-trip (no client-side caching, retries, or heavy parsing) | median across ≥30 repeated calls, benchmarked inside `test/unit/modules/counterparty` with `fetch` stubbed to near-zero latency (always runs in CI) |
+| Update full-replace + discriminant guard | 100% of calls to the counterparty update method fail to compile if any field its own type requires is omitted, OR if the payload mixes fields belonging to more than one counterparty type (payload-internal consistency only — matching a payload to whichever type was actually saved under an existing `Ref` is not compile-time checkable, per AC-05) | static check in CI (type-level test) |
+| Library-added overhead per call | Median total call time ≤ 5ms, measured with `fetch` stubbed to near-zero latency (no client-side caching, retries, or heavy parsing) — with the network cost driven to ~0, total call time and library-added overhead are effectively the same figure | median across ≥30 repeated calls, benchmarked inside `test/unit/modules/counterparty` with `fetch` stubbed to near-zero latency, asserting the median of TOTAL elapsed call time (not a separately isolated overhead figure) (always runs in CI) |
 | Method-surface completeness | 100% of the 11 methods enumerated in §1 have a corresponding typed method | manual audit against the `platx/go-nova-poshta` SDK's method list before release; §8 OQ separately tracks re-verifying against Nova Poshta's official docs once reachable |
-| Published-build type-surface check | 100% of in-scope methods (lookups, writes, convenience) importable and typed from the built ESM and CJS output, not just the source (see AC-17) | automated post-build step that imports the built package output in both module formats and type-checks the method surface; always runs in CI |
+| Published-build type-surface check | 100% of in-scope methods (lookups, writes; convenience methods measured against whichever set §8 OQ-3 fixes at design/tasks time — shipping zero convenience methods in v1 satisfies this at 100% of that set) importable and typed from the built ESM and CJS output, not just the source (see AC-17) | automated post-build step that imports the built package output in both module formats and type-checks the method surface; always runs in CI |
 
 ## 6.1 Security / privacy
 
 - **Data classification:** confidential — this module's data (a private person's name and phone, an organization's registration details, a contact person's name and phone) is personal or business identity data, a step more sensitive than `address`'s street-level data.
 - **Personal data touched:** yes — a `PrivatePerson` counterparty's name and phone, an `Organization` counterparty's registration identifier, and every contact person's name and phone qualify as personal or business identity data.
 - **AuthZ/AuthN impact:** none beyond what's already fixed for the whole library — every call authenticates via the caller's own Nova Poshta API key; `counterparty` introduces no new permission tiers or roles of its own. One documented exception is enforced entirely by Nova Poshta, not this library: contact-person operations are reserved for organization-held API keys, and a private-individual key attempting one is declined the same way any other authorization failure is (see AC-15).
+- **Known consideration (unverified assumption):** AC-15's cross-account-decline behavior — that Nova Poshta declines, rather than silently scopes or no-ops, a write against a `Ref` outside the caller's own account — is inferred from secondary/community sources, not confirmed against a live API response; this spec's own drafting could not reach Nova Poshta's official documentation (see §8 OQ-2). This assumption should be confirmed against a live API call before the security review below is considered complete.
 - **Abuse cases:**
   - Attempting to update or delete a counterparty or contact-person `Ref` belonging to a different account: denied by Nova Poshta, surfaced as the standard error (see AC-15).
   - Using the catalog lookup (search by phone number + partial last name) to harvest personal data by iterating over guessed phone numbers: the library adds no rate-limiting or throttling of its own — Nova Poshta's own rate limits and account-scoping govern what a given API key can retrieve, and the standard error surfaces any rejection.

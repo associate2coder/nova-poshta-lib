@@ -1,4 +1,4 @@
-import type { NovaPoshtaEnvelope } from "./types/common.js";
+import type { NovaPoshtaEnvelope } from "./types/envelope.js";
 
 const API_URL = "https://api.novaposhta.ua/v2.0/json/";
 
@@ -45,6 +45,12 @@ export function createClient(apiKey: string): NovaPoshtaClient {
           envelope.errors,
           envelope.errorCodes,
           envelope.warnings,
+        );
+      }
+
+      if (!Array.isArray(envelope.data)) {
+        throw new NovaPoshtaApiError(
+          `Nova Poshta API response for ${modelName}.${calledMethod} was not a navigable list`,
         );
       }
 

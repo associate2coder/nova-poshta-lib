@@ -23,3 +23,29 @@ export type {
   TireWheel,
   Tray,
 } from "./types/common.js";
+
+export { createAddressModule } from "./modules/address/index.js";
+export type { AddressModule } from "./modules/address/index.js";
+export type {
+  Area,
+  AddressReferenceRecordBase,
+  City,
+  DeleteAddressPayload,
+  DeletedAddress,
+  GetCitiesFilters,
+  GetSettlementsFilters,
+  GetStreetParams,
+  GetWarehousesFilters,
+  SaveAddressPayload,
+  SavedAddress,
+  SearchSettlementsParams,
+  SearchSettlementStreetsParams,
+  SearchWrapper,
+  Settlement,
+  SettlementAddress,
+  Street,
+  StreetAddress,
+  UpdateAddressPayload,
+  Warehouse,
+  WarehouseType,
+} from "./types/address.js";

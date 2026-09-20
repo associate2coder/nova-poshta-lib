@@ -35,6 +35,21 @@ const ADDRESS_METHOD_NAMES = [
   "findCityByName",
 ];
 
+const COUNTERPARTY_METHOD_NAMES = [
+  "getCounterparties",
+  "getCounterpartiesCatalog",
+  "getCounterpartyContactPersons",
+  "getCounterpartyAddresses",
+  "getCounterpartyOptions",
+  "save",
+  "update",
+  "delete",
+  "saveContactPerson",
+  "updateContactPerson",
+  "deleteContactPerson",
+  "findCounterparty",
+];
+
 function declarationPath(relativePath: string): string {
   return fileURLToPath(new URL(`../../${relativePath.replace(/^\.\//, "")}`, import.meta.url));
 }
@@ -101,6 +116,27 @@ describe("published build surface (AC-07)", () => {
 
     expect(contents).toMatch(/\bcreateAddressModule\b/);
     for (const method of ADDRESS_METHOD_NAMES) {
+      // Word-boundary match — "update"/"save"/"delete" are common enough identifiers that a
+      // loose substring check could false-positive against unrelated declarations.
+      expect(contents, `expected ${relativePath} to declare ${method} as its own identifier`).toMatch(
+        new RegExp(`\\b${method}\\b`),
+      );
+    }
+  });
+
+  it.each([
+    [ESM_TYPES_PATH, "ESM"],
+    [CJS_TYPES_PATH, "CJS"],
+  ])("%s (%s) declares createCounterpartyModule and all 12 counterparty identifiers (AC-17)", (relativePath) => {
+    let contents: string;
+    try {
+      contents = readFileSync(declarationPath(relativePath), "utf8");
+    } catch {
+      throw new Error(`${relativePath} is missing — run "npm run build" before this test`);
+    }
+
+    expect(contents).toMatch(/\bcreateCounterpartyModule\b/);
+    for (const method of COUNTERPARTY_METHOD_NAMES) {
       // Word-boundary match — "update"/"save"/"delete" are common enough identifiers that a
       // loose substring check could false-positive against unrelated declarations.
       expect(contents, `expected ${relativePath} to declare ${method} as its own identifier`).toMatch(

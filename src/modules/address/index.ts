@@ -2,10 +2,14 @@ import type { NovaPoshtaClient } from "../../client.js";
 import type {
   Area,
   City,
+  DeleteAddressPayload,
+  DeletedAddress,
   GetCitiesFilters,
   GetSettlementsFilters,
   GetStreetParams,
   GetWarehousesFilters,
+  SaveAddressPayload,
+  SavedAddress,
   SearchSettlementsParams,
   SearchSettlementStreetsParams,
   SearchWrapper,
@@ -13,6 +17,7 @@ import type {
   SettlementAddress,
   Street,
   StreetAddress,
+  UpdateAddressPayload,
   Warehouse,
   WarehouseType,
 } from "../../types/address.js";
@@ -28,6 +33,13 @@ export interface AddressModule {
   ): Promise<SearchWrapper<StreetAddress> | undefined>;
   getWarehouses(filters?: GetWarehousesFilters): Promise<Warehouse[]>;
   getWarehouseTypes(): Promise<WarehouseType[]>;
+  save(payload: SaveAddressPayload): Promise<SavedAddress | undefined>;
+  /**
+   * Full-replace: every field on `payload` is mandatory (AC-05). An omitted key is never treated
+   * as "leave unchanged" — supply the complete, current set of fields to avoid silently wiping one.
+   */
+  update(payload: UpdateAddressPayload): Promise<SavedAddress | undefined>;
+  delete(payload: DeleteAddressPayload): Promise<DeletedAddress | undefined>;
 }
 
 async function firstOrUndefined<T>(
@@ -63,5 +75,11 @@ export function createAddressModule(client: NovaPoshtaClient): AddressModule {
     getWarehouses: (filters?: GetWarehousesFilters) =>
       client.request<Warehouse>("Address", "getWarehouses", filters as Record<string, unknown>),
     getWarehouseTypes: () => client.request<WarehouseType>("Address", "getWarehouseTypes"),
+    save: (payload: SaveAddressPayload) =>
+      firstOrUndefined<SavedAddress>(client, "save", payload as unknown as Record<string, unknown>),
+    update: (payload: UpdateAddressPayload) =>
+      firstOrUndefined<SavedAddress>(client, "update", payload as unknown as Record<string, unknown>),
+    delete: (payload: DeleteAddressPayload) =>
+      firstOrUndefined<DeletedAddress>(client, "delete", payload as unknown as Record<string, unknown>),
   };
 }

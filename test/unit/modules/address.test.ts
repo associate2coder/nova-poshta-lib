@@ -154,6 +154,104 @@ describe("address module — search-wrapper lookups (T4, AC-01/AC-02/AC-03)", ()
   });
 });
 
+describe("address module — write methods (T5, AC-04/AC-05/AC-06/AC-07)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("save resolves the saved record including its own Ref (AC-04)", async () => {
+    const fetchMock = mockFetchOnce(() =>
+      successEnvelope([{ Ref: "address-1", CounterpartyRef: "cp-1", StreetRef: "street-1", BuildingNumber: "12" }]),
+    );
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(
+      address.save({ CounterpartyRef: "cp-1", StreetRef: "street-1", BuildingNumber: "12" }),
+    ).resolves.toEqual({ Ref: "address-1", CounterpartyRef: "cp-1", StreetRef: "street-1", BuildingNumber: "12" });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.calledMethod).toBe("save");
+    expect(sentBody.methodProperties).toEqual({ CounterpartyRef: "cp-1", StreetRef: "street-1", BuildingNumber: "12" });
+  });
+
+  it("save resolves undefined when Nova Poshta reports success with an empty data array (AC-07)", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(
+      address.save({ CounterpartyRef: "cp-1", StreetRef: "street-1", BuildingNumber: "12" }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("update resolves the updated record including its own Ref (AC-05 happy path)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([{ Ref: "address-1", BuildingNumber: "13" }]));
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(
+      address.update({
+        Ref: "address-1",
+        CounterpartyRef: "cp-1",
+        StreetRef: "street-1",
+        BuildingNumber: "13",
+        Flat: "3",
+        Note: "",
+      }),
+    ).resolves.toEqual({ Ref: "address-1", BuildingNumber: "13" });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.calledMethod).toBe("update");
+  });
+
+  it("update resolves undefined when Nova Poshta reports success with an empty data array (AC-07)", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(
+      address.update({
+        Ref: "address-1",
+        CounterpartyRef: "cp-1",
+        StreetRef: "street-1",
+        BuildingNumber: "13",
+        Flat: "3",
+        Note: "",
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("delete resolves the deleted address's own Ref (AC-06)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([{ Ref: "address-1" }]));
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(address.delete({ Ref: "address-1" })).resolves.toEqual({ Ref: "address-1" });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.calledMethod).toBe("delete");
+    expect(sentBody.methodProperties).toEqual({ Ref: "address-1" });
+  });
+
+  it("delete resolves undefined when Nova Poshta reports success with an empty data array (AC-07)", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(address.delete({ Ref: "address-1" })).resolves.toBeUndefined();
+  });
+
+  it("rejects an UpdateAddressPayload missing a field at compile time (AC-05)", () => {
+    const address = createAddressModule(createClient("test-api-key"));
+
+    // @ts-expect-error — Flat is optional on SaveAddressPayload but mandatory on UpdateAddressPayload.
+    void address.update({
+      Ref: "address-1",
+      CounterpartyRef: "cp-1",
+      StreetRef: "street-1",
+      BuildingNumber: "13",
+      Note: "",
+    });
+
+    expect(true).toBe(true);
+  });
+});
+
 describe("address module — decline error branch", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

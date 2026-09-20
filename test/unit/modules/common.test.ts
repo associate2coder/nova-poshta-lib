@@ -64,7 +64,7 @@ describe("common module", () => {
       await expect(common.getPaymentForms()).rejects.toThrow(NovaPoshtaApiError);
     });
 
-    it("throws NovaPoshtaApiError when the API key is rejected (AC-04)", async () => {
+    it("throws NovaPoshtaApiError when the API key is rejected (AC-04), passing through Nova Poshta's own message", async () => {
       mockFetchOnce(() => ({
         ok: true,
         json: () =>
@@ -72,10 +72,13 @@ describe("common module", () => {
       }));
       const common = createCommonModule(createClient("test-api-key"));
 
-      await expect(common.getPaymentForms()).rejects.toThrow(NovaPoshtaApiError);
+      const err = await common.getPaymentForms().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(NovaPoshtaApiError);
+      expect((err as NovaPoshtaApiError).errors).toEqual(["Invalid API key"]);
+      expect((err as NovaPoshtaApiError).errorCodes).toEqual(["401"]);
     });
 
-    it("throws NovaPoshtaApiError when declined for another reason (AC-05)", async () => {
+    it("throws NovaPoshtaApiError when declined for another reason (AC-05), passing through Nova Poshta's own explanation", async () => {
       mockFetchOnce(() => ({
         ok: true,
         json: () =>
@@ -89,20 +92,23 @@ describe("common module", () => {
       }));
       const common = createCommonModule(createClient("test-api-key"));
 
-      await expect(common.getCargoDescriptionList({ FindByString: "??" })).rejects.toThrow(NovaPoshtaApiError);
+      const err = await common.getCargoDescriptionList({ FindByString: "??" }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(NovaPoshtaApiError);
+      expect((err as NovaPoshtaApiError).errors).toEqual(["Unsupported filter value"]);
+      expect((err as NovaPoshtaApiError).errorCodes).toEqual(["400"]);
     });
 
-    it("throws NovaPoshtaApiError on a network/transport failure (AC-08)", async () => {
+    it("throws NovaPoshtaApiError (not a raw native error) on a network/transport failure (AC-08)", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockRejectedValue(new TypeError("fetch failed")),
       );
       const common = createCommonModule(createClient("test-api-key"));
 
-      await expect(common.getPaymentForms()).rejects.toThrow();
+      await expect(common.getPaymentForms()).rejects.toThrow(NovaPoshtaApiError);
     });
 
-    it("throws NovaPoshtaApiError when the response body isn't valid JSON (AC-08)", async () => {
+    it("throws NovaPoshtaApiError (not a raw native error) when the response body isn't valid JSON (AC-08)", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue({
@@ -112,7 +118,7 @@ describe("common module", () => {
       );
       const common = createCommonModule(createClient("test-api-key"));
 
-      await expect(common.getPaymentForms()).rejects.toThrow();
+      await expect(common.getPaymentForms()).rejects.toThrow(NovaPoshtaApiError);
     });
   });
 

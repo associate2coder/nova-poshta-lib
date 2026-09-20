@@ -1,0 +1,59 @@
+{
+  "slug": "common",
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Rename envelope types out of common.ts; add the array-shape check to the core client",
+      "layer": "infra",
+      "deps": [],
+      "acs": ["AC-03"],
+      "dod": "test/unit/client.test.ts asserts a non-array-shaped success response throws NovaPoshtaApiError and an array-shaped response (even with sparse records) does not",
+      "files_hint": ["src/types/common.ts", "src/types/envelope.ts", "src/client.ts", "src/index.ts", "test/unit/client.test.ts"]
+    },
+    {
+      "id": "T2",
+      "title": "Define the 15 reference-list request/response types in src/types/common.ts",
+      "layer": "domain",
+      "deps": ["T1"],
+      "acs": [],
+      "dod": "src/types/common.ts exports all 15 record types + OpenEnum + the 2 filter interfaces matching public-api.md §3, every documented field optional, zero any",
+      "files_hint": ["src/types/common.ts"]
+    },
+    {
+      "id": "T3",
+      "title": "Implement createCommonModule with all 15 typed reference-list methods",
+      "layer": "ports",
+      "deps": ["T2"],
+      "acs": ["AC-01", "AC-02", "AC-06"],
+      "dod": "createCommonModule returns an object with all 15 methods named per public-api.md §1, each delegating to client.request with filters passed through unmodified",
+      "files_hint": ["src/modules/common/index.ts"]
+    },
+    {
+      "id": "T4",
+      "title": "Re-export createCommonModule and its types from src/index.ts",
+      "layer": "wiring",
+      "deps": ["T3"],
+      "acs": [],
+      "dod": "src/index.ts exports createCommonModule, CommonModule, and every type from src/types/common.ts; npm run build succeeds",
+      "files_hint": ["src/index.ts"]
+    },
+    {
+      "id": "T5",
+      "title": "Unit tests: happy path, filters, full error contract, and overhead benchmark",
+      "layer": "tests",
+      "deps": ["T1", "T3"],
+      "acs": ["AC-01", "AC-02", "AC-03", "AC-04", "AC-05", "AC-08"],
+      "dod": "test/unit/modules/common.test.ts covers AC-01/02/03/04/05/08 (100% of the four error branches throw NovaPoshtaApiError, 0% throw on tolerated per-field noise) and asserts median library-added overhead <=5ms across >=30 stubbed calls",
+      "files_hint": ["test/unit/modules/common.test.ts"]
+    },
+    {
+      "id": "T6",
+      "title": "Verify all 15 methods are discoverable in both published ESM and CJS builds",
+      "layer": "tests",
+      "deps": ["T4"],
+      "acs": ["AC-07"],
+      "dod": "test/unit/build-surface.test.ts asserts dist/index.d.ts and dist/index.d.cts both contain createCommonModule and all 15 method names",
+      "files_hint": ["test/unit/build-surface.test.ts"]
+    }
+  ]
+}

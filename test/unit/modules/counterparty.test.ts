@@ -289,3 +289,112 @@ describe("counterparty module — write methods (T4, AC-03/AC-04/AC-05/AC-06/AC-
     expect(true).toBe(true);
   });
 });
+
+describe("counterparty module — contact-person write methods (T5, AC-07/AC-08/AC-09/AC-10)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("saveContactPerson sends modelName ContactPerson / calledMethod save and resolves the saved record's own Ref (AC-08)", async () => {
+    const fetchMock = mockFetchOnce(() =>
+      successEnvelope([{ Ref: "contact-1", FirstName: "Petro", LastName: "Ivanenko" }]),
+    );
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(
+      counterparty.saveContactPerson({
+        CounterpartyRef: "cp-1",
+        FirstName: "Petro",
+        LastName: "Ivanenko",
+        Phone: "380500000001",
+      }),
+    ).resolves.toEqual({ Ref: "contact-1", FirstName: "Petro", LastName: "Ivanenko" });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("ContactPerson");
+    expect(sentBody.calledMethod).toBe("save");
+  });
+
+  it("saveContactPerson resolves undefined when Nova Poshta reports success with an empty data array (AC-07)", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(
+      counterparty.saveContactPerson({
+        CounterpartyRef: "cp-1",
+        FirstName: "Petro",
+        LastName: "Ivanenko",
+        Phone: "380500000001",
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("updateContactPerson sends modelName ContactPerson / calledMethod update and resolves the updated record's own Ref (AC-10)", async () => {
+    const fetchMock = mockFetchOnce(() =>
+      successEnvelope([{ Ref: "contact-1", FirstName: "Petro", LastName: "Ivanenko" }]),
+    );
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(
+      counterparty.updateContactPerson({
+        Ref: "contact-1",
+        FirstName: "Petro",
+        MiddleName: "Petrovych",
+        LastName: "Ivanenko",
+        Phone: "380500000001",
+      }),
+    ).resolves.toEqual({ Ref: "contact-1", FirstName: "Petro", LastName: "Ivanenko" });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("ContactPerson");
+    expect(sentBody.calledMethod).toBe("update");
+  });
+
+  it("updateContactPerson resolves undefined when Nova Poshta reports success with an empty data array (AC-07)", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(
+      counterparty.updateContactPerson({
+        Ref: "contact-1",
+        FirstName: "Petro",
+        MiddleName: "Petrovych",
+        LastName: "Ivanenko",
+        Phone: "380500000001",
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("deleteContactPerson sends modelName ContactPerson / calledMethod delete and resolves the deleted record's own Ref (AC-10)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([{ Ref: "contact-1" }]));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(counterparty.deleteContactPerson({ Ref: "contact-1" })).resolves.toEqual({ Ref: "contact-1" });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("ContactPerson");
+    expect(sentBody.calledMethod).toBe("delete");
+    expect(sentBody.methodProperties).toEqual({ Ref: "contact-1" });
+  });
+
+  it("deleteContactPerson resolves undefined when Nova Poshta reports success with an empty data array (AC-07)", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    await expect(counterparty.deleteContactPerson({ Ref: "contact-1" })).resolves.toBeUndefined();
+  });
+
+  it("rejects an UpdateContactPersonPayload missing MiddleName at compile time (AC-09)", () => {
+    const counterparty = createCounterpartyModule(createClient("test-api-key"));
+
+    // @ts-expect-error — MiddleName is optional on SaveContactPersonPayload but mandatory on update.
+    void counterparty.updateContactPerson({
+      Ref: "contact-1",
+      FirstName: "Petro",
+      LastName: "Ivanenko",
+      Phone: "380500000001",
+    });
+
+    expect(true).toBe(true);
+  });
+});

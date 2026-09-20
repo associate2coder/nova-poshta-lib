@@ -4,14 +4,18 @@ import type {
   Counterparty,
   CounterpartyOptions,
   ContactPerson,
+  DeleteContactPersonPayload,
   DeleteCounterpartyPayload,
+  DeletedContactPerson,
   DeletedCounterparty,
   GetCounterpartiesCatalogFilters,
   GetCounterpartiesFilters,
   GetCounterpartyAddressesFilters,
   GetCounterpartyContactPersonsFilters,
   GetCounterpartyOptionsFilters,
+  SaveContactPersonPayload,
   SaveCounterpartyPayload,
+  UpdateContactPersonPayload,
   UpdateCounterpartyPayload,
 } from "../../types/counterparty.js";
 
@@ -29,14 +33,20 @@ export interface CounterpartyModule {
    */
   update(payload: UpdateCounterpartyPayload): Promise<Counterparty | undefined>;
   delete(payload: DeleteCounterpartyPayload): Promise<DeletedCounterparty | undefined>;
+  saveContactPerson(payload: SaveContactPersonPayload): Promise<ContactPerson | undefined>;
+  /** AC-09: every field ContactPerson documents, required and optional alike (incl. MiddleName), is
+   *  mandatory — no partial update, no "leave unchanged". */
+  updateContactPerson(payload: UpdateContactPersonPayload): Promise<ContactPerson | undefined>;
+  deleteContactPerson(payload: DeleteContactPersonPayload): Promise<DeletedContactPerson | undefined>;
 }
 
 async function firstOrUndefined<T>(
   client: NovaPoshtaClient,
+  modelName: string,
   calledMethod: string,
   methodProperties: Record<string, unknown>,
 ): Promise<T | undefined> {
-  const records = await client.request<T>("Counterparty", calledMethod, methodProperties);
+  const records = await client.request<T>(modelName, calledMethod, methodProperties);
   return records[0];
 }
 
@@ -69,11 +79,42 @@ export function createCounterpartyModule(client: NovaPoshtaClient): Counterparty
         filters as unknown as Record<string, unknown>,
       ),
     save: (payload: SaveCounterpartyPayload) =>
-      firstOrUndefined<Counterparty>(client, "save", payload as unknown as Record<string, unknown>),
+      firstOrUndefined<Counterparty>(client, "Counterparty", "save", payload as unknown as Record<string, unknown>),
     update: (payload: UpdateCounterpartyPayload) =>
-      firstOrUndefined<Counterparty>(client, "update", payload as unknown as Record<string, unknown>),
+      firstOrUndefined<Counterparty>(
+        client,
+        "Counterparty",
+        "update",
+        payload as unknown as Record<string, unknown>,
+      ),
     delete: (payload: DeleteCounterpartyPayload) =>
-      firstOrUndefined<DeletedCounterparty>(client, "delete", payload as unknown as Record<string, unknown>),
+      firstOrUndefined<DeletedCounterparty>(
+        client,
+        "Counterparty",
+        "delete",
+        payload as unknown as Record<string, unknown>,
+      ),
+    saveContactPerson: (payload: SaveContactPersonPayload) =>
+      firstOrUndefined<ContactPerson>(
+        client,
+        "ContactPerson",
+        "save",
+        payload as unknown as Record<string, unknown>,
+      ),
+    updateContactPerson: (payload: UpdateContactPersonPayload) =>
+      firstOrUndefined<ContactPerson>(
+        client,
+        "ContactPerson",
+        "update",
+        payload as unknown as Record<string, unknown>,
+      ),
+    deleteContactPerson: (payload: DeleteContactPersonPayload) =>
+      firstOrUndefined<DeletedContactPerson>(
+        client,
+        "ContactPerson",
+        "delete",
+        payload as unknown as Record<string, unknown>,
+      ),
   };
   return module;
 }

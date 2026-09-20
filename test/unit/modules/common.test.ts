@@ -122,6 +122,37 @@ describe("common module", () => {
     });
   });
 
+  describe("method-surface calledMethod coverage (spec §6 NFR row 2, QG-4)", () => {
+    const ALL_METHODS: Array<[keyof ReturnType<typeof createCommonModule>, unknown[], string]> = [
+      ["getCargoTypes", [], "getCargoTypes"],
+      ["getBackwardDeliveryCargoTypes", [], "getBackwardDeliveryCargoTypes"],
+      ["getCargoDescriptionList", [], "getCargoDescriptionList"],
+      ["getDocumentStatuses", [], "getDocumentStatuses"],
+      ["getOwnershipFormsList", [], "getOwnershipFormsList"],
+      ["getPalletsList", [], "getPalletsList"],
+      ["getPaymentForms", [], "getPaymentForms"],
+      ["getServiceTypes", [], "getServiceTypes"],
+      ["getTimeIntervals", [{ RecipientCityRef: "city-ref-1" }], "getTimeIntervals"],
+      ["getTiresWheelsList", [], "getTiresWheelsList"],
+      ["getTraysList", [], "getTraysList"],
+      ["getTypesOfAlternativePayers", [], "getTypesOfAlternativePayers"],
+      ["getTypesOfPayers", [], "getTypesOfPayers"],
+      ["getTypesOfPayersForRedelivery", [], "getTypesOfPayersForRedelivery"],
+      ["getTypesOfCounterparties", [], "getTypesOfCounterparties"],
+    ];
+
+    it.each(ALL_METHODS)("%s sends modelName Common and calledMethod %s", async (methodName, args, expectedCalledMethod) => {
+      const fetchMock = mockFetchOnce(() => successEnvelope([]));
+      const common = createCommonModule(createClient("test-api-key"));
+
+      await (common[methodName] as (...a: unknown[]) => Promise<unknown>)(...args);
+
+      const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+      expect(sentBody.modelName).toBe("Common");
+      expect(sentBody.calledMethod).toBe(expectedCalledMethod);
+    });
+  });
+
   describe("tolerated per-field noise (AC-03 note) — must NOT throw", () => {
     it("passes through a record missing a documented field, a null field, an off-type field, and an extra field", async () => {
       const noisyRecord = { Ref: "1", Description: null, ExtraUndocumented: 42 };

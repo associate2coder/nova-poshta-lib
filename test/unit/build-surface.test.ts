@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const METHOD_NAMES = [
@@ -19,21 +20,30 @@ const METHOD_NAMES = [
   "getTypesOfCounterparties",
 ];
 
+function declarationPath(relativePath: string): string {
+  return fileURLToPath(new URL(`../../${relativePath}`, import.meta.url));
+}
+
 describe("published build surface (AC-07)", () => {
   it.each([
     ["dist/index.d.ts", "ESM"],
     ["dist/index.d.cts", "CJS"],
-  ])("%s (%s) declares createCommonModule and all 15 reference-list methods", (declarationPath) => {
+  ])("%s (%s) declares createCommonModule and all 15 reference-list methods as distinct identifiers", (relativePath) => {
     let contents: string;
     try {
-      contents = readFileSync(declarationPath, "utf8");
+      contents = readFileSync(declarationPath(relativePath), "utf8");
     } catch {
-      throw new Error(`${declarationPath} is missing — run "npm run build" before this test`);
+      throw new Error(`${relativePath} is missing — run "npm run build" before this test`);
     }
 
-    expect(contents).toContain("createCommonModule");
+    expect(contents).toMatch(/\bcreateCommonModule\b/);
     for (const method of METHOD_NAMES) {
-      expect(contents).toContain(method);
+      // A word-boundary match, not a substring check — "getTypesOfPayers" is itself a
+      // substring of "getTypesOfPayersForRedelivery", so a plain `.toContain` would still
+      // pass even if the shorter method were deleted entirely.
+      expect(contents, `expected ${relativePath} to declare ${method} as its own identifier`).toMatch(
+        new RegExp(`\\b${method}\\b`),
+      );
     }
   });
 });

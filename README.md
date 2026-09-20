@@ -11,16 +11,16 @@ npm install nova-poshta-lib
 ## Usage
 
 ```ts
-import { createClient } from "nova-poshta-lib";
+import { createClient, createAddressModule } from "nova-poshta-lib";
 
 const client = createClient(process.env.NOVA_POSHTA_API_KEY!);
+const address = createAddressModule(client);
 
-// Example: call a domain module method once one is implemented, e.g.
-// const cities = await client.request("Address", "getCities");
+const cities = await address.getCities({ FindByString: "Київ" });
 ```
 
-> This is a scaffolded skeleton — domain modules (address, counterparty, internet-document, …)
-> are added incrementally under `src/modules/`.
+> `common` and `address` are the two domain modules shipped so far — more (counterparty,
+> internet-document, …) are added incrementally under `src/modules/`.
 
 ## Development
 

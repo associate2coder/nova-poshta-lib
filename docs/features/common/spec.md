@@ -47,13 +47,15 @@ Traceability: module boundaries follow ADR-0002 (one folder per Nova Poshta mode
 
 Decision override: feature size — a critic pass flagged that "one typed method per documented reference list" spans a dozen-plus near-identical methods, each needing its own type and tests, which is realistically more than a single one-day PR. Reclassified from XS to S (see `docs/features/common/.size`) to size the feature honestly; the route stays `quick`.
 
-Note: satisfying AC-03 (reject any reference response that doesn't match its documented shape) requires new work — today's scaffolded core client casts a parsed response to its declared type with no runtime check, and the library's existing error contract only covers an unsuccessful response or an HTTP failure, not "the shape looks wrong." This is not yet built anywhere in the codebase; see the matching item in §8 Open questions.
+Note: satisfying AC-03 (reject a response that isn't a navigable list) requires new work — today's scaffolded core client casts a parsed response to its declared type with no check that `data` is actually array-shaped. This is deliberately narrow: per-field/per-record inconsistency on an individual reference-list record is tolerated, not validated — see the Decision override below.
+
+Decision override: shape-check strictness — real production experience with the Nova Poshta API (per the project owner, 2026-09-20) is that individual records routinely omit or vary documented fields; that's normal API noise, not a defect worth blocking a delivery-vendor integration over. A genuinely broken response — a temporary server malfunction, a non-list payload — is different and should fail loudly. AC-03 (below) and the reference-list types are built around this line: fail only when the response isn't a usable list at all; tolerate everything else, typing every documented field as optional so the gap is represented honestly instead of either blocking the call or promising data that isn't really there. This also settles the two open items `clarify` deferred to `design` (the runtime shape-check + the open/provisional value-typing technique) — see ADR-0001 and ADR-0002.
 
 ## 2. Goals
 
 - Give every consuming developer typed, discoverable access to every documented Nova Poshta reference/lookup list, eliminating hardcoded magic values in their own code.
 - Make `common` the single authoritative source other domain modules can point to for shared reference values (payment forms, ownership forms, cargo types, etc.), instead of each module inventing its own copy.
-- Guarantee that a reference-list response either matches its documented shape or surfaces as an error the consuming developer can act on — never silently wrong typed data.
+- Guarantee that a reference-list response is at least usable as a list — a response that isn't a navigable list at all surfaces as an error the consuming developer can act on; a response that's missing or inconsistent at the per-field level (normal Nova Poshta API noise) is represented honestly as an optional field, never silently promised as present when it isn't.
 
 ## 3. Non-goals
 
@@ -119,10 +121,10 @@ Note: satisfying AC-03 (reject any reference response that doesn't match its doc
 ### AC-03 (US-03) — domain invariant
 
 **Given** a consuming developer calls any reference-list method
-**When** the response Nova Poshta returns is missing a field this library documents for that list, or has a documented field whose basic type doesn't match (for example, a number where a string was documented)
-**Then** the system treats the call as failed and never hands the consuming developer typed data that doesn't match what its types promise
+**When** the response Nova Poshta returns for that call is not a navigable list — the data isn't array-shaped, so there's nothing a consuming developer could iterate over as "the list"
+**Then** the system treats the call as failed, rather than handing back something that looks like a list but isn't
 
-**Not a violation of this AC:** a field containing a new, previously-undocumented *value* (the open/provisional typing from §1 already expects and absorbs new values Nova Poshta adds over time), or an extra field in the response that this library doesn't document at all (ignored, not treated as a failure — Nova Poshta may add fields between releases without breaking existing calls).
+**Not a violation of this AC — tolerated, not failed:** an individual record missing one of its documented fields, a field that's `null` where a value was expected, a field whose value doesn't match its documented basic type, a field containing a new previously-undocumented *value* (the open/provisional typing from §1 already expects and absorbs new values Nova Poshta adds over time), or an extra field this library doesn't document. Nova Poshta's real-world responses are inconsistent at the per-field, per-record level — normal API noise, not a defect. When in doubt, the library passes through whatever Nova Poshta actually sent rather than blocking the call; every documented field on a reference-list record is typed as optional for exactly this reason (see the §1 Decision override).
 
 ### AC-04 (US-04) — authorization
 
@@ -159,7 +161,7 @@ Note: satisfying AC-03 (reject any reference response that doesn't match its doc
 | Aspect | Target | Measurement |
 |---|---|---|
 | Type-safety coverage | 100% of in-scope reference-list methods have zero `any` in public signatures | static check in CI |
-| Error-contract coverage | 100% of in-scope methods throw the standard error (`NovaPoshtaApiError`) on any declined/malformed response, 0% throw an unhandled error type | unit test suite (`test/unit/modules/common`) |
+| Error-contract coverage | 100% of in-scope methods throw the standard error (`NovaPoshtaApiError`) on any declined response or a response whose data isn't array-shaped; 0% throw an unhandled error type; 0% throw on a per-field/per-record inconsistency (tolerated per AC-03) | unit test suite (`test/unit/modules/common`) |
 | Library-added overhead per call | Median ≤ 5ms beyond the underlying network round-trip, including the AC-03 shape-check cost (no client-side caching, retries, or heavy parsing) | median across ≥30 repeated calls, benchmarked inside `test/unit/modules/common` with `fetch` stubbed to near-zero latency (always runs in CI — not the opt-in integration suite) |
 | Method-surface completeness | 100% of the reference lists enumerated in §1 have a corresponding typed method | manual audit against Nova Poshta docs before release |
 
@@ -177,15 +179,15 @@ Note: satisfying AC-03 (reject any reference response that doesn't match its doc
 ## 7. Metrics / KPIs
 
 - **Type-safety completeness** — baseline: 0% (module doesn't exist yet), target: 100% of in-scope reference-list methods carry no `any` in their public signature, verified in the first release containing this feature.
-- **Zero silent failures** — baseline: N/A (feature doesn't exist), target: 100% of unit tests asserting that a declined or malformed reference response throws `NovaPoshtaApiError`, passing before merge.
+- **Zero silent failures** — baseline: N/A (feature doesn't exist), target: 100% of unit tests asserting that a declined response or a non-array-shaped response throws `NovaPoshtaApiError` — and that a per-field/per-record inconsistency does NOT throw (tolerated per AC-03), passing before merge.
 - **Method-surface completeness** — baseline: 0 of the documented reference lists exposed, target: every reference list in the agreed §1 scope has a shipped typed method before this feature is marked done.
 - **Stale-enum issue rate** — baseline: N/A (feature doesn't exist), target: 0 GitHub issues within 90 days of release reporting that TypeScript rejected a value Nova Poshta's live API actually accepts.
 
 ## 8. Open questions
 
 - [ ] Does Nova Poshta's API reject an invalid documented filter value with an explicit error, or silently ignore it and return an unfiltered/empty list? Default now: AC-05 is phrased to hold regardless of which; verify against the live API before implementation locks the per-method contract. — owner: Tech Lead, due: before `sdd:implement common`
-- [ ] §1 already commits to open/provisional typing (not a closed union) for reference values, per the stale-enum finding — which specific technique should `design` use to model that (e.g. a string-literal union with an unrecognized-value fallback vs. a plain string type)? Default now: left to `design` to pick the concrete technique. — owner: Tech Lead, due: before `sdd:design common`
-- [ ] What runtime shape-check should `common` (or the shared core client) perform on a reference-list response to satisfy AC-03, and where should it live? Default now: unresolved — this is new work, not covered by the existing error contract (see §1 note). — owner: Tech Lead, due: before `sdd:design common`
+- [x] §1 already commits to open/provisional typing (not a closed union) for reference values, per the stale-enum finding — which specific technique should `design` use to model that (e.g. a string-literal union with an unrecognized-value fallback vs. a plain string type)? **Resolved by `design`** — known values + an open string fallback; see `sad.md` §4 and ADR-0002.
+- [x] What runtime shape-check should `common` (or the shared core client) perform on a reference-list response to satisfy AC-03, and where should it live? **Resolved by `design`** — a shared "is `data` array-shaped" check in the core client, no per-field validation; see `sad.md` §4 and ADR-0001.
 - [ ] Do any in-scope reference lists carry multi-language (UA/RU/EN) description fields, and if so should the typed shape expose all language variants or just Nova Poshta's default? Default now: pass through verbatim per the fixed pass-through convention, no library-side language selection. — owner: Tech Lead, due: before `sdd:tasks common`
 - [ ] Should reference lists gated behind a Nova Poshta account/contract tier (returning empty for ordinary keys) still ship as typed methods in v1, or be flagged/excluded once identified? Default now: ship them (the full-surface decision stands), flag the tier dependency in the method's documentation comment. — owner: Tech Lead, due: before `sdd:tasks common`
 - [ ] Should `common` be expected to be called on a hot/frequent path by future modules (e.g. once per shipment operation), and if so does that change the no-caching decision in §3? Default now: no-caching stands as written; each future module that consumes `common` repeatedly is responsible for its own call pattern. — owner: Tech Lead, due: before `sdd:design` of the first module that consumes `common`'s reference lists

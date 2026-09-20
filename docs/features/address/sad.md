@@ -21,8 +21,9 @@ structural and error-handling precedent `common` established.
 
 **Top-3 quality goals (1-liners; full scenarios in §10):**
 
-1. Type-safety — all 11 in-scope Address methods (lookups + writes) fully typed, zero `any` in public
-   signatures, including the two response shapes that are structurally different from the rest.
+1. Type-safety — all 11 in-scope Address methods (lookups + writes) plus every shipped convenience
+   method fully typed, zero `any` in public signatures, including the two response shapes that are
+   structurally different from the rest.
 2. Error-contract correctness — every declined, malformed, or network-failed call throws the same
    `NovaPoshtaApiError`, including the write-specific "success but no record" case, which must
    resolve as success, not an error.
@@ -130,11 +131,17 @@ different `modelName`/`calledMethod` pair per call.*
    first write-capable module has to decide how "successful write, no record returned" (AC-07)
    surfaces in the public TypeScript signature; `T | undefined` was chosen over an always-array
    return, becoming the library's standard for every future write module with the same pattern.
-6. **Two response shapes stay verbatim, never unwrapped (AC-03).** `searchSettlements` and
-   `searchSettlementStreets` return Nova Poshta's own `TotalCount`/`Addresses`-style wrapper record,
-   typed as a shared generic wrapper shape reused by both methods — not unwrapped to a plain array,
-   per the spec's explicit invariant. This is a spec-locked shape (AC-03 leaves no legitimate
-   alternative), so it stays an inline decision, not an ADR.
+6. **Two response shapes stay verbatim, never unwrapped to a plain array — but the envelope itself
+   still unwraps to a single record (AC-03).** `searchSettlements` and `searchSettlementStreets`
+   return `Promise<SearchWrapper | undefined>`: Nova Poshta's own `TotalCount`/`Addresses`-style
+   wrapper record, typed as a shared generic wrapper shape reused by both methods, with its
+   `Addresses` array left exactly as documented — never flattened to just the inner array. The one
+   thing that *does* get unwrapped is the core client's outer envelope array itself: Nova Poshta
+   returns `data: [wrapper]` (a one-item array holding the wrapper), and `address` unwraps that
+   single item the same way ADR-0001 unwraps a write's result, so the developer receives the wrapper
+   object directly, not an array containing it. The `Addresses`-inner-array-stays-verbatim half is
+   spec-locked (AC-03 leaves no legitimate alternative); the outer-envelope-unwrap half follows
+   ADR-0001's precedent, so neither needs a separate ADR.
 7. **`update`'s full-replace guard is compile-time only (AC-05, closes `spec.md` §8 OQ-4).** The
    `update` payload type makes every field mandatory, derived from the `save` payload type via a
    TypeScript utility type so the two can't drift apart. No added runtime validation — matching the
@@ -271,10 +278,13 @@ sequenceDiagram
 ```
 
 *Flow 1 mirrors `common`'s already-established lookup pattern exactly — every lookup method
-(`getCities`, `getSettlements`, `searchSettlements`, `getAreas`, `getStreet`,
-`searchSettlementStreets`, `getWarehouses`, `getWarehouseTypes`) and every convenience method takes
-this same shape, just with a different `calledMethod` and typed result (AC-03's two search methods
-return the wrapper type instead of a plain array, but the branch structure is identical). Flow 2 shows
+(`getCities`, `getSettlements`, `getAreas`, `getStreet`, `getWarehouses`, `getWarehouseTypes`) and
+every convenience method takes this same shape, just with a different `calledMethod` and typed
+result. The two exceptions are `searchSettlements`/`searchSettlementStreets` (AC-03): the branch
+structure is identical, but the happy-path return differs — instead of the generic "typed `T[]`"
+line, `Client-->>Address` still delivers the one-item envelope array, and `Address-->>Dev` unwraps it
+to the single wrapper record (`SearchWrapper | undefined`, §4 decision 6), the same unwrap shape Flow
+2 uses for writes. Flow 2 shows
 what's new for this feature: a three-way split instead of the lookup's four-way one, because writes
 add the empty-on-success branch (AC-07) that lookups never see — `update` and `delete` follow the
 identical shape, just with `update`/`delete` as the `calledMethod` and their own Ref values.*
@@ -285,7 +295,7 @@ identical shape, just with `update`/`delete` as the `calledMethod` and their own
 |---|---|
 | US-01 Fetch address lookup data | Flow 1, happy-path branch |
 | US-02 Filter a lookup | Flow 1, happy-path branch (`filters?` parameter) |
-| US-03 Get typed results | Flow 1, happy-path branch (`typed T[]` return); AC-03's wrapper shape is a type-level concern, not a distinct runtime path — same Flow 1 shape |
+| US-03 Get typed results | Flow 1, happy-path branch (`typed T[]` return, or the unwrapped `SearchWrapper \| undefined` for the two AC-03 methods) |
 | US-04 Save a new address | Flow 2 |
 | US-05 Update a saved address | Flow 2 (identical shape, `update` in place of `save`) |
 | US-06 Delete a saved address | Flow 2 (identical shape, `delete` in place of `save`) |
@@ -324,7 +334,7 @@ No user story and no acceptance criterion is left uncovered.
 | Error handling | Single `NovaPoshtaApiError`; array-shape check only, no per-field validation; identical for lookups and writes | `src/client.ts`; `common` ADR-0001 |
 | Write-return shape | `T \| undefined` when a successful write's data is empty | `address` ADR-0001 |
 | ID strategy | N/A — the library holds no persistent IDs of its own | `architecture-map.md` |
-| Internationalisation | N/A — pass-through of Nova Poshta's own language fields, no library-side selection | `spec.md` §8 (common's open question, inherited, not `address`-specific) |
+| Internationalisation | N/A — pass-through of Nova Poshta's own language fields, no library-side selection, same convention as `common`. `address`'s own `spec.md` §8 carries no i18n open question; the still-unresolved one belongs to `common` | `docs/features/common/spec.md` §8 |
 | Observability | None new — no metrics/tracing added by this feature | — |
 | Events | N/A — synchronous request/response only | `architecture-map.md` |
 | Rate-limiting | None of our own — Nova Poshta's own throttling governs | `spec.md` §6.1 |
@@ -347,9 +357,11 @@ already-Accepted `0001-array-shape-only-validation.md` and `0002-open-value-typi
 Each top-3 goal from §1 expanded into a full scenario:
 
 **QG-1. Type-safety**
-- **When:** any of the 11 in-scope Address methods (8 lookups + 3 writes) is exported from `address`.
-- **Then:** 100% of in-scope methods have zero `any` in their public signatures — including
-  `searchSettlements`/`searchSettlementStreets`'s wrapper shape and `update`'s full-replace payload.
+- **When:** any of the 11 in-scope Address methods (8 lookups + 3 writes) or any shipped convenience
+  method is exported from `address`.
+- **Then:** 100% of in-scope methods — raw and convenience alike — have zero `any` in their public
+  signatures, including `searchSettlements`/`searchSettlementStreets`'s wrapper shape and `update`'s
+  full-replace payload, matching `spec.md` §6 NFR row 1's "lookups, writes, convenience" wording.
 - **How verify:** static check in CI (`spec.md` §6, row 1).
 
 **QG-2. Error-contract correctness**
@@ -371,7 +383,7 @@ Each top-3 goal from §1 expanded into a full scenario:
 | Risk / debt | Severity | Mitigation | Owner |
 |---|---|---|---|
 | Security review required before release — first write-capable, personal-data-touching module (`spec.md` §6.1) | High | Schedule and complete a security review before `sdd:ship address`; not performed in this design session | Security Lead |
-| The §1 in-scope 11-method list was cross-checked against a third-party SDK, not Nova Poshta's own docs portal (blocks automated fetches) | Medium | Re-verify against Nova Poshta's live/official docs before release (`spec.md` §8 OQ-2) | Tech Lead |
+| Open architectural decision: the §1 in-scope 11-method list was cross-checked against a third-party SDK, not Nova Poshta's own docs portal (blocks automated fetches) — re-verification is still pending | Open question | Resolve before `sdd:implement address` (`spec.md` §8 OQ-2); default now — proceed on the SDK-verified list | Tech Lead |
 | Cross-counterparty write enforcement (AC-09) is trusted from Nova Poshta's own documented behavior, not independently verified by this library's test suite | Medium | Unit tests confirm the library surfaces whatever decline Nova Poshta sends back (mocked), not that Nova Poshta's own enforcement holds in production (`spec.md` §6.1) | Tech Lead |
 | Open architectural decision: should the shared core client be extended to expose pagination metadata (`totalCount`) and success-path warnings — `address` is the first module where their absence materially bites (large city/warehouse lists can silently truncate; a `save`/`update` warning, e.g. a normalized building number, is never surfaced) | Open question | Resolve before `sdd:design` of any future module whose lookups depend on complete, multi-page Address results (`spec.md` §8 OQ-1, kept as a known limitation for this feature per the §1 Decision override) | Tech Lead |
 | Open architectural decision: which specific convenience methods (US-07) ship in v1 | Open question | Resolve before `sdd:tasks address`, based on which raw lookups see the most friction in practice (`spec.md` §8 OQ-3) | Tech Lead |

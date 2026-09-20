@@ -261,7 +261,7 @@ describe("address module — findCityByName convenience method (T6, AC-11)", () 
     const fetchMock = mockFetchOnce(() => successEnvelope([{ Ref: "city-1", Description: "Київ" }]));
     const address = createAddressModule(createClient("test-api-key"));
 
-    await expect(address.findCityByName("Київ")).resolves.toEqual({ Ref: "city-1", Description: "Київ" });
+    await expect(address.findCityByName("Київ")).resolves.toEqual([{ Ref: "city-1", Description: "Київ" }]);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
@@ -269,11 +269,49 @@ describe("address module — findCityByName convenience method (T6, AC-11)", () 
     expect(sentBody.methodProperties).toEqual({ FindByString: "Київ" });
   });
 
-  it("resolves undefined when the result is empty", async () => {
+  it("returns every match unmodified, without reshaping to a single record (AC-11)", async () => {
+    mockFetchOnce(() =>
+      successEnvelope([
+        { Ref: "city-1", Description: "Київ" },
+        { Ref: "city-2", Description: "Київське" },
+      ]),
+    );
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(address.findCityByName("Ки")).resolves.toEqual([
+      { Ref: "city-1", Description: "Київ" },
+      { Ref: "city-2", Description: "Київське" },
+    ]);
+  });
+
+  it("resolves an empty array when the result is empty", async () => {
     mockFetchOnce(() => successEnvelope([]));
     const address = createAddressModule(createClient("test-api-key"));
 
-    await expect(address.findCityByName("Nonexistent")).resolves.toBeUndefined();
+    await expect(address.findCityByName("Nonexistent")).resolves.toEqual([]);
+  });
+});
+
+describe("address module — no caching across calls (AC-12)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("issues an independent request on every call — nothing memoized or stale", async () => {
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string) as { methodProperties?: { FindByString?: string } };
+      const description = body.methodProperties?.FindByString === "Львів" ? "Львів" : "Київ";
+      return successEnvelope([{ Ref: `city-${description}`, Description: description }]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const address = createAddressModule(createClient("test-api-key"));
+
+    const first = await address.getCities({ FindByString: "Київ" });
+    const second = await address.getCities({ FindByString: "Львів" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(first).toEqual([{ Ref: "city-Київ", Description: "Київ" }]);
+    expect(second).toEqual([{ Ref: "city-Львів", Description: "Львів" }]);
   });
 });
 

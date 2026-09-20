@@ -40,7 +40,9 @@ export interface AddressModule {
    */
   update(payload: UpdateAddressPayload): Promise<SavedAddress | undefined>;
   delete(payload: DeleteAddressPayload): Promise<DeletedAddress | undefined>;
-  findCityByName(name: string): Promise<City | undefined>;
+  /** Narrows `getCities` by `FindByString` — one call, same shape `getCities` returns, no
+   *  post-call re-filtering or reshaping of the result (AC-11 / `contracts/public-api.md` §6). */
+  findCityByName(name: string): Promise<City[]>;
 }
 
 async function firstOrUndefined<T>(
@@ -82,10 +84,7 @@ export function createAddressModule(client: NovaPoshtaClient): AddressModule {
       firstOrUndefined<SavedAddress>(client, "update", payload as unknown as Record<string, unknown>),
     delete: (payload: DeleteAddressPayload) =>
       firstOrUndefined<DeletedAddress>(client, "delete", payload as unknown as Record<string, unknown>),
-    findCityByName: async (name: string) => {
-      const cities = await module.getCities({ FindByString: name });
-      return cities[0];
-    },
+    findCityByName: (name: string) => module.getCities({ FindByString: name }),
   };
   return module;
 }

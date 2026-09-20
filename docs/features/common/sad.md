@@ -13,11 +13,12 @@ target_surfaces: ["library-sdk"]
 
 **Intent.** `common` gives every consuming developer typed, discoverable access to all 15 of Nova Poshta's documented reference/lookup lists (payment forms, cargo types, ownership forms, pallets, time intervals, and the rest — enumerated in `spec.md` §1), so they can populate valid input values for other Nova Poshta API calls without hardcoding values or guessing response shapes. It is deliberately pragmatic about the Nova Poshta API's real-world inconsistency: fail loudly only when a response is genuinely unusable, tolerate everything else (see §1 Decision override in `spec.md`).
 
-**Top-3 quality goals (1-liners; full scenarios in §10):**
+**Top quality goals (1-liners; full scenarios in §10):**
 
 1. Type-safety — every in-scope reference-list method fully typed, zero `any` in public signatures.
 2. Error-contract correctness — fails loudly (and *only*) on a genuinely unusable response; never silently wrong, never falsely blocking on normal Nova Poshta API noise.
 3. Low overhead — the library adds a median ≤5ms per call beyond the network round-trip, including the shape check.
+4. Method-surface completeness — every one of the 15 in-scope reference lists ships as its own typed method.
 
 **Stakeholders.**
 
@@ -108,6 +109,8 @@ src/
 └── index.ts                     # public re-exports (client + common + types)
 ```
 
+`tsup`'s existing dual ESM+CJS build (project-level ADR-0002) already emits matching `.d.ts`/`.d.cts` declarations for whatever `src/index.ts` re-exports — no new build step is needed to satisfy AC-07 (every method discoverable via autocomplete in both published formats); `tasks`/`plan-tests` verify the *published* output, not just the source, per `spec.md` AC-07.
+
 **C4 Container (L2):**
 
 ```mermaid
@@ -180,14 +183,16 @@ sequenceDiagram
 
 | Concept | Convention | Where defined |
 |---|---|---|
-| Logging | None — the library emits no logs of its own | `CLAUDE.md` |
-| Authentication | Caller-supplied `apiKey`, unchanged by this feature | `CLAUDE.md` / `architecture-map.md` |
+| Logging | None — the library emits no logs of its own | — (repo default, undocumented) |
+| Authentication | Caller-supplied `apiKey`, unchanged by this feature | `architecture-map.md` |
 | Error handling | Single `NovaPoshtaApiError`; array-shape check only, no per-field validation | `src/client.ts`; ADR-0001 |
 | ID strategy | N/A — the library holds no persistent IDs of its own | `architecture-map.md` |
 | Internationalisation | N/A — pass-through of Nova Poshta's own language fields, no library-side selection | `spec.md` §8 open question (owner: Tech Lead, due before `tasks`) |
 | Observability | None new — no metrics/tracing added by this feature | — |
 | Events | N/A — synchronous request/response only | `architecture-map.md` |
 | Rate-limiting | None of our own — Nova Poshta's own throttling governs | `spec.md` §6.1 |
+| Testing | Mocked unit suite required in CI (`test/unit/modules/common`) + opt-in integration suite against the real API, unchanged by this feature | `docs/adr/0003-testing-strategy.md` |
+| Cross-module value consistency | `common` is the sole source of truth for shared reference values; it enforces nothing about how another module later uses one — that check, if any, belongs to the receiving module | `spec.md` AC-06 / §3 non-goal |
 
 ## 9. Architecture decisions
 
@@ -215,18 +220,23 @@ ADR files live under `docs/features/common/adr/`.
 - **Then:** median ≤5ms of library-added overhead beyond the network round-trip, including the array-shape check cost.
 - **How verify:** median across ≥30 repeated calls, benchmarked inside `test/unit/modules/common` (`spec.md` §6, row 3).
 
+**QG-4. Method-surface completeness**
+- **When:** the feature is evaluated as done / before release.
+- **Then:** 100% of the 15 reference lists enumerated in `spec.md` §1 have a corresponding typed method.
+- **How verify:** manual audit against Nova Poshta's docs before release (`spec.md` §6, row 4 / §7 KPI 3).
+
 ## 11. Risks and technical debt
 
 | Risk / debt | Severity | Mitigation | Owner |
 |---|---|---|---|
-| The §1 in-scope 15-method list was cross-checked against third-party SDK sources, not Nova Poshta's own docs portal (which blocks automated fetches) | Medium | Re-verify the method/field list against the live API (a maintainer-held key) before `tasks`/`implement` locks it; the existing integration suite is the mechanism | Tech Lead |
+| The §1 in-scope 15-method list was cross-checked against third-party SDK sources, not Nova Poshta's own docs portal (which blocks automated fetches) | Medium | Re-verify the method/field list by manual audit against Nova Poshta's docs before release (`spec.md` §6 row 4's stated measurement); the opt-in integration suite (`docs/adr/0003-testing-strategy.md`) is a secondary, maintainer-run check once a real key is available, not yet exercised for this feature | Tech Lead |
 | Open architectural decision: does Nova Poshta reject an invalid documented filter explicitly, or silently ignore it? | Open question | Resolve before `sdd:implement common`; AC-05 is phrased to hold regardless of which | Tech Lead |
 | Open architectural decision: do any in-scope lists carry multi-language (UA/RU/EN) fields, and does the typed shape expose all variants or just the default? | Open question | Resolve before `sdd:tasks common`; default is pass-through verbatim, no library-side selection | Tech Lead |
 | Open architectural decision: should tier-gated reference lists (empty for ordinary keys) still ship as typed methods in v1? | Open question | Resolve before `sdd:tasks common`; default is ship them, flag the tier dependency in the doc comment | Tech Lead |
 | Open architectural decision: will `common` be called on a hot/frequent path by future modules, and does that change the no-caching non-goal? | Open question | Resolve before `sdd:design` of the first module that consumes `common`'s lists | Tech Lead |
 
-**Accepted debt (acceptable in v1, plan to fix later):**
-- Per-field/per-record shape validation is deliberately **not** performed (ADR-0001) — a defensive, best-effort typing choice trading strict runtime guarantees for delivery-vendor integration reliability. Acceptable for v1; revisit only if a consuming developer reports a genuinely broken record slipping through silently in a way that caused real harm.
+**Deliberate, permanent trade-off (not debt — do not "fix" without re-opening ADR-0001):**
+- Per-field/per-record shape validation is intentionally **not** performed (ADR-0001) — the end-state the project owner chose, not a shortcut awaiting cleanup. It trades strict runtime guarantees for delivery-vendor integration reliability. Revisit only if a consuming developer reports a genuinely broken record slipping through silently in a way that caused real harm — and treat that as a new ADR, not a backlog item.
 
 ## 12. Glossary
 

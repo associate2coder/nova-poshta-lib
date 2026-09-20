@@ -25,9 +25,10 @@ Nova Poshta can add a new value to any reference list's value-bearing fields (e.
 
 ## Considered options
 
+`spec.md` §1 already commits to open/provisional typing over "a closed/frozen enum" — a closed string-literal union was excluded before this ADR, so it is not listed as a considered option here. The live choice is between the two ways to honor that commitment:
+
 1. **Known-values string-literal union with an open fallback** (the `"A" | "B" | (string & {})` TypeScript idiom) — known values autocomplete in the editor; any other string still satisfies the type.
 2. **Plain `string`** for every value-bearing field — always compiles, but no autocomplete or typo-catching at all.
-3. **Closed string-literal union, manually regenerated over time** — the strongest autocomplete, but rejects (at the type level, and breaks any exhaustive `switch`) a legitimately new live value until the library is republished.
 
 ## Decision outcome
 

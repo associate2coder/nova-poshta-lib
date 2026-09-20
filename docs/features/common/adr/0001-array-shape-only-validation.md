@@ -22,7 +22,7 @@ ticket: ""
 - `spec.md` §6 NFR (Error-contract coverage): 100% throw `NovaPoshtaApiError` on a declined/non-list response, but explicitly 0% throw on a per-field/per-record inconsistency.
 - `spec.md` §6 NFR (Library-added overhead): median ≤5ms per call, including the shape-check cost — the check has to be cheap.
 - `spec.md` §1 Decision override: when in doubt, pass through whatever Nova Poshta sent rather than blocking the call.
-- `architecture-map.md`: the library carries zero runtime dependencies today.
+- `package.json`: the library carries zero runtime dependencies today (only `devDependencies`) — preserving that footprint is a live consideration, not a hard constraint (Option 3 below is a legitimate alternative, not a strawman).
 
 ## Considered options
 

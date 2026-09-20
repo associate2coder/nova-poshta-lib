@@ -1,4 +1,4 @@
-import type { NovaPoshtaEnvelope } from "./types/common.js";
+import type { NovaPoshtaEnvelope } from "./types/envelope.js";
 
 const API_URL = "https://api.novaposhta.ua/v2.0/json/";
 
@@ -27,24 +27,47 @@ export function createClient(apiKey: string): NovaPoshtaClient {
       calledMethod: string,
       methodProperties: Record<string, unknown> = {},
     ): Promise<T[]> {
-      const response = await fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey, modelName, calledMethod, methodProperties }),
-      });
+      let response: Response;
+      try {
+        response = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ apiKey, modelName, calledMethod, methodProperties }),
+        });
+      } catch (cause) {
+        throw new NovaPoshtaApiError(
+          `Nova Poshta API request for ${modelName}.${calledMethod} failed: ${(cause as Error).message}`,
+        );
+      }
 
       if (!response.ok) {
         throw new NovaPoshtaApiError(`Nova Poshta API request failed with status ${response.status}`);
       }
 
-      const envelope = (await response.json()) as NovaPoshtaEnvelope<T>;
+      let envelope: NovaPoshtaEnvelope<T>;
+      try {
+        envelope = (await response.json()) as NovaPoshtaEnvelope<T>;
+      } catch (cause) {
+        throw new NovaPoshtaApiError(
+          `Nova Poshta API response for ${modelName}.${calledMethod} was not valid JSON: ${(cause as Error).message}`,
+        );
+      }
 
       if (!envelope.success) {
+        const errors = Array.isArray(envelope.errors) ? envelope.errors : [];
+        const errorCodes = Array.isArray(envelope.errorCodes) ? envelope.errorCodes : undefined;
+        const warnings = Array.isArray(envelope.warnings) ? envelope.warnings : [];
         throw new NovaPoshtaApiError(
-          envelope.errors.join("; ") || "Nova Poshta API returned an unsuccessful response",
-          envelope.errors,
-          envelope.errorCodes,
-          envelope.warnings,
+          errors.join("; ") || "Nova Poshta API returned an unsuccessful response",
+          errors,
+          errorCodes,
+          warnings,
+        );
+      }
+
+      if (!Array.isArray(envelope.data)) {
+        throw new NovaPoshtaApiError(
+          `Nova Poshta API response for ${modelName}.${calledMethod} was not a navigable list`,
         );
       }
 

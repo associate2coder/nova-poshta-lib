@@ -175,6 +175,27 @@ sequenceDiagram
 
 **Critical flow 2: <e.g. async event propagation>** — N/A, this library is synchronous request/response only (§4 decision 2).
 
+**Coverage check — user stories and acceptance criteria against the runtime view above:**
+
+| Item | Covered by |
+|---|---|
+| US-01 Fetch a reference list | Flow 1, happy-path branch |
+| US-02 Filter a reference list | Flow 1, happy-path branch (`filters?` parameter) |
+| US-03 Get typed results | Flow 1, happy-path branch (`typed T[]` return) |
+| US-04 Get a clear error on failure | Flow 1, all four error branches |
+| US-05 Discover the full set of reference lists | N/A — not a runtime path; satisfied by published `.d.ts`/`.d.cts` autocomplete (§5), verified by AC-07 |
+| US-06 Rely on one source of truth across modules | N/A — not a distinct runtime path; the same Flow 1 call is what any future module would make. The invariant itself is a cross-cutting concept (§8, "Cross-module value consistency"), not a sequence |
+| AC-01 happy path | Flow 1 |
+| AC-02 filtered happy path | Flow 1 |
+| AC-03 non-array-shaped data | Flow 1, "success but data isn't array-shaped" branch |
+| AC-04 API key rejected | Flow 1, "API key rejected" branch |
+| AC-05 declined for another reason | Flow 1, "declined for another reason" branch |
+| AC-06 authoritative cross-module source | N/A — non-runtime; §8 "Cross-module value consistency" row is where this invariant is fixed |
+| AC-07 published-build discoverability | N/A — non-runtime, build-time/tooling concern; §5 explains the `.d.ts`/`.d.cts` mechanism |
+| AC-08 network/transport failure | Flow 1, "network/transport failure" branch |
+
+No user story and no acceptance criterion is left uncovered.
+
 ## 7. Deployment view
 
 <!-- N/A: this feature ships inside the existing npm package publish process (project-level ADR-0004, release strategy via changesets) — no new infrastructure, no new deployment unit, no server to operate. -->

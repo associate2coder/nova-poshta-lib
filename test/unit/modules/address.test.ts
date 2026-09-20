@@ -68,6 +68,45 @@ describe("address module — plain lookups (T2, AC-01/AC-02)", () => {
     await expect(address.getWarehouseTypes()).resolves.toEqual([{ Ref: "wtype-1", Description: "Відділення" }]);
   });
 
+});
+
+describe("address module — filtered directory lookups (T3, AC-01/AC-02)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("getStreet requires CityRef and passes the full filter object through verbatim", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([{ Ref: "street-1", Description: "Хрещатик" }]));
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(address.getStreet({ CityRef: "city-1", FindByString: "Хрещ" })).resolves.toEqual([
+      { Ref: "street-1", Description: "Хрещатик" },
+    ]);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.calledMethod).toBe("getStreet");
+    expect(sentBody.methodProperties).toEqual({ CityRef: "city-1", FindByString: "Хрещ" });
+  });
+
+  it("getWarehouses passes every documented filter field through with no client-side re-filtering (AC-02)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([{ Ref: "wh-1", Number: "1" }]));
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(
+      address.getWarehouses({ CityRef: "city-1", TypeOfWarehouseRef: "type-1" }),
+    ).resolves.toEqual([{ Ref: "wh-1", Number: "1" }]);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.calledMethod).toBe("getWarehouses");
+    expect(sentBody.methodProperties).toEqual({ CityRef: "city-1", TypeOfWarehouseRef: "type-1" });
+  });
+});
+
+describe("address module — decline error branch", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("throws NovaPoshtaApiError on a decline, passing Nova Poshta's message through (AC-08)", async () => {
     mockFetchOnce(() => ({
       ok: true,

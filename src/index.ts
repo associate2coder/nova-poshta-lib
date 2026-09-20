@@ -49,3 +49,35 @@ export type {
   Warehouse,
   WarehouseType,
 } from "./types/address.js";
+
+export { createCounterpartyModule } from "./modules/counterparty/index.js";
+export type { CounterpartyModule } from "./modules/counterparty/index.js";
+export type {
+  ContactPerson,
+  Counterparty,
+  CounterpartyOptions,
+  CounterpartyProperty,
+  CounterpartyRecordBase,
+  DeleteContactPersonPayload,
+  DeleteCounterpartyPayload,
+  DeletedContactPerson,
+  DeletedCounterparty,
+  GetCounterpartiesCatalogFilters,
+  GetCounterpartiesFilters,
+  GetCounterpartyAddressesFilters,
+  GetCounterpartyContactPersonsFilters,
+  GetCounterpartyOptionsFilters,
+  OrganizationCounterparty,
+  PrivatePersonCounterparty,
+  SaveContactPersonPayload,
+  SaveCounterpartyPayload,
+  SaveOrganizationPayload,
+  SavePrivatePersonPayload,
+  SaveThirdPartyPayload,
+  ThirdPartyCounterparty,
+  UpdateContactPersonPayload,
+  UpdateCounterpartyPayload,
+  UpdateOrganizationPayload,
+  UpdatePrivatePersonPayload,
+  UpdateThirdPartyPayload,
+} from "./types/counterparty.js";

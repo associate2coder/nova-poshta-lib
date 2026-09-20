@@ -24,7 +24,7 @@ available as a typed, tested module in `nova-poshta-lib`, published to npm.
 | 1 | common — typed reference-list module (15 methods: cargo types, payment forms, service types, …) | `docs/features/common/spec.md` §1 | S | shipped |
 | 2 | address — typed Address domain module (11 methods + `findCityByName` convenience) | `docs/features/address/spec.md` §1 | S | shipped |
 | 3 | counterparty — typed Counterparty + ContactPerson module (11 methods + `findCounterparty` convenience) | `docs/features/counterparty/spec.md` §1 | S | shipped |
-| 4 | internet-document — typed shipment/waybill creation module, built on address + counterparty `Ref`s and common's reference types | `docs/features/counterparty/spec.md` §1; `docs/features/address/spec.md` §1; `docs/architecture-map.md` §Module inventory (target) | M | idea |
+| 4 | internet-document — typed shipment/waybill creation module, built on address + counterparty `Ref`s and common's reference types | [`docs/features/internet-document/spec.md`](features/internet-document/spec.md) | M | spec'd |
 | 5 | tracking-document — typed module for tracking a shipment by document number + phone, independent of internet-document | `docs/architecture-map.md` §Module inventory (target) | S | idea |
 | 6 | scan-sheet — typed module for batching waybills into a scan sheet for courier handoff | `docs/architecture-map.md` §Constraints & known tech-debt | S | idea |
 | 7 | additional-service — typed module for post-creation shipment actions: returns, redirections, waybill edits | `docs/architecture-map.md` §Constraints & known tech-debt | M | idea |

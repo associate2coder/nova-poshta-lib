@@ -19,6 +19,30 @@ This module is being built now because the library's foundation was just scaffol
 
 The committed approach is to ship one typed method per documented Nova Poshta reference list, each accepting that method's documented optional filters, with every reference value's type treated as provisional against Nova Poshta's live data rather than a closed/frozen enum. This is grounded in two upstream findings: the research pass found no precedent among comparable typed API-client libraries for keeping a live-fetched (not build-time-generated) reference list from going stale the moment the upstream API adds a value; and the failure-mode pass's sharpest finding is that a response cast to its declared type with no runtime check would silently produce typed-but-wrong data — the acceptance criteria below instead require an error in that case, in service of the "zero silent failures" success bar.
 
+Nova Poshta's written documentation is the starting point for each list's shape, but where the live API disagrees with the docs, the live API wins — types are derived from what the live API actually returns (verified via the integration suite against the real endpoint), consistent with treating reference values as provisional against live data rather than a frozen source.
+
+### In-scope reference lists (as of 2026-09-20)
+
+Cross-checked against Nova Poshta's `Common`-model API surface via community SDK sources (Nova Poshta's own documentation portal blocks automated fetches, so this list should be re-verified against the live/official docs before implementation locks — see the matching §8 open question):
+
+1. `getCargoTypes` — cargo type classifications (parcel, documents, cargo, pallets, tires)
+2. `getBackwardDeliveryCargoTypes` — cargo types valid for return shipments
+3. `getCargoDescriptionList` — cargo descriptions (accepts a search-string filter)
+4. `getDocumentStatuses` — possible document/shipment status values
+5. `getOwnershipFormsList` — business ownership forms
+6. `getPalletsList` — standard pallet sizes
+7. `getPaymentForms` — payment method options
+8. `getServiceTypes` — delivery service types
+9. `getTimeIntervals` — delivery time-interval windows (accepts a recipient city + optional date filter)
+10. `getTiresWheelsList` — tire/wheel cargo options
+11. `getTraysList` — tray types
+12. `getTypesOfAlternativePayers` — alternative payer type options
+13. `getTypesOfPayers` — payer categories
+14. `getTypesOfPayersForRedelivery` — payer types for return deliveries
+15. `getTypesOfCounterparties` — counterparty classifications (individual / organization / private entrepreneur)
+
+Every §5 acceptance criterion, the §6 "Method-surface completeness" row, and §7's "Method-surface completeness" KPI resolve against this list.
+
 Traceability: module boundaries follow ADR-0002 (one folder per Nova Poshta model, dual ESM+CJS build); the test split (mocked unit suite required in CI, opt-in integration suite) follows ADR-0003.
 
 Decision override: feature size — a critic pass flagged that "one typed method per documented reference list" spans a dozen-plus near-identical methods, each needing its own type and tests, which is realistically more than a single one-day PR. Reclassified from XS to S (see `docs/features/common/.size`) to size the feature honestly; the route stays `quick`.
@@ -73,10 +97,12 @@ Note: satisfying AC-03 (reject any reference response that doesn't match its doc
 ### US-06: Rely on one source of truth across modules
 
 **As a** consuming developer
-**I want** every domain module in this library that accepts a shared reference value (e.g. a payment form) to be validated against the same `common` reference list, not each module's own copy
-**So that** a value that's valid in one part of my integration is valid everywhere, and I don't maintain multiple copies of the same list myself
+**I want** every domain module in this library that accepts a shared reference value (e.g. a payment form) to draw its valid values from the same `common` reference list, not maintain its own copy
+**So that** the value I fetch from `common` is the same one every other module expects, without `common` itself checking or enforcing how any other module uses it
 
 ## 5. Acceptance criteria
+
+> Every "standard error" referenced below is `NovaPoshtaApiError` (per CLAUDE.md) — including AC-03's shape-check failure, which raises the same class with a library-written message, since Nova Poshta itself reports no error for a shape mismatch.
 
 ### AC-01 (US-01) — happy path
 
@@ -88,19 +114,21 @@ Note: satisfying AC-03 (reject any reference response that doesn't match its doc
 
 **Given** a consuming developer holds a valid API key
 **When** they request a reference list using one of that method's documented filter parameters (for example, a search string)
-**Then** the system returns only the values matching that filter, typed the same as the unfiltered list
+**Then** the system passes the filter to Nova Poshta and returns exactly what Nova Poshta responds with, typed the same as the unfiltered list — the library performs no client-side re-filtering or stripping of results; how well the response matches the filter is Nova Poshta's own behavior, not something this library corrects
 
 ### AC-03 (US-03) — domain invariant
 
 **Given** a consuming developer calls any reference-list method
-**When** the response Nova Poshta returns does not match that list's documented shape (a missing field, an unexpected type, or an unrecognized structure)
+**When** the response Nova Poshta returns is missing a field this library documents for that list, or has a documented field whose basic type doesn't match (for example, a number where a string was documented)
 **Then** the system treats the call as failed and never hands the consuming developer typed data that doesn't match what its types promise
+
+**Not a violation of this AC:** a field containing a new, previously-undocumented *value* (the open/provisional typing from §1 already expects and absorbs new values Nova Poshta adds over time), or an extra field in the response that this library doesn't document at all (ignored, not treated as a failure — Nova Poshta may add fields between releases without breaking existing calls).
 
 ### AC-04 (US-04) — authorization
 
 **Given** a consuming developer calls any reference-list method with an invalid or expired API key
 **When** the request reaches Nova Poshta
-**Then** the system denies the call by raising the library's standard error naming that the key was rejected, rather than returning any reference data
+**Then** the system denies the call by raising the library's standard error, passing through Nova Poshta's own message about the key as-is — no library-side detection or separate error type is required — rather than returning any reference data
 
 ### AC-05 (US-04) — error
 
@@ -112,13 +140,19 @@ Note: satisfying AC-03 (reject any reference response that doesn't match its doc
 
 **Given** another domain module in this library will eventually accept a field whose valid values come only from a `common` reference list (for example, a payment-form value)
 **When** a consuming developer fetches that reference list through `common`
-**Then** the values returned are the authoritative, current set from Nova Poshta at the moment of the call — never a value invented or hardcoded by this library — so the consuming developer can trust it as the single source for that field across every module
+**Then** the values returned are the authoritative, current set from Nova Poshta at the moment of the call — never a value invented or hardcoded by this library — so any module that later accepts that same field can treat `common`'s output as the single source for it; `common` itself performs no validation or enforcement of how another module uses the value — that check, if any, belongs to the module receiving it (see §3 non-goal)
 
 ### AC-07 (US-05) — happy path
 
 **Given** a consuming developer wants to know which reference lists are available
-**When** they browse the library's exported `common` module methods (e.g. via their editor's autocomplete or the package's published type declarations)
-**Then** every documented Nova Poshta reference list in this feature's scope appears as its own distinctly named, typed method
+**When** they browse the library's exported `common` module methods via their editor's autocomplete against the library's *published* package output — the type declaration files shipped in both the ESM and CJS builds (per ADR-0002), not just the source code
+**Then** every in-scope reference list (see §1) appears as its own distinctly named, typed method in both published builds
+
+### AC-08 (US-04) — error
+
+**Given** a consuming developer calls a reference-list method
+**When** the network call to Nova Poshta fails before a response is received (a timeout, a dropped connection, or a response that isn't valid JSON)
+**Then** the system raises the library's standard error rather than letting the failure propagate unhandled or returning an empty result that looks like a valid response
 
 ## 6. Non-functional requirements
 
@@ -126,8 +160,8 @@ Note: satisfying AC-03 (reject any reference response that doesn't match its doc
 |---|---|---|
 | Type-safety coverage | 100% of in-scope reference-list methods have zero `any` in public signatures | static check in CI |
 | Error-contract coverage | 100% of in-scope methods throw the standard error (`NovaPoshtaApiError`) on any declined/malformed response, 0% throw an unhandled error type | unit test suite (`test/unit/modules/common`) |
-| Library-added overhead per call | ≤ 5ms beyond the underlying network round-trip (no client-side caching, retries, or heavy parsing) | benchmark inside `test/unit/modules/common` with `fetch` stubbed to near-zero latency (always runs in CI — not the opt-in integration suite) |
-| Method-surface completeness | 100% of documented reference lists in scope have a corresponding typed method | manual audit against Nova Poshta docs before release |
+| Library-added overhead per call | Median ≤ 5ms beyond the underlying network round-trip, including the AC-03 shape-check cost (no client-side caching, retries, or heavy parsing) | median across ≥30 repeated calls, benchmarked inside `test/unit/modules/common` with `fetch` stubbed to near-zero latency (always runs in CI — not the opt-in integration suite) |
+| Method-surface completeness | 100% of the reference lists enumerated in §1 have a corresponding typed method | manual audit against Nova Poshta docs before release |
 
 ## 6.1 Security / privacy
 
@@ -154,3 +188,4 @@ Note: satisfying AC-03 (reject any reference response that doesn't match its doc
 - [ ] What runtime shape-check should `common` (or the shared core client) perform on a reference-list response to satisfy AC-03, and where should it live? Default now: unresolved — this is new work, not covered by the existing error contract (see §1 note). — owner: Tech Lead, due: before `sdd:design common`
 - [ ] Do any in-scope reference lists carry multi-language (UA/RU/EN) description fields, and if so should the typed shape expose all language variants or just Nova Poshta's default? Default now: pass through verbatim per the fixed pass-through convention, no library-side language selection. — owner: Tech Lead, due: before `sdd:tasks common`
 - [ ] Should reference lists gated behind a Nova Poshta account/contract tier (returning empty for ordinary keys) still ship as typed methods in v1, or be flagged/excluded once identified? Default now: ship them (the full-surface decision stands), flag the tier dependency in the method's documentation comment. — owner: Tech Lead, due: before `sdd:tasks common`
+- [ ] Should `common` be expected to be called on a hot/frequent path by future modules (e.g. once per shipment operation), and if so does that change the no-caching decision in §3? Default now: no-caching stands as written; each future module that consumes `common` repeatedly is responsible for its own call pattern. — owner: Tech Lead, due: before `sdd:design` of the first module that consumes `common`'s reference lists

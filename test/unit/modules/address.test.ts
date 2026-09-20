@@ -277,20 +277,94 @@ describe("address module — findCityByName convenience method (T6, AC-11)", () 
   });
 });
 
-describe("address module — decline error branch", () => {
+describe("address module — shared error contract (T8, AC-08/AC-09/AC-10)", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("throws NovaPoshtaApiError on a decline, passing Nova Poshta's message through (AC-08)", async () => {
+  it("throws NovaPoshtaApiError when declined for a non-authorization reason (AC-08)", async () => {
     mockFetchOnce(() => ({
       ok: true,
-      json: () => Promise.resolve({ success: false, data: [], errors: ["Invalid API key"], errorCodes: ["401"], warnings: [] }),
+      json: () =>
+        Promise.resolve({
+          success: false,
+          data: [],
+          errors: ["Unsupported filter value"],
+          errorCodes: ["400"],
+          warnings: [],
+        }),
     }));
     const address = createAddressModule(createClient("test-api-key"));
 
     const err = await address.getCities().catch((e: unknown) => e);
     expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Unsupported filter value"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["400"]);
+  });
+
+  it("throws NovaPoshtaApiError when success is true but data isn't array-shaped (AC-08)", async () => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () => Promise.resolve({ success: true, data: { not: "a list" }, errors: [], warnings: [] }),
+    }));
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(address.getCities()).rejects.toThrow(NovaPoshtaApiError);
+  });
+
+  it("throws NovaPoshtaApiError with Nova Poshta's own message on an invalid/expired API key or cross-counterparty write (AC-09)", async () => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () =>
+        Promise.resolve({ success: false, data: [], errors: ["Invalid API key"], errorCodes: ["401"], warnings: [] }),
+    }));
+    const address = createAddressModule(createClient("test-api-key"));
+
+    const err = await address
+      .save({ CounterpartyRef: "cp-other", StreetRef: "street-1", BuildingNumber: "12" })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
     expect((err as NovaPoshtaApiError).errors).toEqual(["Invalid API key"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["401"]);
+  });
+
+  it("throws NovaPoshtaApiError (not a raw error) on a network/transport failure (AC-10)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(address.getCities()).rejects.toThrow(NovaPoshtaApiError);
+  });
+
+  it("throws NovaPoshtaApiError (not a raw error) when the response body isn't valid JSON (AC-10)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: () => Promise.reject(new SyntaxError("Unexpected token")) }),
+    );
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(address.getCities()).rejects.toThrow(NovaPoshtaApiError);
+  });
+});
+
+describe("address module — overhead benchmark (spec §6 NFR row 4)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("median library-added overhead is <=5ms across >=30 stubbed calls", async () => {
+    mockFetchOnce(() => successEnvelope([{ Ref: "city-1" }]));
+    const address = createAddressModule(createClient("test-api-key"));
+
+    const samples: number[] = [];
+    const runs = 30;
+    for (let i = 0; i < runs; i++) {
+      const start = performance.now();
+      await address.getCities();
+      samples.push(performance.now() - start);
+    }
+
+    samples.sort((a, b) => a - b);
+    const median = samples[Math.floor(runs / 2)];
+    expect(median).toBeLessThanOrEqual(5);
   });
 });

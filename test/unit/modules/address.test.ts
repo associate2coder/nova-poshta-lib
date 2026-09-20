@@ -102,6 +102,58 @@ describe("address module — filtered directory lookups (T3, AC-01/AC-02)", () =
   });
 });
 
+describe("address module — search-wrapper lookups (T4, AC-01/AC-02/AC-03)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("searchSettlements resolves the wrapper object itself, not just Addresses (AC-03)", async () => {
+    const fetchMock = mockFetchOnce(() =>
+      successEnvelope([{ TotalCount: 1, Addresses: [{ Ref: "settlement-1", Present: "Київ" }] }]),
+    );
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(address.searchSettlements({ CityName: "Ки" })).resolves.toEqual({
+      TotalCount: 1,
+      Addresses: [{ Ref: "settlement-1", Present: "Київ" }],
+    });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.calledMethod).toBe("searchSettlements");
+    expect(sentBody.methodProperties).toEqual({ CityName: "Ки" });
+  });
+
+  it("searchSettlements resolves undefined when the envelope's data array is empty", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(address.searchSettlements({ CityName: "??" })).resolves.toBeUndefined();
+  });
+
+  it("searchSettlementStreets resolves the wrapper object itself, Addresses left verbatim (AC-03)", async () => {
+    const fetchMock = mockFetchOnce(() =>
+      successEnvelope([{ TotalCount: 1, Addresses: [{ Ref: "street-1", Present: "Хрещатик" }] }]),
+    );
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(
+      address.searchSettlementStreets({ StreetName: "Хрещ", SettlementRef: "settlement-1" }),
+    ).resolves.toEqual({ TotalCount: 1, Addresses: [{ Ref: "street-1", Present: "Хрещатик" }] });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.calledMethod).toBe("searchSettlementStreets");
+  });
+
+  it("searchSettlementStreets resolves undefined when the envelope's data array is empty", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const address = createAddressModule(createClient("test-api-key"));
+
+    await expect(
+      address.searchSettlementStreets({ StreetName: "??", SettlementRef: "settlement-1" }),
+    ).resolves.toBeUndefined();
+  });
+});
+
 describe("address module — decline error branch", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

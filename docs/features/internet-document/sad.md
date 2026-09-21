@@ -359,7 +359,9 @@ the three structurally distinct shapes.*
 
 ## 7. Deployment view
 
-<!-- pending -->
+<!-- N/A: this feature ships inside the existing npm package publish process (project-level ADR-0004,
+     release strategy via changesets) — no new infrastructure, no new deployment unit, no server to
+     operate. Identical reasoning to common's, address's, and counterparty's §7. -->
 
 ## 8. Crosscutting concepts
 

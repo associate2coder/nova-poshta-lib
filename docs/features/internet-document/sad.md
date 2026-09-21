@@ -2,7 +2,7 @@
 status: Draft
 owner: "Architect"
 reviewers: ["Tech Lead", "Security Lead"]
-updated_at: "2026-09-21"
+updated_at: "2026-09-22"
 feature_size: "M"
 target_surfaces: ["library-sdk"]
 ---
@@ -83,8 +83,10 @@ confirming Nova Poshta's wire format varies required fields by cargo type — se
 - `spec.md` §6.1: data classification confidential — a step more sensitive than `counterparty`'s
   identity data: `internet-document` is the first module carrying money fields (`Cost`,
   cash-on-delivery/backward-delivery amounts) and the first returning a value (the print link) that
-  itself carries live account credentials, per the community-SDK cross-check (unconfirmed against the
-  live/official docs, `spec.md` §8 OQ-1). Security review required before release — tracked as an open
+  itself carries live account credentials — confirmed both by the community-SDK cross-check and,
+  since the seventh review pass (2026-09-22), directly from Nova Poshta's own `devcenter.novaposhta.ua`
+  documentation (`spec.md` §8 OQ-1; the exact `type`-value casing and `copies` parameter remain
+  SDK-sourced only, still unconfirmed). Security review required before release — tracked as an open
   risk in §11, not performed in this design session.
 - AuthZ/AuthN: none beyond the existing single-API-key model; `internet-document` introduces no new
   permission tiers of its own (`spec.md` §6.1).
@@ -520,7 +522,7 @@ module formats and type-checks the method surface).
 | Risk / debt | Severity | Mitigation | Owner |
 |---|---|---|---|
 | Security review required before release — new money-bearing fields and a credential-bearing return value (the print link) neither `address` nor `counterparty` carried (`spec.md` §6.1) | High | Schedule and complete a security review before `sdd:ship internet-document`; not performed in this design session | Security Lead |
-| Open architectural decision: re-verify the 8-method InternetDocument surface, the full `save`/`update` field shape per combination, whether the print-link methods' URL genuinely embeds the caller's API key, whether print genuinely returns one combined link per call, the print request/response format (copies, label size, PDF vs HTML), and how a caller can tell a print request failed — all currently inferred from three cross-checked community SDKs, not Nova Poshta's official docs (portal still blocks automated fetches) | Open question | Resolve before next release (`sdd:ship internet-document`); ADR-0003's construct-then-verify mechanism is built on this same unconfirmed assumption set (`spec.md` §8 OQ-1) | Tech Lead |
+| Open architectural decision: re-verify the 8-method InternetDocument surface and the full `save`/`update` field shape per combination against Nova Poshta's official docs — still only inferred from three cross-checked community SDKs. Narrower now (review, seventh/eighth pass, 2026-09-22): the print URL's `apiKey`-embedding and single-combined-link-per-call behavior are confirmed from Nova Poshta's own `devcenter.novaposhta.ua` documentation; the `type`/`Copies` handling is now confirmed directly from the cross-checked PHP SDK's actual `getPrintLink()` implementation (a `copies` URL segment never existed — a previously-shipped bug, now fixed); still open: how a caller can tell a print request failed on a 200-status blank/error page | Open question | Resolve before next release (`sdd:ship internet-document`); ADR-0003's construct-then-verify mechanism still carries the residual unconfirmed items (`spec.md` §8 OQ-1) | Tech Lead |
 | Should the shared core client be extended to expose Nova Poshta's pagination metadata (`totalCount`) for `getDocumentList`? `address` and `counterparty` both deferred this; carried forward unchanged here (§4 decision 6) — `getDocumentList` is the same kind of growing, transactional list `getCounterparties` already is. **Narrowed (review remediation, 2026-09-21):** success-path warnings are no longer part of this open question — `requestEnvelope()` already exposes them, added for `delete`'s AC-08 fix; only `totalCount`/pagination metadata remains undecided | Open question | Resolve before `sdd:design` of any future module whose lookups depend on complete, multi-page results (`spec.md` §8 OQ-2) | Tech Lead |
 | Whether `delete`'s per-Ref outcome (AC-08) is genuinely distinguishable in Nova Poshta's live response, or whether the "mixed batch result" risk is purely theoretical for this endpoint. **Status at this design review:** the gate this open question flagged was reached in this pass and resolved via the spec's own stated default — ADR-0002's defensive reconciliation, which holds up either way — but the underlying live-API confirmation itself is still outstanding | Open question | Resolve before `sdd:ship internet-document` (re-scoped from the original pre-design due date, mirroring how `counterparty`'s equivalent OQ-2 was handled) — downgrade ADR-0002's reconciliation logic if the live API never actually returns a mixed result (`spec.md` §8 OQ-5) | Tech Lead |
 | Should the print-link methods' return type carry a stronger developer-facing warning (a distinct wrapper type, a lint-enforced doc comment) about the embedded-credential risk (AC-13), beyond the doc comment ADR-0003/QG-3 already commit to? | Open question | Resolve before `sdd:ship internet-document`; default for now is document only, no code-level warning mechanism (`spec.md` §8 OQ-4) | Tech Lead |

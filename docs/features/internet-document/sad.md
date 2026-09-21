@@ -365,7 +365,24 @@ the three structurally distinct shapes.*
 
 ## 8. Crosscutting concepts
 
-<!-- pending -->
+| Concept | Convention | Where defined |
+|---|---|---|
+| Logging | None — the library emits no logs of its own | — (repo default, undocumented) |
+| Authentication | Caller-supplied `apiKey`, unchanged by this feature — including the print sub-flow, which embeds the same `apiKey` directly into the returned URL rather than authenticating a separate way | `architecture-map.md`; §4 decision 9, ADR-0003 |
+| Error handling | Single `NovaPoshtaApiError` for all 8 methods, including the two print methods via their own verification check (ADR-0003) — no subclassing, no per-method error type | `src/client.ts`; `common` ADR-0001; `spec.md` §6.1 |
+| Write-return shape (save/update) | `T \| undefined` when a successful write's data is empty | `address` ADR-0001 (reused unchanged) |
+| Write-return shape (delete) | A per-Ref outcome array, never `T \| undefined` — the one deliberate divergence from every other write method in this library | `internet-document` ADR-0002 |
+| Discriminated-type modeling | Two intersected type-sets (`ServiceType` × `CargoType`), composed by TypeScript into all valid combinations — a new pattern, distinct from `counterparty`'s single-axis three-hand-written-types approach | `internet-document` ADR-0001 |
+| Non-JSON transport path | The print methods bypass the shared core client entirely, using a module-local `fetch`-based helper — the only code path in this library that doesn't go through `NovaPoshtaClient.request()` | `internet-document` ADR-0003; `spec.md` §3 non-goal (shared client stays unchanged) |
+| Cross-module type reuse | None new — unlike `counterparty`'s import of `address`'s `SavedAddress`, `internet-document` takes every cross-module value (sender/recipient/contact-person/location Refs) as a plain `string`, performing no cross-module type import and no runtime check of its own (AC-18) | `spec.md` §3 non-goal, AC-18 |
+| ID strategy | N/A — the library holds no persistent IDs of its own; a waybill's `Ref`/`IntDocNumber` are Nova Poshta's, passed through live (AC-17) | `architecture-map.md` |
+| Internationalisation | N/A — pass-through of Nova Poshta's own language fields, no library-side selection, same convention as every other module | `docs/features/common/spec.md` §8 |
+| Observability | None new — no metrics/tracing added by this feature | — |
+| Events | N/A — synchronous request/response only, including the print sub-flow's own direct `fetch` | `architecture-map.md` |
+| Rate-limiting | None of our own — Nova Poshta's own throttling governs | — |
+| Testing | Mocked unit suite required in CI (`test/unit/modules/internet-document`), including the print helper's `fetch` mocked the same way + opt-in integration suite against the real API | `docs/adr/0003-testing-strategy.md` |
+| Money-field handling | Pass-through only — no currency conversion, no unit checking, no precision logic beyond TypeScript's numeric type (§2, `spec.md` §3 non-goal) | `spec.md` §3 non-goal |
+| Cross-module value consistency | `internet-document` is the sole source of truth for waybill `Ref`/`IntDocNumber` values that `scan-sheet`/`additional-service` will depend on; it enforces nothing about how a later module uses one, and performs no check of or cascade into a dependent record on update/delete (AC-17, AC-18) | `spec.md` AC-17 / AC-18 / US-11 |
 
 ## 9. Architecture decisions
 

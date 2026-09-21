@@ -4,8 +4,8 @@
 
 ## Goal
 
-Ship the `internet-document` domain module: typed `save`/`update` on a discriminated
-`ServiceType`×`CargoType` payload, batch-capable `delete` with a per-Ref reconciled outcome, the two
+Ship the `internet-document` domain module: typed `save`/`update` on a `ServiceType`-discriminated
+payload with `CargoType` as a plain field (ADR-0004), batch-capable `delete` with a per-Ref reconciled outcome, the two
 pre-creation calculators (`getDocumentPrice`, `getDocumentDeliveryDate`), filterable
 `getDocumentList`, and the two print-link methods (`printDocument`/`printMarkings`) on their own
 construct-then-verify code path — so consuming developers get compile-time-checked, typed access to
@@ -15,8 +15,8 @@ source of waybill `Ref`/`IntDocNumber` values `scan-sheet`/`additional-service` 
 
 ## Scope
 
-- **In:** `src/types/internet-document.ts` (all request/response types, incl. the intersected
-  `ServiceType`×`CargoType` union and the per-Ref delete outcome array),
+- **In:** `src/types/internet-document.ts` (all request/response types, incl. the `ServiceType`-leg
+  discriminated union and the per-Ref delete outcome array),
   `src/modules/internet-document/index.ts` (the 8 typed methods, including the print methods' private
   `fetch`-based construct-then-verify helper), wiring into `src/index.ts`, the mocked unit suite, the
   published-build type-surface check, a README usage example.
@@ -54,7 +54,7 @@ See [tracker.md](./tracker.md) for status. Machine contract: [tasks.json](../tas
 
 | # | Task | Layer | Blocked by | DoD (short) |
 |---|---|---|---|---|
-| T1 | Define internet-document domain types | domain | — | Full type surface compiles, zero `any`; intersected discriminated union per ADR-0001; per-Ref delete outcome array per ADR-0002 |
+| T1 | Define internet-document domain types | domain | — | Full type surface compiles, zero `any`; `ServiceType`-leg discriminated union per ADR-0004 (superseding ADR-0001's two-axis plan); per-Ref delete outcome array per ADR-0002 |
 | T2 | Implement save and update methods | app | T1 | Happy path + empty-on-success typed; discriminant-mix payload fails to compile |
 | T3 | Implement delete with per-Ref outcome reconciliation | app | T1 | Single- and batch-Ref calls both resolve a per-Ref outcome array |
 | T4 | Implement list/price/delivery-date methods | app | T1 | Unfiltered + filtered `getDocumentList`, no-linkage calculators, all typed + tested |

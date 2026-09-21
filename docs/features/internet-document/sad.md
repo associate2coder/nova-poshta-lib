@@ -329,8 +329,8 @@ sequenceDiagram
     participant NP as Nova Poshta API
 
     Dev->>IDoc: delete({ Documents: [Ref1, Ref2, ...] })
-    IDoc->>Client: request("InternetDocument", "delete", { Documents })
-    Client->>NP: HTTPS POST (apiKey, Documents)
+    IDoc->>Client: requestEnvelope("InternetDocument", "delete", { DocumentRefs })
+    Client->>NP: HTTPS POST (apiKey, DocumentRefs)
 
     alt full network/malformed-response failure (AC-14 / AC-16)
         NP--xClient: timeout / non-JSON body / not array-shaped
@@ -341,9 +341,9 @@ sequenceDiagram
         Client-->>IDoc: throws NovaPoshtaApiError
         IDoc-->>Dev: propagates NovaPoshtaApiError
     else success — full or partial (AC-07 / AC-08)
-        NP-->>Client: success:true, data: [confirmed removals...]
-        Client-->>IDoc: typed confirmed-removal records
-        IDoc->>IDoc: reconcile submitted Refs against confirmed removals (ADR-0002)
+        NP-->>Client: success:true, data: [confirmed removals...], warnings/errors: [per-rejected-Ref reasons]
+        Client-->>IDoc: full envelope (data + warnings + errors) via requestEnvelope() — review 2026-09-21 finding 4
+        IDoc->>IDoc: reconcile submitted Refs against confirmed removals (ADR-0002); for each not confirmed, match a warning/error naming that Ref, falling back to all of them joined (review 2026-09-21-02 finding N3)
         IDoc-->>Dev: one outcome entry per submitted Ref — Removed:true for each confirmed, Removed:false + Reason for each not found in the response
     end
 ```

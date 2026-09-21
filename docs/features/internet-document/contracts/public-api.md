@@ -180,12 +180,20 @@ error (AC-05, `address` ADR-0001 reused unchanged). Response fields confirmed fr
 
 ```ts
 /** AC-06: full-replace — every field the chosen combination's Save payload declares becomes
- *  mandatory here, including BackwardDeliveryData; an omitted BackwardDeliveryData clears any
- *  previously-set cash-on-delivery instruction (§1 decision override), matching UpdateReq's shape
- *  in platx/go-nova-poshta (re-fetched: flat, same field set as SaveReq plus a mandatory Ref, no
- *  BackwardDeliveryData field observed in that SDK's UpdateReq at all — flagged, see §10 finding 2
- *  / api-sync-report.md for the AC-06 wire-shape gap this surfaces). */
-export type UpdateInternetDocumentPayload = Required<SaveInternetDocumentPayload> & { Ref: string };
+ *  mandatory here, EXCEPT BackwardDeliveryData, which stays optional by design: omitting it (or
+ *  passing it as undefined) is how a caller clears a previously-set cash-on-delivery instruction
+ *  (§1 decision override) — it is never carried forward from a previous version. **Correction
+ *  (review remediation, fourth pass, 2026-09-21):** hand-written per ServiceType leg (mirroring
+ *  `counterparty` ADR-0001's explicit-variants precedent), NOT a generic `Required<SaveInternetDocumentPayload>`
+ *  wrapper — `Required<>` would force BackwardDeliveryData mandatory too, making AC-06's "omit to
+ *  clear" case impossible to type. See `src/types/internet-document.ts`'s
+ *  UpdateWarehouseToWarehousePayload/UpdateWarehouseToDoorsPayload/UpdateDoorsToWarehousePayload/
+ *  UpdateDoorsToDoorsPayload for the shipped shape. */
+export type UpdateInternetDocumentPayload =
+  | UpdateWarehouseToWarehousePayload
+  | UpdateWarehouseToDoorsPayload
+  | UpdateDoorsToWarehousePayload
+  | UpdateDoorsToDoorsPayload;
 
 update(payload: UpdateInternetDocumentPayload): Promise<SavedInternetDocument | undefined>;
 ```
@@ -373,12 +381,23 @@ export interface InternetDocumentModule {
 |---|---|---|---|
 | `save` | `InternetDocument` | `save` | `client.request()` (JSON envelope) |
 | `update` | `InternetDocument` | `update` | `client.request()` |
-| `delete` | `InternetDocument` | `delete` | `client.request()` |
+| `delete` | `InternetDocument` | `delete` | `client.requestEnvelope()` — reads success-path `warnings`/`errors` for AC-08's rejected-Ref `Reason` (review 2026-09-21 finding 4); payload field `Documents` is sent on the wire as `DocumentRefs` |
 | `getDocumentList` | `InternetDocument` | `getDocumentList` | `client.request()` |
 | `getDocumentPrice` | `InternetDocument` | `getDocumentPrice` | `client.request()` |
 | `getDocumentDeliveryDate` | `InternetDocument` | `getDocumentDeliveryDate` | `client.request()` |
 | `printDocument` | — | — | direct `fetch`, construct-then-verify (ADR-0003) |
 | `printMarkings` | — | — | direct `fetch`, construct-then-verify (ADR-0003) |
+
+**Shared-client surface added by this feature (review remediation, 2026-09-21 rounds 2 & 3):** two
+narrow, additive members were added to `NovaPoshtaClient` (`src/client.ts`) that no earlier module
+needed — both are now public package surface:
+- `requestEnvelope<T>(modelName, calledMethod, methodProperties?)` → `NovaPoshtaSuccessEnvelope<T>`
+  (`{ data, errors, warnings }`) — used by `delete` above. `NovaPoshtaSuccessEnvelope` is re-exported
+  from `src/index.ts`.
+- `apiKey: string` (read-only, non-enumerable) — used by `buildAndVerifyPrintLink()` (ADR-0003) to
+  embed the caller's key in the constructed print URL, outside any envelope call.
+
+See `spec.md` §3 non-goal's Amendments 1 & 2, ADR-0002's Amendment, and ADR-0003's Amendment 2.
 
 ## 6. Error contract (derived from `sad.md` §6 `alt` branches)
 

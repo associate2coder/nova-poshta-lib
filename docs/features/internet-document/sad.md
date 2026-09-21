@@ -348,15 +348,51 @@ sequenceDiagram
     end
 ```
 
+**Critical flow 4: calculate or list — price, delivery date, and document list**
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant IDoc as internet-document module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>IDoc: getDocumentPrice(payload) | getDocumentDeliveryDate(payload) | getDocumentList(filters?)
+    IDoc->>Client: request("InternetDocument", calledMethod, methodProperties)
+    Client->>NP: HTTPS POST (apiKey, modelName, calledMethod, methodProperties)
+
+    alt network/transport failure (AC-16)
+        NP--xClient: timeout / dropped connection / non-JSON body
+        Client-->>IDoc: throws NovaPoshtaApiError
+        IDoc-->>Dev: propagates NovaPoshtaApiError
+    else declined — invalid Ref, missing field, business-rule rejection, malformed data shape, or bad key (AC-14 / AC-15)
+        NP-->>Client: success:false, error (or success:true with data that doesn't match the documented shape)
+        Client-->>IDoc: throws NovaPoshtaApiError (Nova Poshta's message passed through)
+        IDoc-->>Dev: propagates NovaPoshtaApiError
+    else happy path — no filter supplied (AC-03 / AC-04 / AC-09)
+        NP-->>Client: success:true, data: [result]
+        Client-->>IDoc: typed [result] (array-shape check passes)
+        IDoc-->>Dev: the calculated price/date, or the caller's own waybill page — never auto-walked to a next page, never linked to a later save call (§3 non-goal)
+    else happy path — documented filter supplied, e.g. date range (AC-10)
+        NP-->>Client: success:true, data: [filtered result]
+        Client-->>IDoc: typed [filtered result]
+        IDoc-->>Dev: exactly what Nova Poshta returned for that filter, typed the same as the unfiltered call — no client-side re-filtering
+    end
+```
+
 *Flow 1 covers `save`/`update` (AC-01, AC-05, AC-06) — the discriminated payload guard (AC-02) is a
 compile-time concern, not a runtime branch (§4 decision 7, `src/types/internet-document.ts`). Flow 2
 covers `delete`'s batch-capable, per-Ref-reconciled result (AC-07, AC-08, ADR-0002) — the one flow in
 this module whose shape has no equivalent in `address`/`counterparty`. Flow 3 covers `printDocument`/
 `printMarkings` (AC-11, AC-12, AC-13, ADR-0003) — the only flow in this entire library that never
-touches the shared core client. `getDocumentList`/`getDocumentPrice`/`getDocumentDeliveryDate`
-(AC-03, AC-04, AC-09, AC-10) share Flow 1's exact shape (a read/calculation instead of a write) and are
-not redrawn separately — the `sequences` stage covers every §5 AC individually; this design pass seeds
-the three structurally distinct shapes.*
+touches the shared core client. Flow 4 covers `getDocumentList`/`getDocumentPrice`/
+`getDocumentDeliveryDate` (AC-03, AC-04, AC-09, AC-10) — the same request/typed-response shape as
+Flow 1's happy path, but a read/calculation instead of a write, so it carries no empty-on-success
+branch of its own (AC-05 is write-only). AC-14/AC-15/AC-16 recur here because every in-scope method,
+not just writes, must raise the same standard error on decline, auth denial, or network failure
+(US-10). AC-17/AC-18 (the cross-module Ref-authority and no-local-validation guarantees) and AC-19
+(published-build type-surface, a CI-time check) stay non-runtime — they describe a guarantee about
+values already shown crossing the wire in Flows 1 and 4, not a distinct runtime branch of their own.*
 
 ## 7. Deployment view
 

@@ -265,9 +265,9 @@ describe("internet-document module — printDocument/printMarkings (T5, AC-11/AC
     vi.unstubAllGlobals();
   });
 
-  it("printDocument returns a single verified URL string covering all requested Refs, never through the JSON-envelope path (AC-11)", async () => {
-    const fetchMock = vi.fn(async (url: string) => {
-      void url;
+  it("printDocument builds the exact expected URL and verifies it with a single HEAD request, never through the JSON-envelope path (AC-11)", async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      void init;
       return { ok: true, status: 200 };
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -275,12 +275,41 @@ describe("internet-document module — printDocument/printMarkings (T5, AC-11/AC
 
     const link = await internetDocument.printDocument({ Documents: ["waybill-1", "waybill-2"] });
 
-    expect(typeof link).toBe("string");
-    expect(link).toContain("waybill-1");
-    expect(link).toContain("waybill-2");
-    expect(link).toContain("test-api-key");
+    expect(link).toBe(
+      "https://my.novaposhta.ua/orders/printDocument/orders[]/waybill-1/orders[]/waybill-2/apiKey/test-api-key",
+    );
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]![0]).toBe(link);
+    // finding 11: verification must not leave a real response body unread/uncancelled — a HEAD
+    // request never opens one in the first place.
+    expect(fetchMock.mock.calls[0]![1]).toMatchObject({ method: "HEAD" });
+  });
+
+  it("printDocument builds the Type and Copies segments into the URL when supplied (AC-11)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, status: 200 })),
+    );
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    const link = await internetDocument.printDocument({
+      Documents: ["waybill-1"],
+      Type: "Pdf",
+      Copies: "double",
+    });
+
+    expect(link).toBe(
+      "https://my.novaposhta.ua/orders/printDocument/orders[]/waybill-1/type/Pdf/copies/double/apiKey/test-api-key",
+    );
+  });
+
+  it("printDocument rejects an empty Documents list without issuing a request (contracts/public-api.md §3)", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(internetDocument.printDocument({ Documents: [] })).rejects.toThrow(NovaPoshtaApiError);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("printMarkings returns a single verified URL string for the label, same contract as printDocument (AC-12)", async () => {
@@ -292,7 +321,7 @@ describe("internet-document module — printDocument/printMarkings (T5, AC-11/AC
 
     const link = await internetDocument.printMarkings({ Documents: ["waybill-1"] });
 
-    expect(link).toContain("waybill-1");
+    expect(link).toBe("https://my.novaposhta.ua/orders/printMarkings/orders[]/waybill-1/apiKey/test-api-key");
   });
 
   it("the returned link is the constructed URL unmodified — no redaction of the embedded apiKey (AC-13)", async () => {

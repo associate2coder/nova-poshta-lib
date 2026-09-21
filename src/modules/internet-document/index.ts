@@ -78,7 +78,9 @@ async function buildAndVerifyPrintLink(
 
   let response: { ok: boolean; status?: number };
   try {
-    response = await fetch(url);
+    // HEAD, not GET: this only verifies the link resolves — it never needs the response body, so
+    // there is nothing to leave unread/uncancelled against a real PDF/label endpoint.
+    response = await fetch(url, { method: "HEAD" });
   } catch (cause) {
     throw new NovaPoshtaApiError(
       `Nova Poshta print-link verification for ${kind} failed: ${(cause as Error).message}`,

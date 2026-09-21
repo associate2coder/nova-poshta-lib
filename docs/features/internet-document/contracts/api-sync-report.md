@@ -2,7 +2,7 @@
 status: Draft
 owner: "Backend Lead"
 reviewers: []
-updated_at: "2026-09-21"
+updated_at: "2026-09-22"
 feature_size: "M"
 ---
 
@@ -43,8 +43,8 @@ source found in any cross-checked source — modeled defensively, no field inven
 | Field | Origin | Confidence |
 |---|---|---|
 | `save`/`update`/`delete`/`getDocumentList`/`getDocumentPrice`/`getDocumentDeliveryDate`/`printDocument`/`printMarkings` (8 methods) | `spec.md` §1 in-scope method list | high |
-| `ServiceType` (4 values kept, per ADR-0001) | `platx/go-nova-poshta` `custom/enum/service_type.go` (re-fetched) — **note:** the source documents 6 values, not 4 (see Drift finding 1 below) | high (as far as it goes) / **flagged gap** |
-| `CargoType` (4 values kept, per ADR-0001) | `platx/go-nova-poshta` `custom/enum/cargo_type.go` (re-fetched) — **note:** the source documents 8 values, not 4 (see Drift finding 1) | high (as far as it goes) / **flagged gap** |
+| `ServiceType` (6 values — **widened post-ship, was 4**) | `platx/go-nova-poshta` `custom/enum/service_type.go` (re-fetched) — corroborated by a second independent source, `shopanaio/carrier-api`'s `waybillService.ts` (validates `DoorsPostomat`/`WarehousePostomat` with its own Postomat business rules); see Drift finding 1, resolved | high |
+| `CargoType` (8 values — **widened post-ship, was 4**) | `platx/go-nova-poshta` `custom/enum/cargo_type.go` (re-fetched) — no second source contradicts it; ADR-0004 already established no structural leg shape depends on this field, so widening it required no further change; see Drift finding 1, resolved | high (single-sourced, uncontradicted) |
 | `PayerType`, `PaymentMethod` | `platx/go-nova-poshta` `custom/enum/{payer_type,payment_method}.go` (re-fetched) — exact match, no gap | high |
 | `SaveInternetDocumentPayload` base fields (`DateTime`, `Weight`, `SeatsAmount`, `Description`, `Cost`, `CitySender`, `Sender`, `SenderAddress`, `ContactSender`, `SendersPhone`, `CityRecipient`, `Recipient`, `ContactRecipient`, `RecipientsPhone`) | `platx/go-nova-poshta` `api/internetdocument/request.go`, `SaveReq` (re-fetched) | high |
 | Warehouse-leg fields (`RecipientAddress` as warehouse Ref) | `platx/go-nova-poshta` `request.go`, inferred from `WarehouseSaveReq` embedding `SaveReq` with no additional door-address fields | medium |
@@ -53,7 +53,7 @@ source found in any cross-checked source — modeled defensively, no field inven
 | `BackwardDeliveryData` (property exists) | `serj1chen/nova-poshta-sdk-php`'s `InternetDocument` class docblock, `@property array BackwardDeliveryData` (re-fetched) | high (existence) |
 | `BackwardDeliveryData` sub-fields (`PayerType`, `CargoType`, `RedeliveryString`, `Amount`) | Inferred from `GetDocumentPriceReq.RedeliveryCalculate{CargoType,Amount}`'s naming convention — no source directly documents `BackwardDeliveryData`'s own sub-field set | medium |
 | `SavedInternetDocument` response fields (`Ref`, `CostOnSite`, `EstimatedDeliveryDate`, `IntDocNumber`, `TypeDocument`) | `platx/go-nova-poshta` `response.go`, `SaveItem` (re-fetched) | high |
-| `DeleteInternetDocumentPayload.Documents` (array shape) | ADR-0002 (design decision) — **contradicted by 2 of 3 SDKs' own field typing** (see Drift finding 2 below) | **flagged gap** |
+| `DeleteInternetDocumentPayload.Ref` (single value — **narrowed post-ship, was an array**) | ADR-0005 (post-ship correction of ADR-0002) — 3 of 4 re-fetched sources (`platx/go-nova-poshta`, `maddsua/NovaPoshtaREST`, `serj1chen`) type the wire field as single-value; `deleteBatch` (new) replaces the previously-shipped single-call batch shape with a client-side loop; see Drift finding 2, resolved | high (majority-confirmed) |
 | `DeletedInternetDocumentOutcome` (`Ref`, `Removed`, `Reason`) | `Ref` confirmed from `platx/go-nova-poshta` `response.go`'s `DeleteItem` (re-fetched, high) — no source's `DeleteItem`/`i_delete_result` carries a `Removed`/`Reason` field of its own; both are this module's own reconciliation output (ADR-0002), not a passthrough of Nova Poshta's response shape | `Ref` high / `Removed`+`Reason` — contract-original, by design |
 | `WaybillListItem` fields (`Ref`, `DateTime`, `IntDocNumber`, `Cost`, `CitySender`, `CityRecipient`, `CostOnSite`, `PayerType`, `PaymentMethod`, `AfterpaymentOnGoodsCost`, `StateId`, `StateName`, `RejectionReason`) | `platx/go-nova-poshta` `response.go`, `GetDocumentListItem` (re-fetched) | high |
 | `GetDocumentListFilters` (`DateTimeFrom`, `DateTimeTo`, `Page`) | `platx/go-nova-poshta` `request.go`, `GetDocumentListReq` (re-fetched) | high |
@@ -70,7 +70,20 @@ field variance, `BackwardDeliveryData` sub-fields) are modeled minimally, not in
 
 ## Drift found — and how it was resolved
 
-### Finding 1: `ServiceType`/`CargoType` cardinality mismatch
+### Finding 1: `ServiceType`/`CargoType` cardinality mismatch — **RESOLVED post-ship, 2026-09-22**
+
+**Resolution (post-ship API-contract re-audit, per CLAUDE.md's API-contract sourcing policy):** the
+original "keep as designed" decision below did not survive the new policy's bar. Re-fetching a
+second independent source (`shopanaio/carrier-api`'s `waybillService.ts`) corroborated
+`platx/go-nova-poshta`'s 6-value `ServiceType` list directly — it independently validates
+`DoorsPostomat`/`WarehousePostomat` with its own Postomat-specific business rules (weight, cost,
+seat-count limits). Two agreeing sources clears the policy's bar. `ServiceType`/`CargoType`'s
+standalone types are now widened to 6/8 values; `save`/`update`'s discriminated union still models
+only the original 4 `ServiceType` values as structural variants, since the Postomat leg's
+required-field shape (a seat/dimensions block) has only the one source, not two. See §2 (types),
+ADR-0002's amendment log, `spec.md` §8 OQ-1/OQ-3.
+
+Original finding (2026-09-21):
 
 `spec.md` §1 and `sad.md` ADR-0001 fix `ServiceType` at 4 values (warehouse↔warehouse, warehouse↔door,
 door↔warehouse, door↔door) and `CargoType` at 4 (parcel, cargo, documents, pallet). Re-fetching
@@ -87,7 +100,17 @@ re-verifying field shapes against the live docs; recommend tightening its wordin
 the ServiceType/CargoType cardinality gap this re-fetch found, so a future live-API check doesn't miss
 it believing the 4×4 set was already SDK-confirmed. Not blocking this contract.
 
-### Finding 2: `delete` batch capability not clearly confirmed
+### Finding 2: `delete` batch capability not clearly confirmed — **RESOLVED post-ship, 2026-09-22**
+
+**Resolution (post-ship API-contract re-audit, ADR-0005):** the original "keep as designed"
+decision below did not survive the new policy's bar either. A fifth cross-checked source
+(`shopanaio/carrier-api`) does type `DocumentRefs` as an array and ships a `deleteBatch()` — but
+that leaves the vote at 3-of-4 singular, not the "2 agreeing" bar met in the other direction.
+`delete` now accepts exactly one Ref per call; a new `deleteBatch` method is this module's own
+sequential client-side loop, never a claimed server-side batch capability. See ADR-0005, `spec.md`
+§8 OQ-5 (resolved), AC-07/AC-08.
+
+Original finding (2026-09-21):
 
 `sad.md` ADR-0002 and `spec.md` AC-07/AC-08 model `delete` as batch-capable (multiple Refs in one
 call, reconciled per-Ref). Re-fetching all three SDKs' actual source:
@@ -113,7 +136,42 @@ question) to cover this. Not blocking this contract.
 **Combined pause assessment:** 2 core findings raised, both resolved via Save-as-OQ with the user's
 explicit direction to keep the contract on the already-designed shape — under the ≥3-flags-or-core-
 failure auto-pause threshold in effect (the user was asked directly rather than the run silently
-proceeding).
+proceeding). **Both Save-as-OQ dispositions were reopened and resolved for real in the post-ship
+API-contract re-audit above** — the new CLAUDE.md sourcing policy no longer allows "keep as
+designed, track as an open question" once independent sources actually disagree; see the
+resolutions above each finding's heading.
+
+### Finding 3: print-link URL-construction mechanism contested — found post-ship, 2026-09-22, still OPEN
+
+Widening the source pool from 3 to 5 for the re-audit above (triggered by finding 1/2's own
+reopening) surfaced a third, more serious discrepancy that was not caught by the original 3-SDK
+cross-check: the print-link mechanism itself, not just a cardinality or batch detail.
+
+- This module's shipped `buildAndVerifyPrintLink` and `serj1chen/nova-poshta-sdk-php`'s
+  `getPrintLink()` both build the URL by repeating `orders[]/<ref>` once per Ref (twice for
+  `Copies: "fourfold"`), with capitalized `Type` values.
+- A fourth source, `lis-dev/nova-poshta-api-2`'s `printGetLink()`, builds the same URL differently:
+  `'https://my.novaposhta.ua/orders/'.$method.'/orders[]/'.implode(',', $documentRefs).'/type/'.$type.'/apiKey/'.$this->key`
+  — all Refs comma-joined into **one** `orders[]/` segment, lowercase `type`, and **no** `Copies`
+  segment at all.
+- That same source's own live-hitting test suite (`NovaPoshtaApi2Test.php::testPrintDocument`)
+  calls `printDocument('123')` — routing through the **plain enveloped `calledMethod` path**
+  (`$this->request('InternetDocument', 'printDocument', [...])`), not a constructed URL — and
+  asserts on a real Nova Poshta error code (`20000300415`, "Document not found") returned through
+  the normal JSON envelope. This proves `printDocument`/`printMarkings` are reachable as ordinary
+  enveloped calls, a path `ADR-0003`'s entire design assumed was categorically closed for these two
+  methods.
+- Neither SDK author verified their own URL-construction shortcut against a live *resolved* link —
+  `lis-dev`'s own test for that code path (`testPrintDocumentGetLink`) only asserts
+  `result['success'] === true` on an envelope it fabricates locally, never an actual fetch of the
+  constructed URL.
+
+**Decision: ship unchanged for now, downgrade AC-11/AC-12/AC-13 to provisional.** This module's
+live GET-verification at least confirms the constructed URL resolves to *something* with a 2xx
+status — neither contested alternative offers proof of correctness either way, so there is no
+higher-confidence default to switch to without a live API key. **Not resolved — this is the single
+most urgent open item in this feature.** See ADR-0003's amendment log, `spec.md` §8 OQ-1
+(re-sharpened), `contracts/public-api.md` §3.7.
 
 ## Drift checklist (bidirectional)
 
@@ -128,8 +186,10 @@ proceeding).
   print link (ADR-0003) are all present exactly as decided in `sad.md` §4 — no collapsing, no silent
   reshaping.
 - **Flags raised (see "Drift found" above):** cardinality gap (finding 1), batch-capability gap
-  (finding 2) — both resolved via Save-as-OQ with the user's explicit sign-off to proceed on the
-  designed shape.
+  (finding 2) — both originally resolved via Save-as-OQ with the user's explicit sign-off to
+  proceed on the designed shape; **both reopened and resolved for real in the post-ship
+  API-contract re-audit** (2026-09-22) once the new sourcing policy required it. A third finding
+  (print-link mechanism contradiction) surfaced during that same re-audit and remains open.
 
 **Back-feed — coverage cross-check:**
 

@@ -2,6 +2,10 @@
 
 ## internet-document — typed waybill creation, calculation, and printing
 
+**Corrected 2026-09-22 — see the post-ship section below.** `delete` is no longer batch-capable in
+a single call; `ServiceType`/`CargoType` are wider than described just below. This section is kept
+as originally shipped for history — read the correction section for current behavior.
+
 **What:** Consuming developers now get a fully typed `internet-document` module: all 8 documented
 Nova Poshta InternetDocument API methods — `save` (create), `update` (full-replace), `delete`
 (single/batch, per-Ref outcomes), `getDocumentList` (filterable), the two pre-creation calculators
@@ -72,3 +76,49 @@ if (waybill) {
 **Acceptance criteria delivered:** AC-01 … AC-19 — see [spec.md](spec.md) §5 and the review record
 ([review-2026-09-22-08.md](_review/review-2026-09-22-08.md), PASS, eighth pass — all prior rounds'
 findings held on re-verification).
+
+---
+
+## internet-document — post-ship API-contract corrections (2026-09-22)
+
+**What:** A new repo-wide policy (CLAUDE.md "API-contract sourcing policy" — every field must
+trace to Nova Poshta's own docs or ≥2 agreeing independent implementations, quoting the exact
+upstream struct) triggered a re-audit of this module's shipped contract, widening the cross-checked
+source pool from 3 to 5. Three changes result:
+
+1. **`delete` is now single-Ref per call (breaking).** `delete(payload: {Ref: string})` resolves
+   one `DeletedInternetDocumentOutcome`, not an array. A new `deleteBatch(payload: {Documents:
+   string[]})` provides the same batch convenience as a client-side sequential loop, resolving one
+   outcome per Ref. **Why:** 3 of 4 re-fetched cross-checked sources type Nova Poshta's wire
+   `DocumentRefs` field as accepting exactly one value; no source demonstrates a genuine multi-Ref
+   call succeeding. See [ADR-0005](adr/0005-delete-is-single-ref-per-call-with-client-side-batch.md).
+2. **`ServiceType`/`CargoType` widened (additive).** `ServiceType` now carries 6 values (added
+   `WarehousePostomat`, `DoorsPostomat` — confirmed by 2 independent sources); `CargoType` now
+   carries 8 (added `TiresWheels`, `Money`, `SignedDocuments`, `Trays`). `save`/`update`'s
+   discriminated payload still only accepts the original 4 `ServiceType` values as structural
+   variants — Postomat's own required-field shape has only 1 confirming source, not 2, so it isn't
+   modeled yet.
+3. **Print-link mechanism downgraded to provisional (no code change, doc-only).** A fourth
+   cross-checked source builds the print URL differently than this module does, and proves the
+   print methods are also reachable as plain enveloped calls — a path never attempted here.
+   AC-11/AC-12/AC-13 are no longer confirmed happy-path; see
+   [ADR-0003](adr/0003-construct-then-verify-print-links.md)'s amendment log.
+
+**Migration for `delete` callers:**
+
+```ts
+// Before
+await internetDocument.delete({ Documents: ["ref-1", "ref-2"] });
+
+// After
+await internetDocument.deleteBatch({ Documents: ["ref-1", "ref-2"] });
+// or, for a single Ref:
+await internetDocument.delete({ Ref: "ref-1" });
+```
+
+**Operational notes:**
+- No migration, no new config/flags.
+- No released npm version ever shipped the old `delete` signature to end users (package is
+  pre-1.0.0 / unreleased at the time of this correction).
+- The print-link provisional caveat is documentation-only — no behavior change; existing callers
+  see no difference, only a stronger warning before relying on it in production.

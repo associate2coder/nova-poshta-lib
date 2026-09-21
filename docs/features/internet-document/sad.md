@@ -89,7 +89,48 @@ library whose write payload must stay a discriminated union across **two** indep
 
 ## 3. Context and scope
 
-<!-- pending -->
+`internet-document` gives a consuming developer typed access to Nova Poshta's InternetDocument
+domain — creating, pricing, scheduling, updating, deleting, listing, and printing their own waybills —
+so they can register and manage shipments without hardcoding request shapes or guessing response
+shapes. It ships inside the existing `nova-poshta-lib` npm package, alongside the shared core client
+and the already-shipped `common`, `address`, and `counterparty` modules.
+
+<!-- brownfield: read directly (src/client.ts, src/index.ts, src/modules/common/index.ts,
+     src/modules/address/index.ts, src/modules/counterparty/index.ts, src/types/common.ts,
+     src/types/counterparty.ts, src/types/envelope.ts — trivial codebase size, no Explore subagent
+     needed). docs/architecture-map.md (reflects_commit 94201ac) is stale — both address and
+     counterparty have shipped in full since, and the map still says "no code exists yet" — but its
+     target conventions match what's actually on disk: no drift found in the conventions that matter
+     to this feature (module wiring, dual-build, error handling, the `Required<Omit<>>` full-replace
+     idiom, the per-variant discriminated-union idiom `counterparty` ADR-0001 introduced). Both
+     `address`'s and `counterparty`'s own `sad.md` §3/§4 served as the closer, current precedent. -->
+
+**External systems (in / out):**
+
+| Actor or system | Type | Interaction |
+|---|---|---|
+| Consuming developer | Person | Installs `nova-poshta-lib`, calls `internet-document`'s typed methods |
+| Nova Poshta API | System (external) | HTTPS, `apiKey` auth — the sole backing store for a developer's waybills; the JSON envelope for 6 methods, plus a distinct non-JSON print path for `printDocument`/`printMarkings` (§4/§5) |
+
+**C4 Context (L1):**
+
+```mermaid
+C4Context
+    title internet-document — System Context
+
+    Person(dev, "Consuming developer", "Installs nova-poshta-lib, calls its typed methods")
+    System(lib, "nova-poshta-lib", "Typed TypeScript client for the Nova Poshta API")
+    System_Ext(np_api, "Nova Poshta API", "External REST/JSON-RPC-style API — the sole backing store for waybills, plus a print-link sub-service")
+
+    Rel(dev, lib, "imports, calls internet-document's typed methods")
+    Rel(lib, np_api, "HTTPS, apiKey auth — JSON envelope for 6 methods, opaque print path for 2")
+```
+
+*Identical in shape to `common`'s, `address`'s, and `counterparty`'s: the consuming developer talks
+only to `nova-poshta-lib`, and the library itself is the only thing that talks to the external Nova
+Poshta API. No new external system — `internet-document`'s calls land on the same single external
+API, just a different `modelName` (`InternetDocument`), with one wrinkle none of the earlier modules
+had: 2 of its 8 methods (the print methods) don't get a JSON envelope back at all (§4 decision, §5).*
 
 ## 4. Solution strategy
 

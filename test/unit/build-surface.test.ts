@@ -50,6 +50,17 @@ const COUNTERPARTY_METHOD_NAMES = [
   "findCounterparty",
 ];
 
+const INTERNET_DOCUMENT_METHOD_NAMES = [
+  "save",
+  "update",
+  "delete",
+  "getDocumentList",
+  "getDocumentPrice",
+  "getDocumentDeliveryDate",
+  "printDocument",
+  "printMarkings",
+];
+
 function declarationPath(relativePath: string): string {
   return fileURLToPath(new URL(`../../${relativePath.replace(/^\.\//, "")}`, import.meta.url));
 }
@@ -148,6 +159,33 @@ describe("published build surface (AC-07)", () => {
       // Word-boundary match — "update"/"save"/"delete" are common enough identifiers that a
       // loose substring check could false-positive against unrelated declarations.
       expect(interfaceBody, `expected ${relativePath}'s CounterpartyModule to declare ${method}`).toMatch(
+        new RegExp(`\\b${method}\\b`),
+      );
+    }
+  });
+
+  it.each([
+    [ESM_TYPES_PATH, "ESM"],
+    [CJS_TYPES_PATH, "CJS"],
+  ])("%s (%s) declares createInternetDocumentModule and all 8 internet-document identifiers (AC-19)", (relativePath) => {
+    let contents: string;
+    try {
+      contents = readFileSync(declarationPath(relativePath), "utf8");
+    } catch {
+      throw new Error(`${relativePath} is missing — run "npm run build" before this test`);
+    }
+
+    expect(contents).toMatch(/\bcreateInternetDocumentModule\b/);
+
+    // Sliced to the InternetDocumentModule interface body — several of its method names
+    // ("save"/"update"/"delete") are shared with AddressModule/CounterpartyModule, so matching
+    // against the whole file would still pass even if these were deleted from this interface.
+    const interfaceMatch = contents.match(/interface InternetDocumentModule \{([\s\S]*?)\n\}/);
+    expect(interfaceMatch, `expected ${relativePath} to declare an InternetDocumentModule interface`).not.toBeNull();
+    const interfaceBody = interfaceMatch![1];
+
+    for (const method of INTERNET_DOCUMENT_METHOD_NAMES) {
+      expect(interfaceBody, `expected ${relativePath}'s InternetDocumentModule to declare ${method}`).toMatch(
         new RegExp(`\\b${method}\\b`),
       );
     }

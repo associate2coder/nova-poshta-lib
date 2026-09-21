@@ -48,3 +48,16 @@ rejection risk in the print-link body-discard cleanup plus a falsifying test for
 GET-and-discard print verification's blank/error-page detection gap now recorded in ADR-0003/OQ-1
 (T5), and residual ADR-0001→ADR-0004 doc drift in `sad.md`, `api-sync-report.md`, `tasks/_epic.md`,
 and `tasks/t1-...` (T1). See `_review/review-2026-09-21-03.md` for the full findings table.
+
+## Post-re-review follow-ups (`/sdd:review` 2026-09-21, fourth pass)
+
+6 findings resolved via `/sdd:implement` (no new task IDs): a real AC-08 bug where `delete`'s
+per-Ref reason matching used a plain substring search, so a Ref that's a textual prefix of another
+submitted Ref could inherit the wrong reason — fixed with a word-boundary match (T3), a pinning test
+for `delete([])`'s documented behavior (T7), `sad.md`'s delete sequence diagram still showing the
+pre-fix `request()`/`Documents` design (T1/T3), the contract's transport table and out-of-scope
+section never recording `requestEnvelope()`/`apiKey`/`NovaPoshtaSuccessEnvelope` as added public
+surface (T1/T6), a stale `Required<>`-derived `UpdateInternetDocumentPayload` description in the
+contract and T1's task file that contradicted AC-06's shipped behavior (T1), and residual
+ADR-0001→ADR-0004 two-axis language the third round's fix missed in `tasks/_epic.md` and
+`tasks/t1-...` (T1). See `_review/review-2026-09-21-04.md` for the full findings table.

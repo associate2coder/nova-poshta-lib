@@ -83,9 +83,64 @@ export interface SavedInternetDocument {
 }
 
 /** AC-06: full-replace — every field the chosen combination's Save payload declares becomes
- *  mandatory, including BackwardDeliveryData; an omitted BackwardDeliveryData clears any
- *  previously-set cash-on-delivery instruction. */
-export type UpdateInternetDocumentPayload = Required<SaveInternetDocumentPayload> & { Ref: string };
+ *  mandatory here, except BackwardDeliveryData, which stays optional by design: omitting it (or
+ *  passing it as undefined) is how a caller clears a previously-set cash-on-delivery instruction —
+ *  it is never carried forward from a previous version. Hand-written per ServiceType leg, mirroring
+ *  `counterparty` ADR-0001's explicit-variants precedent, rather than a generic `Required<union>`
+ *  wrapper (which would force BackwardDeliveryData mandatory too and make AC-06's "omit to clear"
+ *  case impossible to express). */
+interface UpdateBase {
+  PayerType: PayerType;
+  PaymentMethod: PaymentMethod;
+  DateTime: string;
+  Weight: number;
+  SeatsAmount: number;
+  Description: string;
+  Cost: number;
+  CitySender: string;
+  Sender: string;
+  SenderAddress: string;
+  ContactSender: string;
+  SendersPhone: string;
+  CityRecipient: string;
+  Recipient: string;
+  ContactRecipient: string;
+  RecipientsPhone: string;
+  CargoType: CargoType;
+  BackwardDeliveryData?: BackwardDeliveryData;
+  Ref: string;
+}
+
+export interface UpdateWarehouseToWarehousePayload extends UpdateBase {
+  ServiceType: "WarehouseWarehouse";
+  RecipientAddress: string;
+}
+export interface UpdateWarehouseToDoorsPayload extends UpdateBase {
+  ServiceType: "WarehouseDoors";
+  RecipientCityName: string;
+  RecipientArea: string;
+  RecipientAddressName: string;
+  RecipientHouse: string;
+  RecipientFlat?: string;
+}
+export interface UpdateDoorsToWarehousePayload extends UpdateBase {
+  ServiceType: "DoorsWarehouse";
+  RecipientAddress: string;
+}
+export interface UpdateDoorsToDoorsPayload extends UpdateBase {
+  ServiceType: "DoorsDoors";
+  RecipientCityName: string;
+  RecipientArea: string;
+  RecipientAddressName: string;
+  RecipientHouse: string;
+  RecipientFlat?: string;
+}
+
+export type UpdateInternetDocumentPayload =
+  | UpdateWarehouseToWarehousePayload
+  | UpdateWarehouseToDoorsPayload
+  | UpdateDoorsToWarehousePayload
+  | UpdateDoorsToDoorsPayload;
 
 export interface DeleteInternetDocumentPayload {
   Documents: string[]; // one or more waybill Refs

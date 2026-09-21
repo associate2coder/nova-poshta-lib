@@ -125,3 +125,42 @@ sending Nova Poshta a URL segment it doesn't define. `"fourfold"` actually repea
 test corrected (T7); `PrintLinkPayload.Copies`'s doc comment, `contracts/public-api.md` §3.7,
 `ADR-0003`'s amendment log, and `spec.md` §8 OQ-1 all updated to match (T1). See
 `_review/review-2026-09-22-08.md` for the full findings table.
+
+## Post-ship API-contract re-audit (2026-09-22, triggered by CLAUDE.md's new sourcing policy)
+
+PR #6 merged this feature to `main` before this pass. A new repo-wide policy — every request field
+and wire method must trace to Nova Poshta's own docs or ≥2 agreeing independent implementations,
+quoting the exact upstream struct — triggered re-auditing this module's shipped contract against a
+widened pool of 5 cross-checked sources (was 3). Three findings, shipped in a follow-up PR rather
+than amending the merged one:
+
+1. **`ServiceType`/`CargoType` cardinality — expanded.** A second independent source
+   (`shopanaio/carrier-api`) corroborated `platx/go-nova-poshta`'s 6-value `ServiceType` list
+   (Postomat pair); `CargoType` widened to its full 8-value list (uncontradicted single source,
+   plus ADR-0004 already established no structural leg shape depends on it). `save`/`update`'s
+   discriminated union still only models the original 4 `ServiceType` values — Postomat's
+   required-field shape has only 1 confirming source.
+2. **`delete` batch capability — narrowed (breaking).** Re-fetching all 4 original sources' actual
+   code found 3 of 4 type the wire field as single-Ref-only; no source demonstrates a genuine
+   multi-Ref call. `delete` now takes exactly one `Ref` and resolves one outcome; a new
+   `deleteBatch` method replaces the previous single-call batch shape with a client-side sequential
+   loop (T3, T1 for docs). See ADR-0005 (supersedes ADR-0002's batch-call premise, keeps its
+   per-Ref outcome shape).
+3. **Print-link mechanism — contested, downgraded to provisional (no code change).** Widening the
+   pool to 5 surfaced a fourth source building the same URL differently (comma-joined segment,
+   lowercase `type`, no `Copies`) and proving these methods are also reachable as plain enveloped
+   calls — a path `ADR-0003`'s design assumed was closed. AC-11/AC-12/AC-13 downgraded from
+   confirmed happy-path to provisional; shipped behavior unchanged pending a live API key or a
+   reachable primary source (T1 for docs, ADR-0003 amendment log).
+
+Also fixed in this pass: the ship changelog's usage example called `createClient({apiKey: "..."})`
+— `createClient` actually takes a plain string (`src/client.ts:44`), matching the README's
+already-correct example, not the changeset's wrong one.
+
+Test suite simplified as a side effect of finding 2: the regex-based per-Ref message-attribution
+logic ADR-0002 needed (to match a warning/error to the right Ref when several were in one response)
+is no longer necessary — a single-Ref response's warnings/errors can only concern that one Ref.
+193 tests → 191 (5 batch-attribution tests removed, 3 new `delete`/`deleteBatch` tests added, net
+-2; all consolidated under new `delete`/`deleteBatch` describe blocks in
+`test/unit/modules/internet-document.test.ts`). Full gate re-run clean: `tsc --noEmit`, `npm test`
+(191 passed, 2 skipped), `npm run lint`, `npm run build`.

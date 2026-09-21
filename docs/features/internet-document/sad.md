@@ -399,7 +399,47 @@ JSON-enveloped methods — no new ADR needed for either here).
 
 ## 10. Quality requirements
 
-<!-- pending -->
+Each top-3 goal from §1 expanded into a full scenario:
+
+**QG-1. Type-safety**
+- **When:** any of the 8 in-scope InternetDocument methods is exported from `internet-document`, or a
+  consuming developer builds a `save`/`update` payload for a specific delivery-method/cargo-type
+  combination.
+- **Then:** 100% of in-scope methods have zero `any` in their public signatures, and 100% of
+  `save`/`update` calls fail to compile if any field the chosen combination requires is omitted, or if
+  the payload mixes fields belonging to a different combination (`spec.md` §6 NFR rows "Type-safety
+  coverage" and "Save/update discriminant guard", AC-02, ADR-0001).
+- **How verify:** static check in CI, plus a type-level test asserting the discriminant guard
+  (`spec.md` §6, rows 1 and 3).
+
+**QG-2. Error-contract correctness**
+- **When:** any InternetDocument call — including a batch `delete` — is declined, malformed, network-
+  failed, or (for `delete`) partially rejected within an otherwise-successful call.
+- **Then:** 100% of in-scope methods throw `NovaPoshtaApiError` on a decline, malformed response, or
+  network failure; 0% throw an unhandled error type; 100% of `delete` calls, single-Ref or batch,
+  return a per-Ref outcome array — never a collapsed boolean, and never an error for a partial
+  rejection (`spec.md` §6 NFR rows "Error-contract coverage" and "Batch-delete result fidelity", AC-07,
+  AC-08, AC-14, AC-16, ADR-0002).
+- **How verify:** unit test suite `test/unit/modules/internet-document` (`spec.md` §6, rows 2 and 4).
+
+**QG-3. Print-link safety**
+- **When:** a consuming developer calls `printDocument` or `printMarkings`, or receives the URL either
+  returns.
+- **Then:** a failure to obtain the link (an invalid Ref, an unmaterialized document, a network
+  failure) throws `NovaPoshtaApiError` — the same standard error every other method uses, verified by
+  the ADR-0003 construct-then-verify check — never a link that resolves to a blank or error page; and
+  the returned link's credential-bearing nature (it carries the same access as the caller's own API
+  key) is documented explicitly in the public API surface, not left for a developer to discover
+  (AC-11, AC-12, AC-13, ADR-0003).
+- **How verify:** unit test suite `test/unit/modules/internet-document` asserting the error path with
+  `fetch` mocked to fail (`spec.md` §6 row "Error-contract coverage", which the print methods share);
+  a documentation check (doc comment / README section covering AC-13) reviewed at `sdd:ship`.
+
+Two further `spec.md` §6 NFR rows apply library-wide, not to one specific quality goal above, and are
+still binding: **Library-added overhead per call** (median ≤5ms across all 8 methods, `fetch` stubbed
+to near-zero latency, benchmarked in `test/unit/modules/internet-document`) and **Method-surface /
+published-build completeness** (all 8 methods present, typed, and importable from both the built ESM
+and CJS output — AC-19, verified by a post-build CI step).
 
 ## 11. Risks and technical debt
 

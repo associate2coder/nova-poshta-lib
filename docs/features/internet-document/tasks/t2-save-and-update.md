@@ -15,7 +15,8 @@ status: "todo"
 ## Why
 
 Derives from [contracts/public-api.md §3.1–3.2](../contracts/public-api.md), [sad.md §6 Flow
-1](../sad.md), and [ADR-0001](../adr/0001-compose-service-type-and-cargo-type-as-two-intersected-type-sets.md).
+1](../sad.md), and [ADR-0001](../adr/0001-compose-service-type-and-cargo-type-as-two-intersected-type-sets.md)
+(superseded by [ADR-0004](../adr/0004-cargotype-is-a-plain-discriminant-field-not-a-structural-variant-axis.md)).
 The write path every later `scan-sheet`/`additional-service` waybill Ref traces back to (`spec.md`
 US-11).
 
@@ -36,8 +37,9 @@ In `src/modules/internet-document/index.ts`:
 - [ ] `save` has a mocked-`fetch` unit test asserting the happy path (resolves the saved waybill incl.
       `Ref`/`IntDocNumber`) and an empty-on-success test (resolves `undefined`, does not throw).
 - [ ] `update` has the same two tests.
-- [ ] A compile-time test (e.g. a `// @ts-expect-error` fixture) proves a payload mixing fields from
-      two different `ServiceType`/`CargoType` combinations fails to compile (AC-02).
+- [ ] A compile-time test (e.g. a `// @ts-expect-error` fixture) proves a payload mixing `ServiceType`
+      location fields from a different leg fails to compile (AC-02; ADR-0004: `CargoType` is not part
+      of this guard).
 - [ ] lint + `tsc --noEmit` clean.
 
 ## Notes

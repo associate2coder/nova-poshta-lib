@@ -36,3 +36,15 @@ when both warnings and errors are present (T3), an unconfirmed `HEAD`-verb assum
 verification — reverted to `GET` (T5), the README's remaining unguarded `counterparty.save()` line (T9),
 and a missing `NovaPoshtaSuccessEnvelope` export (T6). See `_review/review-2026-09-21-02.md` for the
 full findings table.
+
+## Post-re-review follow-ups (`/sdd:review` 2026-09-21, third pass)
+
+8 findings resolved via `/sdd:implement` (no new task IDs): a likely production-breaking `delete()`
+wire-field-name bug — sent `Documents`, the real field is `DocumentRefs` per the cross-checked SDKs
+(T3), a stale delete-contract doc describing the pre-N3 joined-reason behavior (T3), a second
+undocumented shared-client change (`NovaPoshtaClient.apiKey`, added for the print path) now recorded in
+`spec.md`/ADR-0003 (T5), residual `sad.md` contradictions from N1/N6's fixes (T1/T3), an unhandled-
+rejection risk in the print-link body-discard cleanup plus a falsifying test for it (T5/T7), the
+GET-and-discard print verification's blank/error-page detection gap now recorded in ADR-0003/OQ-1
+(T5), and residual ADR-0001→ADR-0004 doc drift in `sad.md`, `api-sync-report.md`, `tasks/_epic.md`,
+and `tasks/t1-...` (T1). See `_review/review-2026-09-21-03.md` for the full findings table.

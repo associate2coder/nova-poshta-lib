@@ -126,3 +126,42 @@ describe("internet-document module — save/update (T2, AC-01/AC-02/AC-05/AC-06)
     expect(true).toBe(true);
   });
 });
+
+describe("internet-document module — delete (T3, AC-07/AC-08)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("a single-Ref delete returns a one-element outcome array confirming the Ref was removed (AC-07)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([{ Ref: "waybill-1" }]));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(internetDocument.delete({ Documents: ["waybill-1"] })).resolves.toEqual([
+      { Ref: "waybill-1", Removed: true },
+    ]);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("InternetDocument");
+    expect(sentBody.calledMethod).toBe("delete");
+  });
+
+  it("a batch delete returns one outcome entry per submitted Ref, all removed", async () => {
+    mockFetchOnce(() => successEnvelope([{ Ref: "waybill-1" }, { Ref: "waybill-2" }]));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(internetDocument.delete({ Documents: ["waybill-1", "waybill-2"] })).resolves.toEqual([
+      { Ref: "waybill-1", Removed: true },
+      { Ref: "waybill-2", Removed: true },
+    ]);
+  });
+
+  it("a batch delete reconciles a Ref missing from Nova Poshta's confirmed-removed set as Removed:false with a Reason, never throwing (AC-08)", async () => {
+    mockFetchOnce(() => successEnvelope([{ Ref: "waybill-1" }]));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(internetDocument.delete({ Documents: ["waybill-1", "waybill-2"] })).resolves.toEqual([
+      { Ref: "waybill-1", Removed: true },
+      { Ref: "waybill-2", Removed: false, Reason: expect.any(String) },
+    ]);
+  });
+});

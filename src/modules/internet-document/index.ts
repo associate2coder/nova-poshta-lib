@@ -56,9 +56,18 @@ export function createInternetDocumentModule(client: NovaPoshtaClient): Internet
         "update",
         payload as unknown as Record<string, unknown>,
       ),
-    delete: (payload: DeleteInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome[]> => {
-      void payload;
-      throw new Error("not implemented");
+    delete: async (payload: DeleteInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome[]> => {
+      const removed = await client.request<{ Ref: string }>(
+        "InternetDocument",
+        "delete",
+        payload as unknown as Record<string, unknown>,
+      );
+      const removedRefs = new Set(removed.map((item) => item.Ref));
+      return payload.Documents.map((ref) =>
+        removedRefs.has(ref)
+          ? { Ref: ref, Removed: true }
+          : { Ref: ref, Removed: false, Reason: "Not confirmed removed by Nova Poshta" },
+      );
     },
     getDocumentList: (filters?: GetDocumentListFilters): Promise<WaybillListItem[]> => {
       void filters;

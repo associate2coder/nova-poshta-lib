@@ -11,11 +11,17 @@ npm install nova-poshta-lib
 ## Usage
 
 ```ts
-import { createClient, createAddressModule, createCounterpartyModule } from "nova-poshta-lib";
+import {
+  createClient,
+  createAddressModule,
+  createCounterpartyModule,
+  createInternetDocumentModule,
+} from "nova-poshta-lib";
 
 const client = createClient(process.env.NOVA_POSHTA_API_KEY!);
 const address = createAddressModule(client);
 const counterparty = createCounterpartyModule(client);
+const internetDocument = createInternetDocumentModule(client);
 
 const cities = await address.getCities({ FindByString: "Київ" });
 
@@ -26,10 +32,47 @@ const recipient = await counterparty.save({
   LastName: "Франко",
   Phone: "380501234567",
 });
+
+// save() can resolve undefined, or a record with no Ref, when Nova Poshta reports success with no
+// record (AC-05) — always check before using the result, rather than asserting it's present.
+if (!recipient?.Ref) {
+  throw new Error("Nova Poshta reported success but returned no counterparty record");
+}
+
+const waybill = await internetDocument.save({
+  ServiceType: "WarehouseWarehouse",
+  CargoType: "Parcel",
+  PayerType: "Sender",
+  PaymentMethod: "Cash",
+  DateTime: "21.09.2026",
+  Weight: 1,
+  SeatsAmount: 1,
+  Description: "Books",
+  Cost: 500,
+  CitySender: "<city ref>",
+  Sender: "<sender counterparty ref>",
+  SenderAddress: "<sender warehouse ref>",
+  ContactSender: "<contact person ref>",
+  SendersPhone: "380501234567",
+  CityRecipient: "<city ref>",
+  Recipient: recipient.Ref,
+  ContactRecipient: "<recipient contact person ref>",
+  RecipientsPhone: "380501234567",
+  RecipientAddress: "<recipient warehouse ref>",
+});
+
+// save() can resolve undefined when Nova Poshta reports success with no record (AC-05) — always
+// check before using the result, rather than asserting it's present.
+if (waybill) {
+  // printDocument/printMarkings return a print-ready link that embeds your own API key —
+  // treat it exactly like the key itself (never log, email, or render it on a public page).
+  // This library performs no redaction, scoping, or expiry of that link.
+  const printLink = await internetDocument.printDocument({ Documents: [waybill.Ref] });
+}
 ```
 
-> `common`, `address`, and `counterparty` are the domain modules shipped so far — more
-> (internet-document, …) are added incrementally under `src/modules/`.
+> `common`, `address`, `counterparty`, and `internet-document` are the domain modules shipped so
+> far — more are added incrementally under `src/modules/`.
 
 ## Development
 

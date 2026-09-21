@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createAddressModule, createClient, createCounterpartyModule } from "../../src/index.js";
+import {
+  createAddressModule,
+  createClient,
+  createCounterpartyModule,
+  createInternetDocumentModule,
+} from "../../src/index.js";
 
 describe("package entry point", () => {
   it("imports and exports a client factory without throwing", () => {
@@ -15,5 +20,10 @@ describe("package entry point", () => {
   it("imports and exports createCounterpartyModule, type-checked against a real client (T7, AC-17)", () => {
     expect(typeof createCounterpartyModule).toBe("function");
     expect(() => createCounterpartyModule(createClient("test-api-key"))).not.toThrow();
+  });
+
+  it("imports and exports createInternetDocumentModule, type-checked against a real client (T6, AC-17/AC-18)", () => {
+    expect(typeof createInternetDocumentModule).toBe("function");
+    expect(() => createInternetDocumentModule(createClient("test-api-key"))).not.toThrow();
   });
 });

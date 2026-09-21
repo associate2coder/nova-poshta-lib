@@ -142,13 +142,36 @@ describe("internet-document module — delete (T3, AC-07/AC-08)", () => {
     ]);
   });
 
-  it("a batch delete reconciles a Ref missing from Nova Poshta's confirmed-removed set as Removed:false with a Reason, never throwing (AC-08)", async () => {
+  it("a batch delete reconciles a Ref missing from Nova Poshta's confirmed-removed set as Removed:false, with a fallback Reason when Nova Poshta gives none (AC-08)", async () => {
     mockFetchOnce(() => successEnvelope([{ Ref: "waybill-1" }]));
     const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
 
     await expect(internetDocument.delete({ Documents: ["waybill-1", "waybill-2"] })).resolves.toEqual([
       { Ref: "waybill-1", Removed: true },
-      { Ref: "waybill-2", Removed: false, Reason: expect.any(String) },
+      { Ref: "waybill-2", Removed: false, Reason: "Not confirmed removed by Nova Poshta" },
+    ]);
+  });
+
+  it("a batch delete's rejected Reason is Nova Poshta's own success-path warning text, when present (AC-08)", async () => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          data: [{ Ref: "waybill-1" }],
+          errors: [],
+          warnings: ["waybill-2: Ref does not belong to caller's account"],
+        }),
+    }));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(internetDocument.delete({ Documents: ["waybill-1", "waybill-2"] })).resolves.toEqual([
+      { Ref: "waybill-1", Removed: true },
+      {
+        Ref: "waybill-2",
+        Removed: false,
+        Reason: "waybill-2: Ref does not belong to caller's account",
+      },
     ]);
   });
 });

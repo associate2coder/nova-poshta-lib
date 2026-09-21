@@ -109,16 +109,23 @@ export function createInternetDocumentModule(client: NovaPoshtaClient): Internet
         payload as unknown as Record<string, unknown>,
       ),
     delete: async (payload: DeleteInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome[]> => {
-      const removed = await client.request<{ Ref: string }>(
+      const envelope = await client.requestEnvelope<{ Ref: string }>(
         "InternetDocument",
         "delete",
         payload as unknown as Record<string, unknown>,
       );
-      const removedRefs = new Set(removed.map((item) => item.Ref));
+      const removedRefs = new Set(envelope.data.map((item) => item.Ref));
+      // AC-08: Nova Poshta's own reason, when it gives one. The confirmed-removed response shape
+      // carries only Ref per item (no per-item outcome field — see ADR-0002), so a rejected Ref's
+      // explanation can only come from the envelope's success-path warnings/errors, which aren't
+      // themselves keyed by Ref — every rejected Ref in the same batch shares the same joined text,
+      // a documented best-effort attribution (spec.md §8 OQ-5), not a per-Ref-precise one.
+      const novaPoshtaReason =
+        envelope.warnings.join("; ") || envelope.errors.join("; ") || undefined;
       return payload.Documents.map((ref) =>
         removedRefs.has(ref)
           ? { Ref: ref, Removed: true }
-          : { Ref: ref, Removed: false, Reason: "Not confirmed removed by Nova Poshta" },
+          : { Ref: ref, Removed: false, Reason: novaPoshtaReason ?? "Not confirmed removed by Nova Poshta" },
       );
     },
     getDocumentList: (filters?: GetDocumentListFilters) =>

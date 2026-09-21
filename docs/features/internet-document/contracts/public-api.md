@@ -208,8 +208,11 @@ export interface DeleteInternetDocumentPayload {
 /** ADR-0002: one entry per submitted Ref, reconciled by this module — never Nova Poshta's raw
  *  response shape as-is (which, per platx/go-nova-poshta's DeleteItem, carries only `Ref` — no
  *  `Removed`/`Reason` field of its own; this module infers Removed by whether the Ref appears in
- *  Nova Poshta's confirmed-removed list, and sets Reason only when Nova Poshta's decline includes
- *  one for that Ref). */
+ *  Nova Poshta's confirmed-removed list). Reason is read from the envelope's success-path
+ *  `warnings`/`errors` (via `client.requestEnvelope()`, review 2026-09-21 finding 4) when Nova
+ *  Poshta provides one — best-effort: the envelope's warnings/errors aren't themselves keyed by
+ *  Ref, so every rejected Ref in one batch shares the same joined text, falling back to a
+ *  library-generated message when Nova Poshta gives no warnings/errors at all (spec.md §8 OQ-5). */
 export interface DeletedInternetDocumentOutcome {
   Ref: string;
   Removed: boolean;

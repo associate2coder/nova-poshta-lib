@@ -88,6 +88,30 @@ describe("core client — declined response missing optional envelope fields (AC
   });
 });
 
+describe("core client — requestEnvelope() (review 2026-09-21 finding 4)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("resolves data plus the success-path warnings/errors, unlike request() which only resolves data", async () => {
+    mockFetchOnce({ success: true, data: [{ Ref: "1" }], errors: ["minor issue"], warnings: ["a warning"] });
+    const client = createClient("test-api-key");
+
+    await expect(client.requestEnvelope("Common", "getPaymentForms")).resolves.toEqual({
+      data: [{ Ref: "1" }],
+      errors: ["minor issue"],
+      warnings: ["a warning"],
+    });
+  });
+
+  it("throws NovaPoshtaApiError under the same conditions as request() (declined response)", async () => {
+    mockFetchOnce({ success: false, data: [], errors: ["Invalid Ref"], warnings: [] });
+    const client = createClient("test-api-key");
+
+    await expect(client.requestEnvelope("Common", "getPaymentForms")).rejects.toThrow(NovaPoshtaApiError);
+  });
+});
+
 describe("core client — apiKey is not enumerable (review 2026-09-21 finding 3)", () => {
   it("does not leak the raw apiKey through JSON.stringify or Object.keys, while remaining directly readable", () => {
     const client = createClient("my-secret-key");

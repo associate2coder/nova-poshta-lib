@@ -70,8 +70,10 @@ cross-checked source beyond `PayerType`/`RedeliveryString`/`Amount` naming conve
 `GetDocumentPriceReq.RedeliveryCalculate` — flagged `medium` in `api-sync-report.md`.*
 
 *Package-root re-export names differ from the module-local names above: `common` already owns the
-bare `ServiceType`/`CargoType`/`PayerType` names at the package root (its own fixed literal sets), so
-`src/index.ts` re-exports this module's versions aliased as `InternetDocumentServiceType`/
+bare `ServiceType`/`CargoType`/`PayerType` names at the package root — but as its own runtime
+reference-list record shapes (`{ Ref?: string; Description?: string }`, `src/types/common.ts`), not
+literal unions — a different kind of type entirely, which is why this module's versions are aliased
+rather than merged: `src/index.ts` re-exports them as `InternetDocumentServiceType`/
 `InternetDocumentCargoType`/`InternetDocumentPayerType`. `PaymentMethod` and `BackwardDeliveryData`
 are unaliased — `common` has no colliding export for either.*
 
@@ -185,10 +187,13 @@ error (AC-05, `address` ADR-0001 reused unchanged). Response fields confirmed fr
 ### 3.2 `update`
 
 ```ts
-/** AC-06: full-replace — every field the chosen combination's Save payload declares becomes
- *  mandatory here, EXCEPT BackwardDeliveryData, which stays optional by design: omitting it (or
- *  passing it as undefined) is how a caller clears a previously-set cash-on-delivery instruction
- *  (§1 decision override) — it is never carried forward from a previous version. **Correction
+/** AC-06: full-replace — every field the chosen ServiceType leg's Save payload declares becomes
+ *  mandatory here, EXCEPT the fields the Save payload itself already declares optional
+ *  (BackwardDeliveryData, and — for a Doors-ending leg — SenderFlat/RecipientFlat): each of these
+ *  stays optional by design, and omitting it (or passing it as undefined) clears it — it is never
+ *  carried forward from a previous version. BackwardDeliveryData is AC-06's headline case (§1
+ *  decision override), but the same clearing behavior applies to any other field the Save payload
+ *  itself leaves optional. **Correction
  *  (review remediation, fourth pass, 2026-09-21):** hand-written per ServiceType leg (mirroring
  *  `counterparty` ADR-0001's explicit-variants precedent), NOT a generic `Required<SaveInternetDocumentPayload>`
  *  wrapper — `Required<>` would force BackwardDeliveryData mandatory too, making AC-06's "omit to
@@ -308,7 +313,9 @@ export interface DocumentPriceEstimate {
 *Fields confirmed from `platx/go-nova-poshta`'s `GetDocumentPriceReq`/`GetDocumentPriceItem` (re-
 fetched, `high` confidence) — a subset shown; `RedeliveryCalculate`/`CargoDetails`/`PackRef` etc. are
 optional, not independently meaningful to type here. No client-side recalculation, no link to a later
-`save` call (AC-03, `spec.md` §3 non-goal).*
+`save` call (AC-03, `spec.md` §3 non-goal). Unlike `save`/`update`'s AC-05 `undefined`-on-empty, a
+success response with empty `data` throws `NovaPoshtaApiError` — this calculator has no meaningful
+"success, no result" outcome (see §6's error contract).*
 
 ### 3.6 `getDocumentDeliveryDate`
 
@@ -334,7 +341,7 @@ export interface DocumentDeliveryDateEstimate {
 
 *Fields confirmed from `platx/go-nova-poshta`'s `GetDocumentDeliveryDateReq`/
 `GetDocumentDeliveryDateItem` (re-fetched, `high` confidence). Same no-linkage behavior as
-`getDocumentPrice` (AC-04).*
+`getDocumentPrice` (AC-04), and the same empty-data-throws behavior — see §6.*
 
 ### 3.7 `printDocument` / `printMarkings`
 
@@ -413,9 +420,10 @@ See `spec.md` §3 non-goal's Amendments 1 & 2, ADR-0002's Amendment, and ADR-000
 | Declined — bad/expired key, or a `Ref` outside the caller's scope | AC-15 | throws `NovaPoshtaApiError`, Nova Poshta's message passed through |
 | Declined — any other reason (invalid `Ref`, missing required field, business-rule rejection) or malformed response shape | AC-14 | throws `NovaPoshtaApiError`, Nova Poshta's message passed through |
 | `save`/`update` success, `data` is an empty array | AC-05 | resolves `undefined` — **not** an error |
+| `getDocumentPrice`/`getDocumentDeliveryDate` success, `data` is an empty array | AC-03, AC-04 | throws `NovaPoshtaApiError` — unlike `save`/`update`'s AC-05 `undefined`, neither calculator has a meaningful "success, no result" outcome to return |
 | `delete` success, full or partial | AC-07, AC-08 | resolves the per-Ref outcome array (ADR-0002) — never throws for a partial rejection |
 | `printDocument`/`printMarkings` verification fails (invalid Ref, unmaterialized document, network failure) | AC-11, AC-12, AC-16 | throws `NovaPoshtaApiError` |
-| Any read/calculate/write success, `data` is array-shaped | AC-01, AC-03, AC-04, AC-09, AC-10 | resolves the typed result |
+| Any other read/calculate/write success, `data` is array-shaped (a non-empty result for `getDocumentPrice`/`getDocumentDeliveryDate`; an empty `getDocumentList` page is a valid "no results" outcome, not an error) | AC-01, AC-03, AC-04, AC-09, AC-10 | resolves the typed result |
 
 No `NovaPoshtaApiError` subclassing (project convention, `sad.md` §2). AC-14 and AC-15 share one code
 path — the library performs no inspection of `errorCodes[]` to tell them apart.

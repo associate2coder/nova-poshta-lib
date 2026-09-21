@@ -390,6 +390,10 @@ sequenceDiagram
         NP-->>Client: success:false, error (or success:true with data that doesn't match the documented shape)
         Client-->>IDoc: throws NovaPoshtaApiError (Nova Poshta's message passed through)
         IDoc-->>Dev: propagates NovaPoshtaApiError
+    else getDocumentPrice/getDocumentDeliveryDate success but data is empty (AC-03 / AC-04)
+        NP-->>Client: success:true, data: []
+        Client-->>IDoc: typed [] (array-shape check passes — empty is still array-shaped)
+        IDoc-->>Dev: throws NovaPoshtaApiError — unlike save/update's AC-05 undefined, neither calculator has a meaningful "success, no result" outcome
     else happy path — no filter supplied (AC-03 / AC-04 / AC-09)
         NP-->>Client: success:true, data: [result]
         Client-->>IDoc: typed [result] (array-shape check passes)
@@ -408,8 +412,11 @@ this module whose shape has no equivalent in `address`/`counterparty`. Flow 3 co
 `printMarkings` (AC-11, AC-12, AC-13, ADR-0003) — the only flow in this entire library that never
 touches the shared core client. Flow 4 covers `getDocumentList`/`getDocumentPrice`/
 `getDocumentDeliveryDate` (AC-03, AC-04, AC-09, AC-10) — the same request/typed-response shape as
-Flow 1's happy path, but a read/calculation instead of a write, so it carries no empty-on-success
-branch of its own (AC-05 is write-only). AC-14/AC-15/AC-16 recur here because every in-scope method,
+Flow 1's happy path, but a read/calculation instead of a write. `getDocumentList`'s own empty result is
+simply an empty array — a valid, meaningful "no waybills match" page, not an error. `getDocumentPrice`/
+`getDocumentDeliveryDate` diverge from AC-05's write-only "resolve `undefined`" convention: an
+empty-`data` success throws `NovaPoshtaApiError` instead, since neither calculator has a meaningful
+"success, no result" outcome to return. AC-14/AC-15/AC-16 recur here because every in-scope method,
 not just writes, must raise the same standard error on decline, auth denial, or network failure
 (US-10). AC-17/AC-18 (the cross-module Ref-authority and no-local-validation guarantees) and AC-19
 (published-build type-surface, a CI-time check) stay non-runtime — they describe a guarantee about
@@ -462,12 +469,12 @@ Each top-3 goal from §1 expanded into a full scenario:
 
 **QG-1. Type-safety**
 - **When:** any of the 8 in-scope InternetDocument methods is exported from `internet-document`, or a
-  consuming developer builds a `save`/`update` payload for a specific delivery-method/cargo-type
-  combination.
+  consuming developer builds a `save`/`update` payload for a specific `ServiceType` leg.
 - **Then:** 100% of in-scope methods have zero `any` in their public signatures, and 100% of
-  `save`/`update` calls fail to compile if any field the chosen combination requires is omitted, or if
-  the payload mixes fields belonging to a different combination (`spec.md` §6 NFR rows "Type-safety
-  coverage" and "Save/update discriminant guard", AC-02, ADR-0001).
+  `save`/`update` calls fail to compile if any field the chosen `ServiceType` leg requires is omitted,
+  or if the payload mixes location fields belonging to a different leg (`spec.md` §6 NFR rows
+  "Type-safety coverage" and "Save/update discriminant guard", AC-02, ADR-0001 as narrowed by
+  ADR-0004).
 - **How verify:** static check in CI, plus a type-level test asserting the discriminant guard
   (`spec.md` §6, rows 1 and 3).
 

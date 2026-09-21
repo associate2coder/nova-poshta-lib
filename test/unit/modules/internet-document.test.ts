@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createClient } from "../../../src/index.js";
+import { createClient, NovaPoshtaApiError } from "../../../src/index.js";
 import { createInternetDocumentModule } from "../../../src/modules/internet-document/index.js";
 import type { SaveInternetDocumentPayload, UpdateInternetDocumentPayload } from "../../../src/types/internet-document.js";
 
@@ -247,5 +247,70 @@ describe("internet-document module — getDocumentList/getDocumentPrice/getDocum
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(sentBody.modelName).toBe("InternetDocument");
     expect(sentBody.calledMethod).toBe("getDocumentDeliveryDate");
+  });
+});
+
+describe("internet-document module — printDocument/printMarkings (T5, AC-11/AC-12/AC-13)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("printDocument returns a single verified URL string covering all requested Refs, never through the JSON-envelope path (AC-11)", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      void url;
+      return { ok: true, status: 200 };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    const link = await internetDocument.printDocument({ Documents: ["waybill-1", "waybill-2"] });
+
+    expect(typeof link).toBe("string");
+    expect(link).toContain("waybill-1");
+    expect(link).toContain("waybill-2");
+    expect(link).toContain("test-api-key");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]![0]).toBe(link);
+  });
+
+  it("printMarkings returns a single verified URL string for the label, same contract as printDocument (AC-12)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, status: 200 })),
+    );
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    const link = await internetDocument.printMarkings({ Documents: ["waybill-1"] });
+
+    expect(link).toContain("waybill-1");
+  });
+
+  it("the returned link is the constructed URL unmodified — no redaction of the embedded apiKey (AC-13)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, status: 200 })),
+    );
+    const internetDocument = createInternetDocumentModule(createClient("my-secret-key"));
+
+    const link = await internetDocument.printDocument({ Documents: ["waybill-1"] });
+
+    expect(link).toContain("my-secret-key");
+  });
+
+  it("printDocument throws NovaPoshtaApiError when the verification check fails (invalid Ref / unmaterialized document) (AC-11)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 404 })),
+    );
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(internetDocument.printDocument({ Documents: ["waybill-1"] })).rejects.toThrow(NovaPoshtaApiError);
+  });
+
+  it("printMarkings throws NovaPoshtaApiError when the verification fetch itself fails (network failure) (AC-16)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(internetDocument.printMarkings({ Documents: ["waybill-1"] })).rejects.toThrow(NovaPoshtaApiError);
   });
 });

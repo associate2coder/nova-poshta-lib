@@ -56,6 +56,42 @@ async function firstOrThrow<T>(
   return first;
 }
 
+const PRINT_BASE_URL = "https://my.novaposhta.ua/orders";
+
+/** ADR-0003: builds the print URL per Nova Poshta's documented pattern (community-SDK cross-check,
+ *  spec.md §1/§8 OQ-1) — embeds every submitted Ref plus the caller's own apiKey — then issues one
+ *  live verification check against that exact URL, never routed through client.request()'s envelope
+ *  unwrap. Only returns the URL if that check succeeds; otherwise raises the standard error. */
+async function buildAndVerifyPrintLink(
+  client: NovaPoshtaClient,
+  kind: "printDocument" | "printMarkings",
+  payload: PrintLinkPayload,
+): Promise<string> {
+  if (payload.Documents.length === 0) {
+    throw new NovaPoshtaApiError(`Nova Poshta ${kind} requires at least one waybill Ref`);
+  }
+
+  const refsPath = payload.Documents.map((ref) => `orders[]/${encodeURIComponent(ref)}`).join("/");
+  const typeSegment = payload.Type ? `/type/${payload.Type}` : "";
+  const copiesSegment = payload.Copies ? `/copies/${payload.Copies}` : "";
+  const url = `${PRINT_BASE_URL}/${kind}/${refsPath}${typeSegment}${copiesSegment}/apiKey/${client.apiKey}`;
+
+  let response: { ok: boolean; status?: number };
+  try {
+    response = await fetch(url);
+  } catch (cause) {
+    throw new NovaPoshtaApiError(
+      `Nova Poshta print-link verification for ${kind} failed: ${(cause as Error).message}`,
+    );
+  }
+
+  if (!response.ok) {
+    throw new NovaPoshtaApiError(`Nova Poshta print-link verification for ${kind} failed with status ${response.status}`);
+  }
+
+  return url;
+}
+
 export function createInternetDocumentModule(client: NovaPoshtaClient): InternetDocumentModule {
   const module: InternetDocumentModule = {
     save: (payload: SaveInternetDocumentPayload) =>
@@ -105,14 +141,8 @@ export function createInternetDocumentModule(client: NovaPoshtaClient): Internet
         "getDocumentDeliveryDate",
         payload as unknown as Record<string, unknown>,
       ),
-    printDocument: (payload: PrintLinkPayload): Promise<string> => {
-      void payload;
-      throw new Error("not implemented");
-    },
-    printMarkings: (payload: PrintLinkPayload): Promise<string> => {
-      void payload;
-      throw new Error("not implemented");
-    },
+    printDocument: (payload: PrintLinkPayload) => buildAndVerifyPrintLink(client, "printDocument", payload),
+    printMarkings: (payload: PrintLinkPayload) => buildAndVerifyPrintLink(client, "printMarkings", payload),
   };
   return module;
 }

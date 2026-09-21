@@ -17,11 +17,16 @@ export class NovaPoshtaApiError extends Error {
 }
 
 export interface NovaPoshtaClient {
+  /** The caller's own Nova Poshta API key. Exposed read-only for the rare code path that must embed
+   *  it outside the JSON envelope (e.g. `internet-document`'s print-link construct-then-verify helper,
+   *  ADR-0003) — every other module reaches Nova Poshta exclusively through `request()`. */
+  readonly apiKey: string;
   request<T>(modelName: string, calledMethod: string, methodProperties?: Record<string, unknown>): Promise<T[]>;
 }
 
 export function createClient(apiKey: string): NovaPoshtaClient {
   return {
+    apiKey,
     async request<T>(
       modelName: string,
       calledMethod: string,

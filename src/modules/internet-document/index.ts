@@ -123,14 +123,17 @@ export function createInternetDocumentModule(client: NovaPoshtaClient): Internet
       // AC-08: Nova Poshta's own reason, when it gives one. The confirmed-removed response shape
       // carries only Ref per item (no per-item outcome field — see ADR-0002), so a rejected Ref's
       // explanation can only come from the envelope's success-path warnings/errors, which aren't
-      // themselves keyed by Ref — every rejected Ref in the same batch shares the same joined text,
-      // a documented best-effort attribution (spec.md §8 OQ-5), not a per-Ref-precise one.
-      const novaPoshtaReason =
-        envelope.warnings.join("; ") || envelope.errors.join("; ") || undefined;
+      // themselves keyed by Ref. Per rejected Ref, prefer whichever message actually names that
+      // Ref (N3); when nothing matches, fall back to every warning/error joined together rather
+      // than silently dropping errors whenever a warning is also present.
+      const combinedMessages = [...envelope.warnings, ...envelope.errors];
+      const fallbackReason = combinedMessages.join("; ") || undefined;
+      const reasonForRef = (ref: string): string | undefined =>
+        combinedMessages.find((message) => message.includes(ref)) ?? fallbackReason;
       return payload.Documents.map((ref) =>
         removedRefs.has(ref)
           ? { Ref: ref, Removed: true }
-          : { Ref: ref, Removed: false, Reason: novaPoshtaReason ?? "Not confirmed removed by Nova Poshta" },
+          : { Ref: ref, Removed: false, Reason: reasonForRef(ref) ?? "Not confirmed removed by Nova Poshta" },
       );
     },
     getDocumentList: (filters?: GetDocumentListFilters) =>

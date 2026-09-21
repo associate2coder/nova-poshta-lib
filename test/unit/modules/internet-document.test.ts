@@ -174,6 +174,54 @@ describe("internet-document module — delete (T3, AC-07/AC-08)", () => {
       },
     ]);
   });
+
+  it("a rejected Ref's Reason is read from errors too, not only warnings, when both are present (N3)", async () => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          data: [{ Ref: "waybill-1" }],
+          errors: ["waybill-2: Ref does not belong to caller's account"],
+          warnings: ["unrelated success-path notice"],
+        }),
+    }));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(internetDocument.delete({ Documents: ["waybill-1", "waybill-2"] })).resolves.toEqual([
+      { Ref: "waybill-1", Removed: true },
+      {
+        Ref: "waybill-2",
+        Removed: false,
+        Reason: "waybill-2: Ref does not belong to caller's account",
+      },
+    ]);
+  });
+
+  it("each rejected Ref in a batch gets its own matching reason, not one text stamped onto all of them (N3)", async () => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          data: [{ Ref: "waybill-1" }],
+          errors: [],
+          warnings: [
+            "waybill-2: Ref does not belong to caller's account",
+            "waybill-3: Ref already deleted",
+          ],
+        }),
+    }));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(
+      internetDocument.delete({ Documents: ["waybill-1", "waybill-2", "waybill-3"] }),
+    ).resolves.toEqual([
+      { Ref: "waybill-1", Removed: true },
+      { Ref: "waybill-2", Removed: false, Reason: "waybill-2: Ref does not belong to caller's account" },
+      { Ref: "waybill-3", Removed: false, Reason: "waybill-3: Ref already deleted" },
+    ]);
+  });
 });
 
 describe("internet-document module — getDocumentList/getDocumentPrice/getDocumentDeliveryDate (T4, AC-03/AC-04/AC-09/AC-10)", () => {

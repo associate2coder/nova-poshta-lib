@@ -127,6 +127,18 @@ describe("internet-document domain types (T1, AC-02)", () => {
       RecipientHouse: "1",
     };
 
+    // AC-02: omitting a required leg field entirely (not just mixing legs) must also fail to
+    // compile — TypeScript's excess-property check would otherwise mask this, since it short-
+    // circuits before reporting missing properties whenever an object literal also has an
+    // out-of-union field.
+    // @ts-expect-error — RecipientAddress is required for WarehouseWarehouse and was omitted.
+    const missingRequiredField: SaveWarehouseToWarehousePayload = {
+      ...saveCommon,
+      ServiceType: "WarehouseWarehouse",
+      CargoType: "Parcel",
+      SenderAddress: "sender-warehouse-ref",
+    };
+
     const union: SaveInternetDocumentPayload[] = [warehouseWarehouse, warehouseDoors, doorsWarehouse, doorsDoors];
 
     expect(union).toHaveLength(4);
@@ -134,6 +146,7 @@ describe("internet-document domain types (T1, AC-02)", () => {
     expect(wrongSenderLeg2.ServiceType).toBe("WarehouseWarehouse");
     expect(wrongRecipientLeg.ServiceType).toBe("WarehouseDoors");
     expect(wrongRecipientLeg2.ServiceType).toBe("WarehouseWarehouse");
+    expect(missingRequiredField.ServiceType).toBe("WarehouseWarehouse");
   });
 
   it("update: the sender leg is discriminated the same way as save (AC-02, AC-06)", () => {

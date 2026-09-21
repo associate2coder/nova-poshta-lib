@@ -109,6 +109,17 @@ describe("internet-document module — save/update (T2, AC-01/AC-02/AC-05/AC-06)
     expect(sentBody.methodProperties).toEqual(payloadWithoutBackwardDelivery);
   });
 
+  it("update with a supplied BackwardDeliveryData sends it through intact, not stripped (AC-06)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([savedWaybill]));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+    const backwardDeliveryData = { PayerType: "Recipient" as const, CargoType: "Money" as const, Amount: 500 };
+
+    await internetDocument.update({ ...validUpdatePayload, BackwardDeliveryData: backwardDeliveryData });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.methodProperties.BackwardDeliveryData).toEqual(backwardDeliveryData);
+  });
+
   // AC-02's compile-time discriminated-payload coverage (every ServiceType leg, both sender and
   // recipient sides, plus CargoType) lives in test/unit/types/internet-document.test.ts, per this
   // repo's convention (address/counterparty keep type-level tests in a separate file).

@@ -386,7 +386,16 @@ the three structurally distinct shapes.*
 
 ## 9. Architecture decisions
 
-<!-- pending -->
+| # | Title | Status | Section |
+|---|---|---|---|
+| 0001 | Compose ServiceType and CargoType as two intersected type-sets | Accepted | §4 |
+| 0002 | Represent batch delete as a defensively reconciled per-Ref outcome array | Accepted | §4 |
+| 0003 | Construct the print link, then verify it with one live check | Accepted | §4 |
+
+ADR files live under `docs/features/internet-document/adr/`. This feature also relies on `common`'s
+already-Accepted `0001-array-shape-only-validation.md` and `address`'s already-Accepted
+`0001-return-undefined-on-empty-write-response.md` (both unchanged, inherited for the 6
+JSON-enveloped methods — no new ADR needed for either here).
 
 ## 10. Quality requirements
 

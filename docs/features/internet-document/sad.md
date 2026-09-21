@@ -55,7 +55,37 @@ library whose write payload must stay a discriminated union across **two** indep
 
 ## 2. Constraints
 
-<!-- pending -->
+**Technical.**
+- TypeScript, Node.js ≥18 (native `fetch`, no HTTP client dependency)
+- No framework — this is a library, not an application
+- No datastore — `internet-document` is stateless; the Nova Poshta API is the sole backing store
+- Architecture convention: one folder per Nova Poshta model (`src/modules/<domain>/`), dual ESM+CJS
+  build via `tsup` (project-level ADR-0002)
+
+**Organisational.**
+- Effort budget: sized M per `.size` — bigger than `address`/`counterparty`'s S, driven mainly by the
+  two-axis (`ServiceType` × `CargoType`) discriminated payload and the print sub-flow's distinct code
+  path
+- No hard deadline stated in `spec.md`
+- Team: single maintainer (project owner)
+
+**Conventions.**
+- Convention file: `CLAUDE.md` + `docs/architecture-map.md`
+- Error handling: a single `NovaPoshtaApiError`, no subclassing (project-level convention), reused
+  unchanged for every one of the 8 methods, including the two print methods (per their own typed
+  code path, §4/§5)
+- `src/types/internet-document.ts` holds this feature's request/response interfaces, per the
+  `src/types/<domain>.ts`-per-model convention `common`/`address`/`counterparty` already established
+
+**Regulatory / external.**
+- `spec.md` §6.1: data classification confidential — a step more sensitive than `counterparty`'s
+  identity data: `internet-document` is the first module carrying money fields (`Cost`,
+  cash-on-delivery/backward-delivery amounts) and the first returning a value (the print link) that
+  itself carries live account credentials, per the community-SDK cross-check (unconfirmed against the
+  live/official docs, `spec.md` §8 OQ-1). Security review required before release — tracked as an open
+  risk in §11, not performed in this design session.
+- AuthZ/AuthN: none beyond the existing single-API-key model; `internet-document` introduces no new
+  permission tiers of its own (`spec.md` §6.1).
 
 ## 3. Context and scope
 

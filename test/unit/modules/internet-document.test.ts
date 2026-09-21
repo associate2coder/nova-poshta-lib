@@ -165,3 +165,87 @@ describe("internet-document module — delete (T3, AC-07/AC-08)", () => {
     ]);
   });
 });
+
+describe("internet-document module — getDocumentList/getDocumentPrice/getDocumentDeliveryDate (T4, AC-03/AC-04/AC-09/AC-10)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const listItem = {
+    Ref: "waybill-1",
+    DateTime: "21.09.2026",
+    IntDocNumber: "20450000000001",
+    Cost: 500,
+    CitySender: "city-sender-1",
+    CityRecipient: "city-recipient-1",
+    CostOnSite: 520,
+    PayerType: "Sender",
+    PaymentMethod: "Cash",
+    AfterpaymentOnGoodsCost: 0,
+    StateId: 1,
+    StateName: "In transit",
+  };
+
+  it("getDocumentList with no filters returns the typed page and never injects Page (AC-09)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([listItem]));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(internetDocument.getDocumentList()).resolves.toEqual([listItem]);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("InternetDocument");
+    expect(sentBody.calledMethod).toBe("getDocumentList");
+    expect(sentBody.methodProperties).toEqual({});
+  });
+
+  it("getDocumentList passes a documented date-range filter through unmodified, no client-side re-filtering (AC-10)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([listItem]));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await internetDocument.getDocumentList({ DateTimeFrom: "01.09.2026", DateTimeTo: "21.09.2026", Page: 2 });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.methodProperties).toEqual({ DateTimeFrom: "01.09.2026", DateTimeTo: "21.09.2026", Page: 2 });
+  });
+
+  it("getDocumentPrice returns Nova Poshta's calculated price unchanged (AC-03)", async () => {
+    const fetchMock = mockFetchOnce(() =>
+      successEnvelope([{ Cost: 500, AssessedCost: 500, CostRedelivery: 0 }]),
+    );
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(
+      internetDocument.getDocumentPrice({
+        CitySender: "city-sender-1",
+        CityRecipient: "city-recipient-1",
+        Weight: 1,
+        ServiceType: "WarehouseWarehouse",
+        CargoType: "Parcel",
+        Cost: 500,
+        SeatsAmount: 1,
+      }),
+    ).resolves.toEqual({ Cost: 500, AssessedCost: 500, CostRedelivery: 0 });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("InternetDocument");
+    expect(sentBody.calledMethod).toBe("getDocumentPrice");
+  });
+
+  it("getDocumentDeliveryDate returns Nova Poshta's calculated date unchanged (AC-04)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([{ Date: "23.09.2026", Timezone: "Europe/Kyiv" }]));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(
+      internetDocument.getDocumentDeliveryDate({
+        DateTime: "21.09.2026",
+        ServiceType: "WarehouseWarehouse",
+        CitySender: "city-sender-1",
+        CityRecipient: "city-recipient-1",
+      }),
+    ).resolves.toEqual({ Date: "23.09.2026", Timezone: "Europe/Kyiv" });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("InternetDocument");
+    expect(sentBody.calledMethod).toBe("getDocumentDeliveryDate");
+  });
+});

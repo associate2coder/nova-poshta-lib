@@ -1,4 +1,4 @@
-import type { NovaPoshtaClient } from "../../client.js";
+import { NovaPoshtaApiError, type NovaPoshtaClient } from "../../client.js";
 import type {
   DeleteInternetDocumentPayload,
   DeletedInternetDocumentOutcome,
@@ -40,6 +40,22 @@ async function firstOrUndefined<T>(
   return records[0];
 }
 
+async function firstOrThrow<T>(
+  client: NovaPoshtaClient,
+  modelName: string,
+  calledMethod: string,
+  methodProperties: Record<string, unknown>,
+): Promise<T> {
+  const records = await client.request<T>(modelName, calledMethod, methodProperties);
+  const [first] = records;
+  if (first === undefined) {
+    throw new NovaPoshtaApiError(
+      `Nova Poshta API response for ${modelName}.${calledMethod} reported success but returned no record`,
+    );
+  }
+  return first;
+}
+
 export function createInternetDocumentModule(client: NovaPoshtaClient): InternetDocumentModule {
   const module: InternetDocumentModule = {
     save: (payload: SaveInternetDocumentPayload) =>
@@ -69,18 +85,26 @@ export function createInternetDocumentModule(client: NovaPoshtaClient): Internet
           : { Ref: ref, Removed: false, Reason: "Not confirmed removed by Nova Poshta" },
       );
     },
-    getDocumentList: (filters?: GetDocumentListFilters): Promise<WaybillListItem[]> => {
-      void filters;
-      throw new Error("not implemented");
-    },
-    getDocumentPrice: (payload: GetDocumentPricePayload): Promise<DocumentPriceEstimate> => {
-      void payload;
-      throw new Error("not implemented");
-    },
-    getDocumentDeliveryDate: (payload: GetDocumentDeliveryDatePayload): Promise<DocumentDeliveryDateEstimate> => {
-      void payload;
-      throw new Error("not implemented");
-    },
+    getDocumentList: (filters?: GetDocumentListFilters) =>
+      client.request<WaybillListItem>(
+        "InternetDocument",
+        "getDocumentList",
+        filters as unknown as Record<string, unknown>,
+      ),
+    getDocumentPrice: (payload: GetDocumentPricePayload) =>
+      firstOrThrow<DocumentPriceEstimate>(
+        client,
+        "InternetDocument",
+        "getDocumentPrice",
+        payload as unknown as Record<string, unknown>,
+      ),
+    getDocumentDeliveryDate: (payload: GetDocumentDeliveryDatePayload) =>
+      firstOrThrow<DocumentDeliveryDateEstimate>(
+        client,
+        "InternetDocument",
+        "getDocumentDeliveryDate",
+        payload as unknown as Record<string, unknown>,
+      ),
     printDocument: (payload: PrintLinkPayload): Promise<string> => {
       void payload;
       throw new Error("not implemented");

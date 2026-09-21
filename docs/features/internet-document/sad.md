@@ -4,7 +4,7 @@ owner: "Architect"
 reviewers: ["Tech Lead", "Security Lead"]
 updated_at: "2026-09-21"
 feature_size: "M"
-target_surfaces: []
+target_surfaces: ["library-sdk"]
 ---
 
 # Software Architecture Document — internet-document
@@ -134,7 +134,58 @@ had: 2 of its 8 methods (the print methods) don't get a JSON envelope back at al
 
 ## 4. Solution strategy
 
-<!-- pending -->
+**Top strategic choices (the seeds for ADRs):**
+
+1. **Target surface: `library-sdk`.** Same single-surface shape `common`, `address`, and
+   `counterparty` already established and the only fit for this repo (no server, no UI). Written to
+   this document's frontmatter (`target_surfaces: ["library-sdk"]`); §5 draws one container for it,
+   alongside the already-shipped `common`, `address`, and `counterparty` modules.
+2. **Synchronous, direct calls into the existing core client — unchanged, for the 6 JSON-enveloped
+   methods.** `save`, `update`, `delete`, `getDocumentList`, `getDocumentPrice`, and
+   `getDocumentDeliveryDate` call `NovaPoshtaClient.request()` directly, exactly like `common`/
+   `address`/`counterparty`. No client-level change.
+3. **Stateless — no persistence, no caching.** Per the non-goal fixed in `spec.md` §3: a price or
+   delivery-date estimate is never linked to a later `save` call; a developer who needs a fresh number
+   must request it again immediately before saving.
+4. **Inherit `common`'s array-shape check unchanged, for the 6 JSON-enveloped methods.** The check
+   already tolerates an empty array on success — exactly what AC-05's "success but empty data" case
+   needs for `save`/`update`.
+5. **Write-return shape for `save`/`update`: `T | undefined`, reusing `address`'s already-Accepted
+   ADR-0001 unchanged.** Both resolve `undefined` when Nova Poshta reports success with an empty
+   result (AC-05) — the identical case `address`/`counterparty` already solved; no new ADR needed here.
+6. **`getDocumentList` pagination stays a known limitation, inherited unchanged from `address`/
+   `counterparty`.** Every documented parameter, including any date-range/pagination field, stays
+   optional at the type level; no client-side page-walking, no injected default (AC-09, matching
+   `spec.md` §8 OQ-2's carried-forward default).
+7. **`save`/`update` payload: two independent hand-written type-sets (`ServiceType` × `CargoType`)
+   composed by TypeScript into all valid combinations — ADR-0001.** 4 hand-written `ServiceType`
+   variants (each requiring the location fields its leg needs) and ~4–5 hand-written `CargoType`
+   variants (each requiring its own cargo-detail fields) are written once each, then intersected so
+   TypeScript itself produces every valid delivery-method/cargo-type combination — never 16 fully
+   duplicated interfaces, and never one generic distributive-conditional formula (the style
+   `counterparty` ADR-0001 already rejected, at a much smaller scale, for readability). Closes
+   `spec.md` §8 OQ-3. See ADR-0001.
+8. **`delete`'s result: a hand-built per-Ref outcome array, cross-checked defensively against the
+   submitted Refs — ADR-0002.** Every `delete` call, single-Ref or batch, returns one outcome entry
+   per submitted Ref (`Ref`, `Removed`, an optional rejection `Reason`) — reconciled by this module
+   against whichever Refs Nova Poshta's own response actually confirms removed, so a Ref silently
+   missing from that response still surfaces as "not removed" rather than vanishing (AC-07, AC-08).
+   This is a deliberate, spec-mandated break from the `T | undefined` shape every other write method in
+   this library uses (`spec.md` §8 OQ-4's own stated default: "build defensively"). See ADR-0002.
+9. **Print methods (`printDocument`/`printMarkings`): construct the link, then verify it with one real
+   network check, entirely inside this module — ADR-0003.** Both methods build the print URL per Nova
+   Poshta's documented pattern (embedding the caller's own `apiKey` and the submitted Refs), then issue
+   one HTTP check against that exact URL — never through `NovaPoshtaClient.request()`'s JSON-envelope
+   unwrap (§1 decision override) — so an invalid Ref or an unmaterialized document surfaces as
+   `NovaPoshtaApiError` at call time (AC-11, AC-12), not as a broken page discovered later. Implemented
+   entirely within this module's own files, per `spec.md` §3's non-goal against changing the shared
+   core client. The exact wire shape remains unconfirmed against Nova Poshta's official docs
+   (`spec.md` §8 OQ-1) — flagged in §11. See ADR-0003.
+
+Each tactical decision in later sections traces to one of these nine. Decisions 7, 8, and 9 are the
+three genuinely new problems this module solves that neither `address` nor `counterparty` faced: a
+two-axis discriminant (vs. `counterparty`'s one-axis ADR-0001), a batch result that can legitimately be
+half-successful, and a return value that isn't JSON data at all.
 
 ## 5. Building block view
 

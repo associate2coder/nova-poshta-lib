@@ -223,6 +223,49 @@ describe("internet-document module — delete (T3, AC-07/AC-08)", () => {
       { Ref: "waybill-3", Removed: false, Reason: "waybill-3: Ref already deleted" },
     ]);
   });
+
+  it("a Ref that's a textual prefix of another submitted Ref doesn't inherit the longer Ref's reason (Q1)", async () => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          data: [],
+          errors: [],
+          warnings: ["waybill-10: Ref already deleted", "waybill-2: Ref does not belong to caller's account"],
+        }),
+    }));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(
+      internetDocument.delete({ Documents: ["waybill-1", "waybill-10", "waybill-2"] }),
+    ).resolves.toEqual([
+      {
+        Ref: "waybill-1",
+        Removed: false,
+        // Not named by either message — falls back to both joined, never a single wrongly-borrowed
+        // message the way plain substring matching would (waybill-1 is a textual prefix of waybill-10).
+        Reason: "waybill-10: Ref already deleted; waybill-2: Ref does not belong to caller's account",
+      },
+      { Ref: "waybill-10", Removed: false, Reason: "waybill-10: Ref already deleted" },
+      { Ref: "waybill-2", Removed: false, Reason: "waybill-2: Ref does not belong to caller's account" },
+    ]);
+  });
+
+  it("delete with zero Refs reaches Nova Poshta and surfaces its own decline — no client-side pre-check (test-plan.md edge case, Q6)", async () => {
+    const fetchMock = mockFetchOnce(() => ({
+      ok: true,
+      json: () =>
+        Promise.resolve({ success: false, data: [], errors: ["Documents is empty"], errorCodes: ["400"], warnings: [] }),
+    }));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(internetDocument.delete({ Documents: [] })).rejects.toThrow(NovaPoshtaApiError);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.methodProperties).toEqual({ DocumentRefs: [] });
+  });
 });
 
 describe("internet-document module — getDocumentList/getDocumentPrice/getDocumentDeliveryDate (T4, AC-03/AC-04/AC-09/AC-10)", () => {

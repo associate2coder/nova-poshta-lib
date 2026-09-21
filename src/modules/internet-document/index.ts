@@ -131,8 +131,12 @@ export function createInternetDocumentModule(client: NovaPoshtaClient): Internet
       // than silently dropping errors whenever a warning is also present.
       const combinedMessages = [...envelope.warnings, ...envelope.errors];
       const fallbackReason = combinedMessages.join("; ") || undefined;
+      // Word-boundary match, not a plain substring: a Ref that's a textual prefix of another
+      // submitted Ref (e.g. "waybill-1" vs "waybill-10") must not match the longer Ref's message.
+      const namesRef = (message: string, ref: string): boolean =>
+        new RegExp(`(^|[^\\w-])${ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^\\w-]|$)`).test(message);
       const reasonForRef = (ref: string): string | undefined =>
-        combinedMessages.find((message) => message.includes(ref)) ?? fallbackReason;
+        combinedMessages.find((message) => namesRef(message, ref)) ?? fallbackReason;
       return payload.Documents.map((ref) =>
         removedRefs.has(ref)
           ? { Ref: ref, Removed: true }

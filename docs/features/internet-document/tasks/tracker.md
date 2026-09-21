@@ -61,3 +61,18 @@ surface (T1/T6), a stale `Required<>`-derived `UpdateInternetDocumentPayload` de
 contract and T1's task file that contradicted AC-06's shipped behavior (T1), and residual
 ADR-0001→ADR-0004 two-axis language the third round's fix missed in `tasks/_epic.md` and
 `tasks/t1-...` (T1). See `_review/review-2026-09-21-04.md` for the full findings table.
+
+## Post-re-review follow-ups (`/sdd:review` 2026-09-21, fifth pass)
+
+4 findings resolved (no new task IDs): the fourth round's `Required<>` doc fix missed one copy —
+`update()`'s public JSDoc in `src/modules/internet-document/index.ts` still claimed
+`BackwardDeliveryData` was mandatory and used ADR-0001's superseded two-axis language (T1); no test
+ever supplied a real `BackwardDeliveryData` value on update, only the omit-to-clear path, so a bug
+that unconditionally stripped the field would have passed the whole suite (T7); the compile-time
+guarantee that omitting a required leg field (not just mixing legs) fails to compile was documented
+but never pinned by a `@ts-expect-error` case, since TS's excess-property short-circuit meant every
+existing negative case tested only the "wrong field present" half (T7); and the contract documented
+package-root exports as bare `ServiceType`/`CargoType`/`PayerType` when `src/index.ts` actually
+aliases them `InternetDocumentServiceType`/`InternetDocumentCargoType`/`InternetDocumentPayerType` to
+avoid colliding with `common`'s exports, undocumented in any feature artifact (T1). See
+`_review/review-2026-09-21-05.md` for the full findings table.

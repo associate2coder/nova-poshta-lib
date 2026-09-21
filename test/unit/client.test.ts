@@ -87,3 +87,13 @@ describe("core client — declined response missing optional envelope fields (AC
     await expect(client.request("Common", "getPaymentForms")).rejects.toThrow(NovaPoshtaApiError);
   });
 });
+
+describe("core client — apiKey is not enumerable (review 2026-09-21 finding 3)", () => {
+  it("does not leak the raw apiKey through JSON.stringify or Object.keys, while remaining directly readable", () => {
+    const client = createClient("my-secret-key");
+
+    expect(JSON.stringify(client)).not.toContain("my-secret-key");
+    expect(Object.keys(client)).not.toContain("apiKey");
+    expect(client.apiKey).toBe("my-secret-key");
+  });
+});

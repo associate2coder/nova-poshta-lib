@@ -25,8 +25,7 @@ export interface NovaPoshtaClient {
 }
 
 export function createClient(apiKey: string): NovaPoshtaClient {
-  return {
-    apiKey,
+  const client = {
     async request<T>(
       modelName: string,
       calledMethod: string,
@@ -79,4 +78,16 @@ export function createClient(apiKey: string): NovaPoshtaClient {
       return envelope.data;
     },
   };
+
+  // Defined non-enumerable so JSON.stringify(client)/Object.keys(client)/console.log(client)
+  // never surface the raw key (review 2026-09-21 finding 3) — still readable via client.apiKey
+  // for the one code path that needs it outside the envelope (internet-document's print-link
+  // construct-then-verify helper, ADR-0003).
+  Object.defineProperty(client, "apiKey", {
+    value: apiKey,
+    enumerable: false,
+    writable: false,
+  });
+
+  return client as NovaPoshtaClient;
 }

@@ -61,7 +61,8 @@ async function firstOrThrow<T>(
 const PRINT_BASE_URL = "https://my.novaposhta.ua/orders";
 
 /** ADR-0003: builds the print URL per Nova Poshta's documented pattern (community-SDK cross-check,
- *  spec.md §1/§8 OQ-1) — embeds every submitted Ref plus the caller's own apiKey — then issues one
+ *  confirmed against Nova Poshta's own devcenter.novaposhta.ua docs — spec.md §1/§8 OQ-1, seventh-
+ *  pass narrowing) — embeds every submitted Ref plus the caller's own apiKey — then issues one
  *  live verification check against that exact URL, never routed through client.request()'s envelope
  *  unwrap. Only returns the URL if that check succeeds; otherwise raises the standard error. */
 async function buildAndVerifyPrintLink(

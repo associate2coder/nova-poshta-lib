@@ -357,15 +357,20 @@ sequenceDiagram
     participant NP as Nova Poshta API
 
     Dev->>IDoc: printDocument(Refs) | printMarkings(Refs)
-    IDoc->>IDoc: build the print URL — embeds the caller's apiKey + submitted Refs (ADR-0003)
-    IDoc->>NP: direct fetch against that URL — bypasses the core client entirely (AC-11 / AC-12)
 
-    alt verification fails — invalid Ref, document not yet materialized, network failure (AC-11 / AC-12 / AC-16)
-        NP--xIDoc: non-ok response / timeout
-        IDoc-->>Dev: throws NovaPoshtaApiError
-    else verification succeeds
-        NP-->>IDoc: ok response
-        IDoc-->>Dev: the print-ready URL string (AC-11 / AC-12) — documented as credential-bearing (AC-13, §6.1)
+    alt Documents is empty (AC-11 / AC-12)
+        IDoc-->>Dev: throws NovaPoshtaApiError — no fetch issued, request never reaches Nova Poshta
+    else Documents is non-empty
+        IDoc->>IDoc: build the print URL — embeds the caller's apiKey + submitted Refs (ADR-0003)
+        IDoc->>NP: direct fetch against that URL — bypasses the core client entirely (AC-11 / AC-12)
+
+        alt verification fails — invalid Ref, document not yet materialized, network failure (AC-11 / AC-12 / AC-16)
+            NP--xIDoc: non-ok response / timeout
+            IDoc-->>Dev: throws NovaPoshtaApiError
+        else verification succeeds
+            NP-->>IDoc: ok response
+            IDoc-->>Dev: the print-ready URL string (AC-11 / AC-12) — documented as credential-bearing (AC-13, §6.1)
+        end
     end
 ```
 
@@ -453,7 +458,7 @@ values already shown crossing the wire in Flows 1 and 4, not a distinct runtime 
 
 | # | Title | Status | Section |
 |---|---|---|---|
-| 0001 | Compose ServiceType and CargoType as two intersected type-sets | Accepted (cargo axis superseded by 0004) | §4 |
+| 0001 | Compose ServiceType and CargoType as two intersected type-sets | Superseded by 0004 | §4 |
 | 0002 | Represent batch delete as a defensively reconciled per-Ref outcome array | Accepted (amended: `delete` reads its Reason via `client.ts`'s new `requestEnvelope()`) | §4 |
 | 0003 | Construct the print link, then verify it with one live check | Accepted | §4 |
 | 0004 | CargoType is a plain discriminant field, not a structural variant axis | Accepted | §1, §4 |

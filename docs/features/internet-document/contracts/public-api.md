@@ -364,7 +364,11 @@ printMarkings(payload: PrintLinkPayload): Promise<string>;
 `getPrintLink()` helper, which appends every Ref to one URL path (`/orders[]/<ref>`) and embeds the
 caller's own API key as the URL's final segment (confirms `spec.md` §8 OQ-1's credential-embedding
 assumption and the single-combined-link assumption at `high` confidence — no longer "unconfirmed
-against the live/official docs" for this specific point; see `api-sync-report.md`). A failure to
+against the live/official docs" for this specific point; see `api-sync-report.md`). **Confirmed
+directly against Nova Poshta's own documentation (review, seventh pass, 2026-09-22):** Nova Poshta's
+`devcenter.novaposhta.ua` developer blog documents this exact same URL pattern —
+`.../orders[]/<ref or number>/.../apiKey/<key>` — independently corroborating both assumptions from
+a primary source, not just a community SDK; see `spec.md` §8 OQ-1. A failure to
 obtain the link (empty `Documents`, an invalid Ref, a document not yet materialized) throws
 `NovaPoshtaApiError` per the construct-then-verify check (AC-11, AC-12) — the PHP SDK's own
 `getPrintLink()` returns an empty string on an empty ref list, which this contract explicitly does

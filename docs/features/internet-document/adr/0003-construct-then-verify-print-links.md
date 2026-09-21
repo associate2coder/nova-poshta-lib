@@ -25,7 +25,12 @@ AC-12 still require that a genuine failure — an invalid Ref, a document Nova P
 materializing — raises the standard error, exactly like every other method (AC-14). `spec.md` §8 OQ-1
 flags that the exact wire shape of this sub-flow (request format, response format, how a failure is
 signaled) is unconfirmed against Nova Poshta's official docs, since the docs portal has blocked every
-automated fetch attempted while drafting both the spec and this design.
+automated fetch attempted while drafting both the spec and this design. **Amendment (review
+remediation, seventh pass, 2026-09-22):** the URL pattern itself (`apiKey` embedded as a path segment;
+multiple Refs combined into one URL via repeated `orders[]/...` segments) is now confirmed directly
+from Nova Poshta's own `devcenter.novaposhta.ua` documentation — matching this module's shipped
+implementation exactly. Still unconfirmed: the exact success/failure response shape a verification
+check should look for (see `spec.md` §8 OQ-1).
 
 ## Decision drivers
 

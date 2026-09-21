@@ -76,16 +76,19 @@ async function buildAndVerifyPrintLink(
   const copiesSegment = payload.Copies ? `/copies/${payload.Copies}` : "";
   const url = `${PRINT_BASE_URL}/${kind}/${refsPath}${typeSegment}${copiesSegment}/apiKey/${client.apiKey}`;
 
-  let response: { ok: boolean; status?: number };
+  let response: { ok: boolean; status?: number; body?: ReadableStream | null };
   try {
-    // HEAD, not GET: this only verifies the link resolves — it never needs the response body, so
-    // there is nothing to leave unread/uncancelled against a real PDF/label endpoint.
-    response = await fetch(url, { method: "HEAD" });
+    // GET, not HEAD: Nova Poshta's print endpoint never confirmed HEAD support (spec.md §8 OQ-1),
+    // so this issues the same request a browser would, then discards the body unread below rather
+    // than leaving it open against a real PDF/label endpoint.
+    response = await fetch(url, { method: "GET" });
   } catch (cause) {
     throw new NovaPoshtaApiError(
       `Nova Poshta print-link verification for ${kind} failed: ${(cause as Error).message}`,
     );
   }
+
+  void response.body?.cancel();
 
   if (!response.ok) {
     throw new NovaPoshtaApiError(`Nova Poshta print-link verification for ${kind} failed with status ${response.status}`);

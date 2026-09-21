@@ -265,7 +265,7 @@ describe("internet-document module — printDocument/printMarkings (T5, AC-11/AC
     vi.unstubAllGlobals();
   });
 
-  it("printDocument builds the exact expected URL and verifies it with a single HEAD request, never through the JSON-envelope path (AC-11)", async () => {
+  it("printDocument builds the exact expected URL and verifies it with a single GET request, never through the JSON-envelope path (AC-11)", async () => {
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       void init;
       return { ok: true, status: 200 };
@@ -280,9 +280,10 @@ describe("internet-document module — printDocument/printMarkings (T5, AC-11/AC
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]![0]).toBe(link);
-    // finding 11: verification must not leave a real response body unread/uncancelled — a HEAD
-    // request never opens one in the first place.
-    expect(fetchMock.mock.calls[0]![1]).toMatchObject({ method: "HEAD" });
+    // GET, not HEAD (N5): Nova Poshta's print endpoint never confirmed HEAD support (spec.md §8
+    // OQ-1), so verification uses the same verb a browser would and discards the body itself
+    // (finding 11) rather than betting on an unconfirmed method.
+    expect(fetchMock.mock.calls[0]![1]).toMatchObject({ method: "GET" });
   });
 
   it("printDocument builds the Type and Copies segments into the URL when supplied (AC-11)", async () => {

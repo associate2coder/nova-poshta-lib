@@ -76,3 +76,18 @@ package-root exports as bare `ServiceType`/`CargoType`/`PayerType` when `src/ind
 aliases them `InternetDocumentServiceType`/`InternetDocumentCargoType`/`InternetDocumentPayerType` to
 avoid colliding with `common`'s exports, undocumented in any feature artifact (T1). See
 `_review/review-2026-09-21-05.md` for the full findings table.
+
+## Post-re-review follow-ups (`/sdd:review` 2026-09-21, sixth pass)
+
+7 findings resolved — a genuinely fresh pass over the whole feature, not just round 5's changed
+surface (no new task IDs): `getDocumentPrice`/`getDocumentDeliveryDate`'s real throw-on-empty-data
+behavior was undocumented in the contract's error table and `sad.md`'s flow 4 (T4); round 5's own
+contract fix (R4) mis-described `common`'s colliding exports as "fixed literal sets" instead of
+runtime record types (T1); round 5's own JSDoc fix (R1) understated which fields clear on `update`
+omission — only `BackwardDeliveryData` was named, not `SenderFlat`/`RecipientFlat` (T2);
+`tasks/t2-save-and-update.md`'s DoD and two `test-plan.md` spots plus `sad.md`'s QG-1 still carried
+ADR-0001's retired two-axis language after four prior rounds scrubbed it elsewhere (T2); `test-plan.md`'s
+AC-06 row didn't map round 5's new pass-through test (T7); and `review-2026-09-21-05.md`'s self-reported
+post-fix test count was off by one (191 vs the actual 190). This round's verdict is the first **PASS** —
+every finding was a doc/JSDoc accuracy correction, no shipped behavior changed. See
+`_review/review-2026-09-21-06.md` for the full findings table.

@@ -38,18 +38,30 @@ export function createInternetDocumentModule(client: NovaPoshtaClient): Internet
 ```ts
 // src/types/internet-document.ts
 
-/** sad.md §4 decision 7 / ADR-0001: this module's own fixed, compile-time literal set — 4 values
- *  fixed by ADR-0001. The cross-checked wire enum documents 2 more (DoorsPostomat,
- *  WarehousePostomat) not yet in scope here — see §10 finding 1 / api-sync-report.md. */
+/** Widened to 6 values (post-ship API-contract re-audit, 2026-09-22) — 2 independent sources
+ *  (`platx/go-nova-poshta`, `shopanaio/carrier-api`) agree the Postomat pair is real. `save`/
+ *  `update`'s discriminated union still models only the original 4 as structural variants — the
+ *  Postomat leg's field shape has only 1 confirming source, not 2 — see §10 finding 1. */
 export type ServiceType =
   | "WarehouseWarehouse"
   | "WarehouseDoors"
   | "DoorsWarehouse"
-  | "DoorsDoors";
+  | "DoorsDoors"
+  | "WarehousePostomat"
+  | "DoorsPostomat";
 
-/** ADR-0001: 4 values fixed at design time. The cross-checked wire enum documents 8
- *  (adds TiresWheels, Money, SignedDocuments, Trays) — see §10 finding 1. */
-export type CargoType = "Parcel" | "Cargo" | "Documents" | "Pallet";
+/** Widened to all 8 cross-checked values (post-ship API-contract re-audit, 2026-09-22) — no second
+ *  source contradicts the 8-value list, and ADR-0004 already established CargoType needs no
+ *  structural leg shape, so every value slots into the existing field unchanged. */
+export type CargoType =
+  | "Parcel"
+  | "Cargo"
+  | "Documents"
+  | "Pallet"
+  | "TiresWheels"
+  | "Money"
+  | "SignedDocuments"
+  | "Trays";
 
 export type PayerType = "Sender" | "Recipient" | "ThirdPerson";
 export type PaymentMethod = "Cash" | "NonCash";
@@ -211,43 +223,43 @@ update(payload: UpdateInternetDocumentPayload): Promise<SavedInternetDocument | 
 
 *`undefined` on empty-on-success, same as `save` (AC-05).*
 
-### 3.3 `delete`
+### 3.3 `delete` / `deleteBatch`
 
 ```ts
-/** sad.md §4 decision 8, ADR-0002: batch-capable by spec/ADR decision — every submitted Ref gets
- *  one outcome entry, reconciled defensively against whichever Refs Nova Poshta's response actually
- *  confirms removed. NOTE: 2 of the 3 cross-checked SDKs (Go, TypeScript) type the wire
- *  `DocumentRefs` field as a SINGLE ref, not an array — only the PHP SDK forces a one-element array
- *  client-side. This contract still models the batch shape ADR-0002 already fixed; §10 finding 2 /
- *  api-sync-report.md carries the unconfirmed-batch-capability flag forward. Field-name note (review
- *  2026-09-21, third pass, finding P1): `Documents` below is this module's own public field name —
- *  the module maps it to the wire's actual `DocumentRefs` field before sending; the two names are
- *  deliberately different. */
+/** ADR-0005 (post-ship correction of ADR-0002): single-Ref per call — a post-ship re-audit found
+ *  3 of the 4 cross-checked SDKs (Go, TypeScript-maddsua, PHP-serj1chen) type the wire
+ *  `DocumentRefs` field as accepting exactly one value; no source demonstrates a genuine multi-Ref
+ *  call succeeding. `Ref` is this module's own public field name — the module maps it to the
+ *  wire's actual `DocumentRefs` field (as a 1-element array) before sending. */
 export interface DeleteInternetDocumentPayload {
-  Documents: string[]; // one or more waybill Refs — sent on the wire as DocumentRefs
+  Ref: string; // exactly one waybill Ref — sent on the wire as DocumentRefs: [Ref]
 }
 
-/** ADR-0002: one entry per submitted Ref, reconciled by this module — never Nova Poshta's raw
- *  response shape as-is (which, per platx/go-nova-poshta's DeleteItem, carries only `Ref` — no
- *  `Removed`/`Reason` field of its own; this module infers Removed by whether the Ref appears in
- *  Nova Poshta's confirmed-removed list). Reason is read from the envelope's success-path
- *  `warnings`/`errors` (via `client.requestEnvelope()`, review 2026-09-21 finding 4) when Nova
- *  Poshta provides one — best-effort: the envelope's warnings/errors aren't themselves keyed by
- *  Ref, so this module first tries to match each rejected Ref to whichever warning/error message
- *  names that Ref, falling back to every warning/error joined together only when nothing names it,
- *  and to a library-generated message when Nova Poshta gives no warnings/errors at all (review
- *  2026-09-21-02 finding N3; spec.md §8 OQ-5). */
+/** ADR-0005: this module's own sequential client-side loop over `delete`, never a single
+ *  server-side batch call. */
+export interface DeleteBatchInternetDocumentPayload {
+  Documents: string[]; // one or more waybill Refs
+}
+
+/** One outcome, reconciled by this module — never Nova Poshta's raw response shape as-is (which,
+ *  per platx/go-nova-poshta's DeleteItem, carries only `Ref` — no `Removed`/`Reason` field of its
+ *  own; this module infers Removed by whether the Ref appears in Nova Poshta's confirmed-removed
+ *  list). Reason is read from the envelope's success-path `warnings`/`errors` (via
+ *  `client.requestEnvelope()`, review 2026-09-21 finding 4) when Nova Poshta provides one — since
+ *  ADR-0005, a response can only ever concern the one Ref just submitted, so no cross-Ref
+ *  message-attribution is needed (simpler than ADR-0002's original per-Ref regex matching). */
 export interface DeletedInternetDocumentOutcome {
   Ref: string;
   Removed: boolean;
   Reason?: string;
 }
 
-delete(payload: DeleteInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome[]>;
+delete(payload: DeleteInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome>;
+deleteBatch(payload: DeleteBatchInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome[]>;
 ```
 
 *Never `T | undefined` — the one deliberate divergence from every other write method in this library
-(ADR-0002). A single-Ref call still returns a one-element array (AC-07).*
+(ADR-0002/ADR-0005). `deleteBatch` issues N sequential HTTP calls, one per Ref, not one batched call.*
 
 ### 3.4 `getDocumentList`
 
@@ -343,7 +355,15 @@ export interface DocumentDeliveryDateEstimate {
 `GetDocumentDeliveryDateItem` (re-fetched, `high` confidence). Same no-linkage behavior as
 `getDocumentPrice` (AC-04), and the same empty-data-throws behavior — see §6.*
 
-### 3.7 `printDocument` / `printMarkings`
+### 3.7 `printDocument` / `printMarkings` — **PROVISIONAL (post-ship API-contract re-audit, 2026-09-22)**
+
+Widening the cross-checked source pool to 5 surfaced a genuine mechanism-level contradiction: a
+fourth SDK (`lis-dev/nova-poshta-api-2`) builds this same URL differently (comma-joined Refs in one
+segment, lowercase `type`, no `Copies` segment) and its own live-hitting tests prove these two
+methods are *also* reachable as plain enveloped `calledMethod` calls — a path this entire section's
+design (ADR-0003) assumed was categorically closed. AC-11/AC-12/AC-13 are downgraded to
+provisional. Shipped behavior below is unchanged (it is the one variant with live 2xx verification,
+even if the exact mechanism is contested) — see ADR-0003's amendment log for the full finding.
 
 ```ts
 /** sad.md §4 decision 9, ADR-0003: bypasses the shared core client entirely — constructs the URL,
@@ -390,7 +410,8 @@ link).*
 export interface InternetDocumentModule {
   save(payload: SaveInternetDocumentPayload): Promise<SavedInternetDocument | undefined>;
   update(payload: UpdateInternetDocumentPayload): Promise<SavedInternetDocument | undefined>;
-  delete(payload: DeleteInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome[]>;
+  delete(payload: DeleteInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome>;
+  deleteBatch(payload: DeleteBatchInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome[]>;
   getDocumentList(filters?: GetDocumentListFilters): Promise<WaybillListItem[]>;
   getDocumentPrice(payload: GetDocumentPricePayload): Promise<DocumentPriceEstimate>;
   getDocumentDeliveryDate(
@@ -407,7 +428,8 @@ export interface InternetDocumentModule {
 |---|---|---|---|
 | `save` | `InternetDocument` | `save` | `client.request()` (JSON envelope) |
 | `update` | `InternetDocument` | `update` | `client.request()` |
-| `delete` | `InternetDocument` | `delete` | `client.requestEnvelope()` — reads success-path `warnings`/`errors` for AC-08's rejected-Ref `Reason` (review 2026-09-21 finding 4); payload field `Documents` is sent on the wire as `DocumentRefs` |
+| `delete` | `InternetDocument` | `delete` | `client.requestEnvelope()` — reads success-path `warnings`/`errors` for AC-08's rejected-Ref `Reason` (review 2026-09-21 finding 4); payload field `Ref` is sent on the wire as `DocumentRefs: [Ref]` (ADR-0005) |
+| `deleteBatch` | — | — | client-side loop over `delete`, one HTTP call per Ref (ADR-0005) |
 | `getDocumentList` | `InternetDocument` | `getDocumentList` | `client.request()` |
 | `getDocumentPrice` | `InternetDocument` | `getDocumentPrice` | `client.request()` |
 | `getDocumentDeliveryDate` | `InternetDocument` | `getDocumentDeliveryDate` | `client.request()` |
@@ -434,7 +456,7 @@ See `spec.md` §3 non-goal's Amendments 1 & 2, ADR-0002's Amendment, and ADR-000
 | Declined — any other reason (invalid `Ref`, missing required field, business-rule rejection) or malformed response shape | AC-14 | throws `NovaPoshtaApiError`, Nova Poshta's message passed through |
 | `save`/`update` success, `data` is an empty array | AC-05 | resolves `undefined` — **not** an error |
 | `getDocumentPrice`/`getDocumentDeliveryDate` success, `data` is an empty array | AC-03, AC-04 | throws `NovaPoshtaApiError` — unlike `save`/`update`'s AC-05 `undefined`, neither calculator has a meaningful "success, no result" outcome to return |
-| `delete` success, full or partial | AC-07, AC-08 | resolves the per-Ref outcome array (ADR-0002) — never throws for a partial rejection |
+| `delete` success, removed or not confirmed | AC-07, AC-08 | resolves one outcome (ADR-0005); `deleteBatch` resolves an array, one per Ref — never throws for a single unconfirmed Ref |
 | `printDocument`/`printMarkings` verification fails (invalid Ref, unmaterialized document, network failure) | AC-11, AC-12, AC-16 | throws `NovaPoshtaApiError` |
 | Any other read/calculate/write success, `data` is array-shaped (a non-empty result for `getDocumentPrice`/`getDocumentDeliveryDate`; an empty `getDocumentList` page is a valid "no results" outcome, not an error) | AC-01, AC-03, AC-04, AC-09, AC-10 | resolves the typed result |
 
@@ -480,27 +502,33 @@ These `sad.md` §6 marks as non-runtime (N/A in the coverage table) but that sti
 
 ## 9. Convenience-methods
 
-None — unlike `counterparty`, `spec.md` §1 fixes exactly 8 methods with no deferred convenience-method
-set (`spec.md` §8 has no equivalent open question). No `§7`-style deferred-shape clause needed here.
+**`deleteBatch`** (added post-ship, ADR-0005) — a client-side sequential loop over `delete`, one
+outcome per submitted Ref. Not a Nova Poshta wire method; `spec.md` §1's 8-method surface is
+unaffected. Otherwise unchanged: `spec.md` §1 fixes exactly those 8 wire methods, no other deferred
+convenience-method set.
 
 ## 10. Findings from this pass's SDK re-fetch (see `api-sync-report.md` for full detail)
 
-Two findings from re-fetching the cross-checked sources are larger than routine field-origin
-confidence notes, and are carried forward as open questions rather than silently reshaping
-`sad.md`'s already-Accepted ADRs:
+Two findings from re-fetching the cross-checked sources were larger than routine field-origin
+confidence notes, and were originally carried forward as open questions rather than reshaping
+`sad.md`'s already-Accepted ADRs. **Both are now resolved (post-ship API-contract re-audit,
+2026-09-22, per CLAUDE.md's API-contract sourcing policy):**
 
-1. **`ServiceType`/`CargoType` cardinality.** The wire enum (`platx/go-nova-poshta`'s `enum` package)
-   documents 6 `ServiceType` values (adds `WarehousePostomat`, `DoorsPostomat`) and 8 `CargoType`
-   values (adds `TiresWheels`, `Money`, `SignedDocuments`, `Trays`) — not the 4 + 4 `spec.md` §1 and
-   ADR-0001 fixed. This contract keeps ADR-0001's 4×4 model as designed, per the user's decision
-   during this pass; §2 flags the exact gap in the type comments.
-2. **`delete` batch capability.** Two of the three cross-checked SDKs (Go, TypeScript) type the wire
-   `DocumentRefs` field as a single ref, not an array — only the PHP SDK forces a one-element array
-   client-side, and no source demonstrates a genuine multi-Ref call. ADR-0002's batch-capable,
-   per-Ref-reconciled shape is kept as designed; §3.3 flags the gap.
+1. **`ServiceType`/`CargoType` cardinality — resolved: expanded.** The wire enum
+   (`platx/go-nova-poshta`'s `enum` package) documents 6 `ServiceType` values (adds
+   `WarehousePostomat`, `DoorsPostomat`) and 8 `CargoType` values (adds `TiresWheels`, `Money`,
+   `SignedDocuments`, `Trays`) — not the 4 + 4 `spec.md` §1 and ADR-0001 originally fixed. A second
+   independent source (`shopanaio/carrier-api`) corroborates the `ServiceType` Postomat pair. §2's
+   standalone types now carry the full 6/8; `save`/`update`'s discriminated union still models only
+   the original 4 `ServiceType` values as structural variants pending a second source for the
+   Postomat leg's field shape.
+2. **`delete` batch capability — resolved: narrowed (ADR-0005).** 3 of 4 cross-checked sources
+   (Go, TypeScript-maddsua, PHP-serj1chen) type the wire `DocumentRefs` field as a single ref, not
+   an array; only `shopanaio/carrier-api` dissents. No source demonstrates a genuine multi-Ref call
+   succeeding. `delete` now takes exactly one Ref per call; `deleteBatch` (§9) replaces the
+   previously-shipped single-call batch shape with a client-side sequential loop; §3.3 updated.
 
-Both are recorded in `spec.md`'s existing §8 open-question set by extension (OQ-1's "re-verify... the
-full save/update field shape" already covers finding 1's scope; OQ-5's "confirm whether delete's
-per-Ref outcome is genuinely distinguishable" is adjacent to but narrower than finding 2 — finding 2
-questions whether batch itself, not just a mixed result, is real) — `api-sync-report.md`'s drift
-section recommends tightening both questions' wording.
+`spec.md` §8 OQ-1 and OQ-5 are updated in place to record both resolutions. A third, more serious
+finding surfaced widening the source pool for this same re-audit — the print-link mechanism itself
+(§3.7) is contested, not just its cardinality — see ADR-0003's amendment log; that one remains open,
+downgrading AC-11/AC-12/AC-13 to provisional rather than resolving them.

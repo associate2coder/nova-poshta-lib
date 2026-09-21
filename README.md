@@ -66,9 +66,16 @@ const waybill = await internetDocument.save({
 if (waybill) {
   // printDocument/printMarkings return a print-ready link that embeds your own API key —
   // treat it exactly like the key itself (never log, email, or render it on a public page).
-  // This library performs no redaction, scoping, or expiry of that link.
+  // This library performs no redaction, scoping, or expiry of that link. PROVISIONAL: the
+  // exact URL-construction mechanism is contested across sources — see PrintLinkPayload's
+  // doc comment before relying on this in production.
   const printLink = await internetDocument.printDocument({ Documents: [waybill.Ref] });
 }
+
+// delete() removes exactly one waybill per call; deleteBatch() loops over several client-side —
+// it is not a single Nova Poshta batch call (see DeleteInternetDocumentPayload's doc comment).
+await internetDocument.delete({ Ref: "<waybill ref>" });
+await internetDocument.deleteBatch({ Documents: ["<waybill ref 1>", "<waybill ref 2>"] });
 ```
 
 > `common`, `address`, `counterparty`, and `internet-document` are the domain modules shipped so

@@ -54,6 +54,7 @@ const INTERNET_DOCUMENT_METHOD_NAMES = [
   "save",
   "update",
   "delete",
+  "deleteBatch",
   "getDocumentList",
   "getDocumentPrice",
   "getDocumentDeliveryDate",
@@ -189,7 +190,7 @@ describe("published build surface (AC-07)", () => {
   it.each([
     [ESM_TYPES_PATH, "ESM"],
     [CJS_TYPES_PATH, "CJS"],
-  ])("%s (%s) declares createInternetDocumentModule and all 8 internet-document identifiers (AC-19)", (relativePath) => {
+  ])("%s (%s) declares createInternetDocumentModule and all 9 internet-document identifiers (AC-19)", (relativePath) => {
     const contents = readFreshDeclaration(relativePath);
 
     expect(contents).toMatch(/\bcreateInternetDocumentModule\b/);

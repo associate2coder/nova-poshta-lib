@@ -1,8 +1,8 @@
 ---
-status: Accepted
+status: Accepted (provisional — see 2026-09-22 amendment)
 owner: "Architect"
 reviewers: ["Tech Lead", "Security Lead"]
-updated_at: "2026-09-21"
+updated_at: "2026-09-22"
 feature_size: "M"
 ticket: ""
 ---
@@ -30,7 +30,9 @@ remediation, seventh pass, 2026-09-22):** the URL pattern itself (`apiKey` embed
 multiple Refs combined into one URL via repeated `orders[]/...` segments) is now confirmed directly
 from Nova Poshta's own `devcenter.novaposhta.ua` documentation — matching this module's shipped
 implementation exactly. Still unconfirmed: the exact success/failure response shape a verification
-check should look for (see `spec.md` §8 OQ-1).
+check should look for (see `spec.md` §8 OQ-1). **Correction (post-ship API-contract re-audit,
+2026-09-22):** "matching this module's shipped implementation exactly" above overclaimed — see the
+new amendment below. The mechanism is contested, not confirmed.
 
 ## Decision drivers
 
@@ -103,6 +105,32 @@ guarantee, not an oversight.
   relied on the (never-real) `/copies/double` segment saw no behavior change (it was a no-op segment
   Nova Poshta never defined), but a caller passing `Copies: "fourfold"` gets a materially different,
   now-correct URL.
+- **Amendment (post-ship API-contract re-audit, 2026-09-22):** widening the cross-checked source
+  pool from 3 SDKs to 5 for the new CLAUDE.md sourcing policy surfaced a genuine, unresolved
+  contradiction in the print-link mechanism itself, not just its details:
+  - A fourth SDK, `lis-dev/nova-poshta-api-2` (`printGetLink()`), builds the URL differently from
+    the `serj1chen` SDK this module follows — **one** `orders[]/` segment with all Refs
+    **comma-joined** (`implode(',', $documentRefs)`), lowercase `type` (`html`/`pdf`), and **no**
+    `Copies` segment at all — versus this module's **repeated** `orders[]/<ref>` segments and
+    capitalized `Type`.
+  - That same SDK's own live-hitting test suite (`NovaPoshtaApi2Test.php::testPrintDocument`)
+    proves `printDocument`/`printMarkings` are reachable as **plain enveloped `calledMethod`
+    calls** — a bogus Ref returns a real Nova Poshta error code (`20000300415`) through the normal
+    JSON request/response cycle — a path this ADR's Context section assumed was categorically
+    impossible for these two methods.
+  - Neither SDK author verified their own URL-construction shortcut against a live *resolved*
+    link; `lis-dev`'s test only asserts `success: true` on an envelope it fabricates locally for
+    that code path, never an actual fetch of the constructed URL.
+
+  **Decision:** ship unchanged for now — this module's live GET-verification at least confirms the
+  constructed URL resolves to *something* with a 2xx status, which neither contested alternative
+  offers proof of either way. But AC-11/AC-12/AC-13 are downgraded from confirmed happy-path to
+  **provisional** (see `PrintLinkPayload`'s doc comment in `src/types/internet-document.ts` and
+  `spec.md` §8 OQ-1, sharpened again) until a live API key or Nova Poshta's own documentation
+  settles which mechanism — or a third one entirely, such as the plain enveloped call `lis-dev`'s
+  tests prove reachable — is actually correct. This ADR's core intent (verify before promising
+  success) still holds regardless of which mechanism wins; only the specific URL-construction
+  detail is now flagged as contested rather than confirmed.
 
 **Neutral**
 - One narrow, additive shared-client change (`NovaPoshtaClient.apiKey`, read-only) was needed after all
@@ -116,4 +144,4 @@ guarantee, not an oversight.
 
 - Spec: [[../spec.md]]
 - SAD: [[../sad.md]] §4
-- Related ADR: [[0001-compose-service-type-and-cargo-type-as-two-intersected-type-sets]], [[0002-per-ref-outcome-array-for-batch-delete]]
+- Related ADR: [[0001-compose-service-type-and-cargo-type-as-two-intersected-type-sets]], [[0002-per-ref-outcome-array-for-batch-delete]], [[0005-delete-is-single-ref-per-call-with-client-side-batch]]

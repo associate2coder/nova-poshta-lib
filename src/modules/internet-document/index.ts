@@ -1,5 +1,6 @@
 import { NovaPoshtaApiError, type NovaPoshtaClient } from "../../client.js";
 import type {
+  DeleteBatchInternetDocumentPayload,
   DeleteInternetDocumentPayload,
   DeletedInternetDocumentOutcome,
   DocumentDeliveryDateEstimate,
@@ -24,11 +25,19 @@ export interface InternetDocumentModule {
    * previous version.
    */
   update(payload: UpdateInternetDocumentPayload): Promise<SavedInternetDocument | undefined>;
-  delete(payload: DeleteInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome[]>;
+  /** ADR-0005: exactly one Ref per call — Nova Poshta's `delete` is not confirmed batch-capable
+   *  (see DeleteInternetDocumentPayload's doc comment). Use `deleteBatch` for more than one Ref. */
+  delete(payload: DeleteInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome>;
+  /** ADR-0005: this module's own sequential loop over `delete`, never a single server-side batch
+   *  call — resolves one outcome per submitted Ref, in submission order. */
+  deleteBatch(payload: DeleteBatchInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome[]>;
   getDocumentList(filters?: GetDocumentListFilters): Promise<WaybillListItem[]>;
   getDocumentPrice(payload: GetDocumentPricePayload): Promise<DocumentPriceEstimate>;
   getDocumentDeliveryDate(payload: GetDocumentDeliveryDatePayload): Promise<DocumentDeliveryDateEstimate>;
+  /** PROVISIONAL (see PrintLinkPayload's doc comment) — the URL this resolves to is live-verified
+   *  before returning, but the construction mechanism itself is contested across sources. */
   printDocument(payload: PrintLinkPayload): Promise<string>;
+  /** PROVISIONAL — see printDocument. */
   printMarkings(payload: PrintLinkPayload): Promise<string>;
 }
 
@@ -56,6 +65,20 @@ async function firstOrThrow<T>(
     );
   }
   return first;
+}
+
+/** ADR-0005: one Nova Poshta call per Ref. Since the response can only ever concern this one Ref,
+ *  no per-Ref message-attribution logic is needed (unlike the pre-ADR-0005 batch implementation) —
+ *  any warning/error on a reported-unremoved response is this Ref's own reason. */
+async function deleteOne(client: NovaPoshtaClient, ref: string): Promise<DeletedInternetDocumentOutcome> {
+  const envelope = await client.requestEnvelope<{ Ref: string }>("InternetDocument", "delete", {
+    DocumentRefs: [ref],
+  });
+  if (envelope.data.some((item) => item.Ref === ref)) {
+    return { Ref: ref, Removed: true };
+  }
+  const combinedMessages = [...envelope.warnings, ...envelope.errors];
+  return { Ref: ref, Removed: false, Reason: combinedMessages.join("; ") || "Not confirmed removed by Nova Poshta" };
 }
 
 const PRINT_BASE_URL = "https://my.novaposhta.ua/orders";
@@ -129,32 +152,16 @@ export function createInternetDocumentModule(client: NovaPoshtaClient): Internet
         "update",
         payload as unknown as Record<string, unknown>,
       ),
-    delete: async (payload: DeleteInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome[]> => {
-      // contracts/api-sync-report.md:94-99: the wire field is `DocumentRefs`, not `Documents` —
-      // `Documents` is only this module's public field name.
-      const envelope = await client.requestEnvelope<{ Ref: string }>("InternetDocument", "delete", {
-        DocumentRefs: payload.Documents,
-      });
-      const removedRefs = new Set(envelope.data.map((item) => item.Ref));
-      // AC-08: Nova Poshta's own reason, when it gives one. The confirmed-removed response shape
-      // carries only Ref per item (no per-item outcome field — see ADR-0002), so a rejected Ref's
-      // explanation can only come from the envelope's success-path warnings/errors, which aren't
-      // themselves keyed by Ref. Per rejected Ref, prefer whichever message actually names that
-      // Ref (N3); when nothing matches, fall back to every warning/error joined together rather
-      // than silently dropping errors whenever a warning is also present.
-      const combinedMessages = [...envelope.warnings, ...envelope.errors];
-      const fallbackReason = combinedMessages.join("; ") || undefined;
-      // Word-boundary match, not a plain substring: a Ref that's a textual prefix of another
-      // submitted Ref (e.g. "waybill-1" vs "waybill-10") must not match the longer Ref's message.
-      const namesRef = (message: string, ref: string): boolean =>
-        new RegExp(`(^|[^\\w-])${ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^\\w-]|$)`).test(message);
-      const reasonForRef = (ref: string): string | undefined =>
-        combinedMessages.find((message) => namesRef(message, ref)) ?? fallbackReason;
-      return payload.Documents.map((ref) =>
-        removedRefs.has(ref)
-          ? { Ref: ref, Removed: true }
-          : { Ref: ref, Removed: false, Reason: reasonForRef(ref) ?? "Not confirmed removed by Nova Poshta" },
-      );
+    delete: (payload: DeleteInternetDocumentPayload) => deleteOne(client, payload.Ref),
+    deleteBatch: async (payload: DeleteBatchInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome[]> => {
+      const outcomes: DeletedInternetDocumentOutcome[] = [];
+      // Sequential, not Promise.all: this module's own client-side loop over single-Ref calls
+      // (ADR-0005), not a server-side batch — sequential avoids bursting Nova Poshta's rate limit
+      // with N simultaneous requests for one logical batch.
+      for (const ref of payload.Documents) {
+        outcomes.push(await deleteOne(client, ref));
+      }
+      return outcomes;
     },
     getDocumentList: (filters?: GetDocumentListFilters) =>
       client.request<WaybillListItem>(

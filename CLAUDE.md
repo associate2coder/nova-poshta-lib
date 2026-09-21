@@ -28,6 +28,16 @@ on `NovaPoshtaClient.request()`, plus `src/types/<domain>.ts`, plus
 - **No persistence:** the library holds no state and no IDs of its own — it passes through
   whatever the Nova Poshta API returns (refs, waybill numbers).
 
+## API-contract sourcing policy
+
+External API fields may not become acceptance criteria solely because another generated artifact
+(a spec, a SAD, an ADR, a prior module's contract) says so. Before implementation, every request
+field and wire method must be traced directly to an authoritative source — Nova Poshta's own
+documentation — or, when that's unreachable, at least two independent third-party implementations
+that agree. The agent must quote or list the exact upstream struct/schema used for the decision,
+not just cite an SDK by name. Any discrepancy between sources blocks ship; a review may not PASS
+while unresolved API-contract questions remain open.
+
 ## Commands
 
 ```sh

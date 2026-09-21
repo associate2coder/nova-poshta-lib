@@ -1,17 +1,26 @@
 ---
-status: Accepted
+status: Superseded by 0005
 owner: "Architect"
 reviewers: ["Tech Lead"]
-updated_at: "2026-09-21"
+updated_at: "2026-09-22"
 feature_size: "M"
 ticket: ""
 ---
 
 # 0002 — Represent batch delete as a defensively reconciled per-Ref outcome array
 
-- **Status:** Accepted
+- **Status:** Superseded by [[0005-delete-is-single-ref-per-call-with-client-side-batch]]
 - **Date:** 2026-09-21
 - **Deciders:** User (project owner) + Architect (design session)
+
+**Superseded (2026-09-22):** the single-server-call batch premise this ADR was built on — Nova
+Poshta's `delete` genuinely accepting multiple Refs in one call — turned out to have no confirming
+source once the CLAUDE.md API-contract sourcing policy required actually checking: 3 of 4
+independent implementations type the wire field as accepting exactly one value. §8 OQ-5's own
+stated default ("downgrade to a simpler contract if the live API never actually returns a mixed
+result") is exactly what triggered. The per-Ref outcome shape (`{Ref, Removed, Reason?}`) and the
+`requestEnvelope()` addition below are both unaffected and remain in place — only the "one server
+call, multiple Refs" premise is retracted. See ADR-0005 for the replacement design.
 
 ## Context
 

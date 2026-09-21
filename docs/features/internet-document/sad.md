@@ -15,7 +15,43 @@ target_surfaces: []
 
 ## 1. Introduction and goals
 
-<!-- pending -->
+**Intent.** `internet-document` gives every consuming developer typed, discoverable access to all 8
+documented InternetDocument methods — waybill creation (`save`), full-replace `update`, single/batch
+`delete`, filterable `getDocumentList`, the two pre-creation calculators (`getDocumentPrice`,
+`getDocumentDeliveryDate`), and the two print-link methods (`printDocument`, `printMarkings`) — so a
+developer who has already resolved a sender Ref, a recipient Ref, and a location Ref through
+`counterparty`/`address` never has to hand-roll an untyped shipment-creation call (`spec.md` §2). It
+makes `internet-document` the authoritative, typed source of waybill `Ref`/`IntDocNumber` values that
+the roadmap's next two modules (`scan-sheet`, `additional-service`) will depend on, mirroring the role
+`address` and `counterparty` already play for their own Refs — and it is the first module in the
+library whose write payload must stay a discriminated union across **two** independent axes
+(`ServiceType` × `CargoType`, up to 16 combinations) rather than `counterparty`'s single axis
+(`CounterpartyType`, 3 variants).
+
+**Top-3 quality goals (1-liners; full scenarios in §10):**
+
+1. Type-safety — all 8 in-scope methods fully typed, zero `any` in public signatures, and the
+   `save`/`update` payload fails to compile if any field required by the chosen delivery-method/
+   cargo-type combination is missing, or if the payload mixes fields belonging to a different
+   combination (AC-02).
+2. Error-contract correctness — every declined, malformed, or network-failed call throws the same
+   `NovaPoshtaApiError`, including the batch-delete case where some waybills in the same call succeed
+   and others are rejected — that case is represented per-Ref, never collapsed into one boolean
+   (AC-07, AC-08).
+3. Print-link safety — the print methods are modeled as their own typed code path, distinct from every
+   other method in this library, never routed through the shared envelope-unwrap; and the security
+   risk of the credential-bearing link they return is documented explicitly, not left for a developer
+   to discover at runtime (AC-11, AC-12, AC-13, §6.1).
+
+**Stakeholders.**
+
+| Role | Interest | Sign-off owner? |
+|---|---|---|
+| Consuming developer | Calls the 8 typed methods to create, price, schedule, update, delete, list, and print waybills | No |
+| Tech Lead | SAD approval; owns the `spec.md` §8 open questions this design pass surfaces or inherits | Yes |
+| Security Lead | Reviews the module before release — new money-bearing fields and a credential-bearing return value (the print link) neither `address` nor `counterparty` carried (`spec.md` §6.1) | Yes |
+
+<!-- Decision overrides (¶4) — none raised during this design pass. -->
 
 ## 2. Constraints
 

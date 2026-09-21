@@ -55,10 +55,14 @@ const waybill = await internetDocument.save({
   RecipientAddress: "<recipient warehouse ref>",
 });
 
-// printDocument/printMarkings return a print-ready link that embeds your own API key —
-// treat it exactly like the key itself (never log, email, or render it on a public page).
-// This library performs no redaction, scoping, or expiry of that link.
-const printLink = await internetDocument.printDocument({ Documents: [waybill!.Ref] });
+// save() can resolve undefined when Nova Poshta reports success with no record (AC-05) — always
+// check before using the result, rather than asserting it's present.
+if (waybill) {
+  // printDocument/printMarkings return a print-ready link that embeds your own API key —
+  // treat it exactly like the key itself (never log, email, or render it on a public page).
+  // This library performs no redaction, scoping, or expiry of that link.
+  const printLink = await internetDocument.printDocument({ Documents: [waybill.Ref] });
+}
 ```
 
 > `common`, `address`, `counterparty`, and `internet-document` are the domain modules shipped so

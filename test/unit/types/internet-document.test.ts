@@ -101,11 +101,39 @@ describe("internet-document domain types (T1, AC-02)", () => {
       RecipientAddress: "recipient-warehouse-ref",
     };
 
+    // WarehouseDoors's recipient leg needs the door fields, not the warehouse-only
+    // RecipientAddress ref (AC-02: the recipient leg, not just the sender leg, must be
+    // discriminated by ServiceType).
+    const wrongRecipientLeg: SaveWarehouseToDoorsPayload = {
+      ...saveCommon,
+      ServiceType: "WarehouseDoors",
+      CargoType: "Parcel",
+      SenderAddress: "sender-warehouse-ref",
+      // @ts-expect-error — RecipientAddress belongs to the Warehouse recipient leg, not Doors.
+      RecipientAddress: "recipient-warehouse-ref",
+    };
+
+    // WarehouseWarehouse's recipient leg needs the warehouse-only RecipientAddress ref, not the
+    // door fields belonging to the Doors recipient leg.
+    const wrongRecipientLeg2: SaveWarehouseToWarehousePayload = {
+      ...saveCommon,
+      ServiceType: "WarehouseWarehouse",
+      CargoType: "Parcel",
+      SenderAddress: "sender-warehouse-ref",
+      // @ts-expect-error — RecipientCityName belongs to the Doors recipient leg, not Warehouse.
+      RecipientCityName: "Kyiv",
+      RecipientArea: "Kyivska",
+      RecipientAddressName: "Khreshchatyk",
+      RecipientHouse: "1",
+    };
+
     const union: SaveInternetDocumentPayload[] = [warehouseWarehouse, warehouseDoors, doorsWarehouse, doorsDoors];
 
     expect(union).toHaveLength(4);
     expect(wrongSenderLeg.ServiceType).toBe("DoorsWarehouse");
     expect(wrongSenderLeg2.ServiceType).toBe("WarehouseWarehouse");
+    expect(wrongRecipientLeg.ServiceType).toBe("WarehouseDoors");
+    expect(wrongRecipientLeg2.ServiceType).toBe("WarehouseWarehouse");
   });
 
   it("update: the sender leg is discriminated the same way as save (AC-02, AC-06)", () => {
@@ -169,10 +197,23 @@ describe("internet-document domain types (T1, AC-02)", () => {
       RecipientAddress: "recipient-warehouse-ref",
     };
 
+    // WarehouseDoors's update recipient leg needs the door fields, not the warehouse-only
+    // RecipientAddress ref.
+    const wrongRecipientLeg: UpdateWarehouseToDoorsPayload = {
+      ...saveCommon,
+      Ref: "waybill-1",
+      ServiceType: "WarehouseDoors",
+      CargoType: "Parcel",
+      SenderAddress: "sender-warehouse-ref",
+      // @ts-expect-error — RecipientAddress belongs to the Warehouse recipient leg, not Doors.
+      RecipientAddress: "recipient-warehouse-ref",
+    };
+
     expect(warehouseWarehouse.Ref).toBe("waybill-1");
     expect(doorsWarehouse.SenderHouse).toBe("1");
     expect(warehouseDoors.RecipientHouse).toBe("1");
     expect(doorsDoors.SenderCityName).toBe("Lviv");
     expect(wrongSenderLeg.ServiceType).toBe("DoorsWarehouse");
+    expect(wrongRecipientLeg.ServiceType).toBe("WarehouseDoors");
   });
 });

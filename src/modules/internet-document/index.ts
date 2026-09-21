@@ -18,9 +18,10 @@ export interface InternetDocumentModule {
   save(payload: SaveInternetDocumentPayload): Promise<SavedInternetDocument | undefined>;
   /**
    * Full-replace (AC-06): every field the chosen ServiceType leg's Save payload declares is
-   * mandatory here, except BackwardDeliveryData, which stays optional by design — omitting it is
-   * how a caller clears a previously-set cash-on-delivery instruction; it is never carried forward
-   * from a previous version.
+   * mandatory here, except the fields that Save payload itself already declares optional
+   * (BackwardDeliveryData, and — for a Doors-ending leg — SenderFlat/RecipientFlat): each of these
+   * stays optional by design, and omitting it clears it — it is never carried forward from a
+   * previous version.
    */
   update(payload: UpdateInternetDocumentPayload): Promise<SavedInternetDocument | undefined>;
   delete(payload: DeleteInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome[]>;

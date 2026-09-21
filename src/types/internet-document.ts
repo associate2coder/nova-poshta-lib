@@ -89,13 +89,14 @@ export interface SavedInternetDocument {
   TypeDocument: string;
 }
 
-/** AC-06: full-replace — every field the chosen combination's Save payload declares becomes
- *  mandatory here, except BackwardDeliveryData, which stays optional by design: omitting it (or
- *  passing it as undefined) is how a caller clears a previously-set cash-on-delivery instruction —
- *  it is never carried forward from a previous version. Hand-written per ServiceType leg, mirroring
+/** AC-06: full-replace — every field the chosen ServiceType leg's Save payload declares becomes
+ *  mandatory here, except the fields that Save payload itself already declares optional
+ *  (BackwardDeliveryData, and — for a Doors-ending leg — SenderFlat/RecipientFlat): each of these
+ *  stays optional by design, and omitting it (or passing it as undefined) clears it — it is never
+ *  carried forward from a previous version. Hand-written per ServiceType leg, mirroring
  *  `counterparty` ADR-0001's explicit-variants precedent, rather than a generic `Required<union>`
- *  wrapper (which would force BackwardDeliveryData mandatory too and make AC-06's "omit to clear"
- *  case impossible to express). */
+ *  wrapper (which would force every optional field, including BackwardDeliveryData, mandatory too
+ *  and make AC-06's "omit to clear" case impossible to express). */
 interface UpdateCommonFields {
   PayerType: PayerType;
   PaymentMethod: PaymentMethod;

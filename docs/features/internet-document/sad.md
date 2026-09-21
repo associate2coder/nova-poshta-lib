@@ -159,8 +159,9 @@ had: 2 of its 8 methods (the print methods) don't get a JSON envelope back at al
    `spec.md` §8 OQ-2's carried-forward default).
 7. **`save`/`update` payload: two independent hand-written type-sets (`ServiceType` × `CargoType`)
    composed by TypeScript into all valid combinations — ADR-0001.** 4 hand-written `ServiceType`
-   variants (each requiring the location fields its leg needs) and ~4–5 hand-written `CargoType`
-   variants (each requiring its own cargo-detail fields) are written once each, then intersected so
+   variants (each requiring the location fields its leg needs) and 4 hand-written `CargoType`
+   variants (parcel, cargo, documents, pallet — each requiring its own cargo-detail fields) are
+   written once each, then intersected so
    TypeScript itself produces every valid delivery-method/cargo-type combination — never 16 fully
    duplicated interfaces, and never one generic distributive-conditional formula (the style
    `counterparty` ADR-0001 already rejected, at a much smaller scale, for readability). Closes
@@ -171,12 +172,12 @@ had: 2 of its 8 methods (the print methods) don't get a JSON envelope back at al
    against whichever Refs Nova Poshta's own response actually confirms removed, so a Ref silently
    missing from that response still surfaces as "not removed" rather than vanishing (AC-07, AC-08).
    This is a deliberate, spec-mandated break from the `T | undefined` shape every other write method in
-   this library uses (`spec.md` §8 OQ-4's own stated default: "build defensively"). See ADR-0002.
+   this library uses (`spec.md` §8 OQ-5's own stated default: "build defensively"). See ADR-0002.
 9. **Print methods (`printDocument`/`printMarkings`): construct the link, then verify it with one real
    network check, entirely inside this module — ADR-0003.** Both methods build the print URL per Nova
    Poshta's documented pattern (embedding the caller's own `apiKey` and the submitted Refs), then issue
    one HTTP check against that exact URL — never through `NovaPoshtaClient.request()`'s JSON-envelope
-   unwrap (§1 decision override) — so an invalid Ref or an unmaterialized document surfaces as
+   unwrap (`spec.md` §1 decision override) — so an invalid Ref or an unmaterialized document surfaces as
    `NovaPoshtaApiError` at call time (AC-11, AC-12), not as a broken page discovered later. Implemented
    entirely within this module's own files, per `spec.md` §3's non-goal against changing the shared
    core client. The exact wire shape remains unconfirmed against Nova Poshta's official docs
@@ -369,7 +370,7 @@ the three structurally distinct shapes.*
 |---|---|---|
 | Logging | None — the library emits no logs of its own | — (repo default, undocumented) |
 | Authentication | Caller-supplied `apiKey`, unchanged by this feature — including the print sub-flow, which embeds the same `apiKey` directly into the returned URL rather than authenticating a separate way | `architecture-map.md`; §4 decision 9, ADR-0003 |
-| Error handling | Single `NovaPoshtaApiError` for all 8 methods, including the two print methods via their own verification check (ADR-0003) — no subclassing, no per-method error type | `src/client.ts`; `common` ADR-0001; `spec.md` §6.1 |
+| Error handling | Single `NovaPoshtaApiError` for all 8 methods, including the two print methods via their own verification check (ADR-0003) — no subclassing, no per-method error type | `src/client.ts`; `CLAUDE.md`; `spec.md` §6.1 |
 | Write-return shape (save/update) | `T \| undefined` when a successful write's data is empty | `address` ADR-0001 (reused unchanged) |
 | Write-return shape (delete) | A per-Ref outcome array, never `T \| undefined` — the one deliberate divergence from every other write method in this library | `internet-document` ADR-0002 |
 | Discriminated-type modeling | Two intersected type-sets (`ServiceType` × `CargoType`), composed by TypeScript into all valid combinations — a new pattern, distinct from `counterparty`'s single-axis three-hand-written-types approach | `internet-document` ADR-0001 |
@@ -435,11 +436,14 @@ Each top-3 goal from §1 expanded into a full scenario:
   `fetch` mocked to fail (`spec.md` §6 row "Error-contract coverage", which the print methods share);
   a documentation check (doc comment / README section covering AC-13) reviewed at `sdd:ship`.
 
-Two further `spec.md` §6 NFR rows apply library-wide, not to one specific quality goal above, and are
+Three further `spec.md` §6 NFR rows apply library-wide, not to one specific quality goal above, and are
 still binding: **Library-added overhead per call** (median ≤5ms across all 8 methods, `fetch` stubbed
-to near-zero latency, benchmarked in `test/unit/modules/internet-document`) and **Method-surface /
-published-build completeness** (all 8 methods present, typed, and importable from both the built ESM
-and CJS output — AC-19, verified by a post-build CI step).
+to near-zero latency, benchmarked in `test/unit/modules/internet-document`); **Method-surface
+completeness** (all 8 methods enumerated in §1 have a corresponding typed method, verified by a manual
+audit against the three cross-checked community SDKs before release); and **Published-build
+type-surface check** (all 8 methods importable and typed from the *built* ESM and CJS output, not just
+the source — AC-19, verified by an automated post-build CI step that imports the built package in both
+module formats and type-checks the method surface).
 
 ## 11. Risks and technical debt
 
@@ -448,8 +452,8 @@ and CJS output — AC-19, verified by a post-build CI step).
 | Security review required before release — new money-bearing fields and a credential-bearing return value (the print link) neither `address` nor `counterparty` carried (`spec.md` §6.1) | High | Schedule and complete a security review before `sdd:ship internet-document`; not performed in this design session | Security Lead |
 | Open architectural decision: re-verify the 8-method InternetDocument surface, the full `save`/`update` field shape per combination, whether the print-link methods' URL genuinely embeds the caller's API key, whether print genuinely returns one combined link per call, the print request/response format (copies, label size, PDF vs HTML), and how a caller can tell a print request failed — all currently inferred from three cross-checked community SDKs, not Nova Poshta's official docs (portal still blocks automated fetches) | Open question | Resolve before next release (`sdd:ship internet-document`); ADR-0003's construct-then-verify mechanism is built on this same unconfirmed assumption set (`spec.md` §8 OQ-1) | Tech Lead |
 | Should the shared core client be extended to expose Nova Poshta's pagination metadata (`totalCount`) and success-path warnings? `address` and `counterparty` both deferred this; carried forward unchanged here (§4 decision 6) — `getDocumentList` is the same kind of growing, transactional list `getCounterparties` already is | Open question | Resolve before `sdd:design` of any future module whose lookups depend on complete, multi-page results (`spec.md` §8 OQ-2) | Tech Lead |
-| Whether `delete`'s per-Ref outcome (AC-08) is genuinely distinguishable in Nova Poshta's live response, or whether the "mixed batch result" risk is purely theoretical for this endpoint. **Status at this design review:** the gate this open question flagged was reached in this pass and resolved via the spec's own stated default — ADR-0002's defensive reconciliation, which holds up either way — but the underlying live-API confirmation itself is still outstanding | Open question | Resolve before `sdd:ship internet-document` (re-scoped from the original pre-design due date, mirroring how `counterparty`'s equivalent OQ-2 was handled) — downgrade ADR-0002's reconciliation logic if the live API never actually returns a mixed result (`spec.md` §8 OQ-4) | Tech Lead |
-| Should the print-link methods' return type carry a stronger developer-facing warning (a distinct wrapper type, a lint-enforced doc comment) about the embedded-credential risk (AC-13), beyond the doc comment ADR-0003/QG-3 already commit to? | Open question | Resolve before `sdd:ship internet-document`; default for now is document only, no code-level warning mechanism (`spec.md` §8 OQ-3) | Tech Lead |
+| Whether `delete`'s per-Ref outcome (AC-08) is genuinely distinguishable in Nova Poshta's live response, or whether the "mixed batch result" risk is purely theoretical for this endpoint. **Status at this design review:** the gate this open question flagged was reached in this pass and resolved via the spec's own stated default — ADR-0002's defensive reconciliation, which holds up either way — but the underlying live-API confirmation itself is still outstanding | Open question | Resolve before `sdd:ship internet-document` (re-scoped from the original pre-design due date, mirroring how `counterparty`'s equivalent OQ-2 was handled) — downgrade ADR-0002's reconciliation logic if the live API never actually returns a mixed result (`spec.md` §8 OQ-5) | Tech Lead |
+| Should the print-link methods' return type carry a stronger developer-facing warning (a distinct wrapper type, a lint-enforced doc comment) about the embedded-credential risk (AC-13), beyond the doc comment ADR-0003/QG-3 already commit to? | Open question | Resolve before `sdd:ship internet-document`; default for now is document only, no code-level warning mechanism (`spec.md` §8 OQ-4) | Tech Lead |
 | Cross-account write/list-decline behavior (AC-15) is trusted from community-sourced docs, not confirmed against a live API response (`spec.md` §6.1, same unresolved category as the OQ-1 row above) | Medium | Unit tests confirm the library surfaces whatever decline Nova Poshta sends back (mocked), not that Nova Poshta's own enforcement holds in production; the security review above should confirm this against a live call before sign-off | Security Lead |
 | The print methods' construct-then-verify mechanism (ADR-0003) makes two real network round-trips per call instead of one, unlike every other method in this library — real-world latency for `printDocument`/`printMarkings` will be measurably higher than the rest of the surface, even though the ≤5ms NFR (measured with `fetch` stubbed to near-zero latency) still technically passes | Low | Document the two-round-trip behavior for print methods specifically in the public API docs, so a developer doesn't assume uniform latency across all 8 methods | Tech Lead |
 

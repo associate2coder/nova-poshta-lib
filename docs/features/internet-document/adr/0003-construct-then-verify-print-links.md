@@ -46,7 +46,11 @@ automated fetch attempted while drafting both the spec and this design.
    `spec.md` §1 use), performs one request against it, and only returns the URL string if that request
    succeeds; otherwise it raises `NovaPoshtaApiError`.
 2. **Construct the link only, with no verification.** The method builds and returns the URL string by
-   interpolating the caller's `apiKey` and the submitted Refs, making no network call of its own.
+   interpolating the caller's `apiKey` and the submitted Refs, making no network call of its own. This
+   mirrors how print-link helpers are commonly implemented in the community SDKs `spec.md` §1
+   cross-checked — a real, precedent-following choice a developer reaching for the "obvious" approach
+   would land on, not an invented strawman — which is exactly why it has to be explicitly rejected here
+   rather than silently assumed sufficient.
 
 ## Decision outcome
 

@@ -37,6 +37,21 @@ verification — reverted to `GET` (T5), the README's remaining unguarded `count
 and a missing `NovaPoshtaSuccessEnvelope` export (T6). See `_review/review-2026-09-21-02.md` for the
 full findings table.
 
+## Post-re-review follow-ups (`/sdd:review` 2026-09-22, seventh pass)
+
+5 findings resolved via `/sdd:implement` (no new task IDs): `build-surface.test.ts` only detected a
+*missing* `dist/`, never a *stale* one (T8); AC-02's negative type tests never typed a payload
+against `InternetDocumentModule["save"/"update"]`'s own call-site parameter, only named variant
+types (T7); `sad.md` §9 still listed ADR-0001 as "Accepted" when the ADR's own file says
+`Superseded` (T1); `sad.md` flow 3 didn't show the empty-`Documents` pre-fetch throw the code and a
+test already cover (T5); no `.changeset/` entry existed for this feature (release gate). Also, per
+explicit instruction, re-consulted Nova Poshta's official documentation: `developers.novaposhta.ua`
+remains blocked (403), but a different official domain, `devcenter.novaposhta.ua`, corroborated
+(via a search-engine cache — direct fetch fails on a broken TLS handshake) the print link's `apiKey`
+embedding and single-combined-link behavior from a primary source for the first time, narrowing
+`spec.md` §8 OQ-1. This round's verdict is **PASS**, all findings doc/test-robustness/release-process
+only — no shipped behavior changed. See `_review/review-2026-09-22.md` for the full findings table.
+
 ## Post-re-review follow-ups (`/sdd:review` 2026-09-21, third pass)
 
 8 findings resolved via `/sdd:implement` (no new task IDs): a likely production-breaking `delete()`

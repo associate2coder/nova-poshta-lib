@@ -265,7 +265,97 @@ never a live cross-module call (AC-18, §8).*
 
 ## 6. Runtime view
 
-<!-- pending -->
+**Critical flow 1: save or update a waybill — happy path + every error branch**
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant IDoc as internet-document module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>IDoc: save(payload) | update(payload)
+    IDoc->>Client: request("InternetDocument", calledMethod, payload)
+    Client->>NP: HTTPS POST (apiKey, modelName, calledMethod, methodProperties)
+
+    alt network/transport failure (AC-16)
+        NP--xClient: timeout / dropped connection / non-JSON body
+        Client-->>IDoc: throws NovaPoshtaApiError
+        IDoc-->>Dev: propagates NovaPoshtaApiError
+    else declined — invalid Ref, missing field, business-rule rejection, or bad key (AC-14 / AC-15)
+        NP-->>Client: success:false, error
+        Client-->>IDoc: throws NovaPoshtaApiError (Nova Poshta's message passed through)
+        IDoc-->>Dev: propagates NovaPoshtaApiError
+    else success but data is empty (AC-05)
+        NP-->>Client: success:true, data: []
+        Client-->>IDoc: typed [] (array-shape check passes — empty is still array-shaped)
+        IDoc-->>Dev: undefined (address ADR-0001, reused unchanged) — a valid success, not an error
+    else happy path (AC-01 / AC-06)
+        NP-->>Client: success:true, data: [savedWaybill]
+        Client-->>IDoc: typed [savedWaybill]
+        IDoc-->>Dev: the saved/updated waybill, incl. its own Ref and IntDocNumber
+    end
+```
+
+**Critical flow 2: batch delete — per-Ref outcome reconciliation**
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant IDoc as internet-document module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>IDoc: delete({ Documents: [Ref1, Ref2, ...] })
+    IDoc->>Client: request("InternetDocument", "delete", { Documents })
+    Client->>NP: HTTPS POST (apiKey, Documents)
+
+    alt full network/malformed-response failure (AC-14 / AC-16)
+        NP--xClient: timeout / non-JSON body / not array-shaped
+        Client-->>IDoc: throws NovaPoshtaApiError
+        IDoc-->>Dev: propagates NovaPoshtaApiError
+    else call-level decline — bad key (AC-15)
+        NP-->>Client: success:false, error
+        Client-->>IDoc: throws NovaPoshtaApiError
+        IDoc-->>Dev: propagates NovaPoshtaApiError
+    else success — full or partial (AC-07 / AC-08)
+        NP-->>Client: success:true, data: [confirmed removals...]
+        Client-->>IDoc: typed confirmed-removal records
+        IDoc->>IDoc: reconcile submitted Refs against confirmed removals (ADR-0002)
+        IDoc-->>Dev: one outcome entry per submitted Ref — Removed:true for each confirmed, Removed:false + Reason for each not found in the response
+    end
+```
+
+**Critical flow 3: print-ready link — construct, then verify**
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant IDoc as internet-document module
+    participant NP as Nova Poshta API
+
+    Dev->>IDoc: printDocument(Refs) | printMarkings(Refs)
+    IDoc->>IDoc: build the print URL — embeds the caller's apiKey + submitted Refs (ADR-0003)
+    IDoc->>NP: direct fetch against that URL — bypasses the core client entirely (AC-11 / AC-12)
+
+    alt verification fails — invalid Ref, document not yet materialized, network failure (AC-11 / AC-12 / AC-16)
+        NP--xIDoc: non-ok response / timeout
+        IDoc-->>Dev: throws NovaPoshtaApiError
+    else verification succeeds
+        NP-->>IDoc: ok response
+        IDoc-->>Dev: the print-ready URL string (AC-11 / AC-12) — documented as credential-bearing (AC-13, §6.1)
+    end
+```
+
+*Flow 1 covers `save`/`update` (AC-01, AC-05, AC-06) — the discriminated payload guard (AC-02) is a
+compile-time concern, not a runtime branch (§4 decision 7, `src/types/internet-document.ts`). Flow 2
+covers `delete`'s batch-capable, per-Ref-reconciled result (AC-07, AC-08, ADR-0002) — the one flow in
+this module whose shape has no equivalent in `address`/`counterparty`. Flow 3 covers `printDocument`/
+`printMarkings` (AC-11, AC-12, AC-13, ADR-0003) — the only flow in this entire library that never
+touches the shared core client. `getDocumentList`/`getDocumentPrice`/`getDocumentDeliveryDate`
+(AC-03, AC-04, AC-09, AC-10) share Flow 1's exact shape (a read/calculation instead of a write) and are
+not redrawn separately — the `sequences` stage covers every §5 AC individually; this design pass seeds
+the three structurally distinct shapes.*
 
 ## 7. Deployment view
 

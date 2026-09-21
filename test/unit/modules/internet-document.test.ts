@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createClient, NovaPoshtaApiError } from "../../../src/index.js";
 import { createInternetDocumentModule } from "../../../src/modules/internet-document/index.js";
+import type { InternetDocumentModule } from "../../../src/modules/internet-document/index.js";
 import type { SaveInternetDocumentPayload, UpdateInternetDocumentPayload } from "../../../src/types/internet-document.js";
 
 function mockFetchOnce(handler: (body: unknown) => { ok: boolean; status?: number; json: () => Promise<unknown> }) {
@@ -312,5 +313,199 @@ describe("internet-document module — printDocument/printMarkings (T5, AC-11/AC
     const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
 
     await expect(internetDocument.printMarkings({ Documents: ["waybill-1"] })).rejects.toThrow(NovaPoshtaApiError);
+  });
+});
+
+const validPricePayload = {
+  CitySender: "city-sender-1",
+  CityRecipient: "city-recipient-1",
+  Weight: 1,
+  ServiceType: "WarehouseWarehouse",
+  CargoType: "Parcel",
+  Cost: 500,
+  SeatsAmount: 1,
+} as const;
+
+const validDeliveryDatePayload = {
+  DateTime: "21.09.2026",
+  ServiceType: "WarehouseWarehouse",
+  CitySender: "city-sender-1",
+  CityRecipient: "city-recipient-1",
+} as const;
+
+// The 6 JSON-enveloped methods (save/update/delete/getDocumentList/getDocumentPrice/
+// getDocumentDeliveryDate) all share client.request()'s single error-mapping path — exercised once
+// per method here rather than duplicated per-AC block above.
+const enveloped: [string, (m: InternetDocumentModule) => Promise<unknown>][] = [
+  ["save", (m) => m.save(validSavePayload)],
+  ["update", (m) => m.update(validUpdatePayload)],
+  ["delete", (m) => m.delete({ Documents: ["waybill-1"] })],
+  ["getDocumentList", (m) => m.getDocumentList()],
+  ["getDocumentPrice", (m) => m.getDocumentPrice(validPricePayload)],
+  ["getDocumentDeliveryDate", (m) => m.getDocumentDeliveryDate(validDeliveryDatePayload)],
+];
+
+describe("internet-document module — shared error contract across all 8 methods (T7, AC-14/AC-15/AC-16)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each(enveloped)("%s throws NovaPoshtaApiError when Nova Poshta declines the request (AC-14)", async (_name, invoke) => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () =>
+        Promise.resolve({ success: false, data: [], errors: ["Invalid Ref"], errorCodes: ["400"], warnings: [] }),
+    }));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    const err = await invoke(internetDocument).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Invalid Ref"]);
+  });
+
+  it.each(enveloped)("%s throws NovaPoshtaApiError when success is true but data isn't array-shaped (AC-14)", async (_name, invoke) => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () => Promise.resolve({ success: true, data: { not: "a list" }, errors: [], warnings: [] }),
+    }));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(invoke(internetDocument)).rejects.toThrow(NovaPoshtaApiError);
+  });
+
+  it.each(enveloped)("%s throws NovaPoshtaApiError with Nova Poshta's message on an authorization denial (AC-15)", async (_name, invoke) => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () =>
+        Promise.resolve({ success: false, data: [], errors: ["Invalid API key"], errorCodes: ["401"], warnings: [] }),
+    }));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    const err = await invoke(internetDocument).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Invalid API key"]);
+  });
+
+  it.each(enveloped)("%s throws NovaPoshtaApiError (not a raw error) on a network/transport failure (AC-16)", async (_name, invoke) => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(invoke(internetDocument)).rejects.toThrow(NovaPoshtaApiError);
+  });
+
+  it.each(enveloped)("%s throws NovaPoshtaApiError (not a raw error) when the response body isn't valid JSON (AC-16)", async (_name, invoke) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: () => Promise.reject(new SyntaxError("Unexpected token")) }),
+    );
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(invoke(internetDocument)).rejects.toThrow(NovaPoshtaApiError);
+  });
+
+  it("getDocumentPrice throws NovaPoshtaApiError when Nova Poshta reports success but returns no estimate (AC-14)", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(internetDocument.getDocumentPrice(validPricePayload)).rejects.toThrow(NovaPoshtaApiError);
+  });
+
+  it("getDocumentDeliveryDate throws NovaPoshtaApiError when Nova Poshta reports success but returns no estimate (AC-14)", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(internetDocument.getDocumentDeliveryDate(validDeliveryDatePayload)).rejects.toThrow(
+      NovaPoshtaApiError,
+    );
+  });
+});
+
+describe("internet-document module — authoritative Ref source, no caching (T7, AC-17)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("save issues an independent request every call — the returned Ref/IntDocNumber is exactly Nova Poshta's response, never invented or cached", async () => {
+    let callCount = 0;
+    const fetchMock = vi.fn(async () => {
+      callCount += 1;
+      return successEnvelope([{ ...savedWaybill, Ref: `waybill-${callCount}`, IntDocNumber: `2045000000000${callCount}` }]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    const first = await internetDocument.save(validSavePayload);
+    const second = await internetDocument.save(validSavePayload);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(first?.Ref).toBe("waybill-1");
+    expect(second?.Ref).toBe("waybill-2");
+  });
+});
+
+describe("internet-document module — no local Ref validation (T7, AC-18)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("a syntactically-arbitrary Ref string reaches the outgoing delete request unchanged — no local validity/ownership check", async () => {
+    const arbitraryRef = "not-a-real-uuid-!@#$%";
+    const fetchMock = mockFetchOnce(() => successEnvelope([{ Ref: arbitraryRef }]));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await internetDocument.delete({ Documents: [arbitraryRef] });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.methodProperties.Documents).toEqual([arbitraryRef]);
+  });
+
+  it("only Nova Poshta's own decline rejects an out-of-scope Ref — the library performs no check of its own before sending", async () => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () =>
+        Promise.resolve({ success: false, data: [], errors: ["Ref does not belong to caller"], errorCodes: ["403"], warnings: [] }),
+    }));
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(internetDocument.delete({ Documents: ["someone-elses-waybill"] })).rejects.toThrow(
+      NovaPoshtaApiError,
+    );
+  });
+});
+
+describe("internet-document module — overhead benchmark across all 8 methods (T7, spec §6 NFR row 4)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const benchmarked: [string, (m: InternetDocumentModule) => Promise<unknown>][] = [
+    ...enveloped,
+    ["printDocument", (m) => m.printDocument({ Documents: ["waybill-1"] })],
+    ["printMarkings", (m) => m.printMarkings({ Documents: ["waybill-1"] })],
+  ];
+
+  it.each(benchmarked)("%s median library-added overhead is <=5ms across >=30 stubbed calls", async (_name, invoke) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.startsWith("https://my.novaposhta.ua/")) {
+          return { ok: true, status: 200 };
+        }
+        return successEnvelope([savedWaybill]);
+      }),
+    );
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    const samples: number[] = [];
+    const runs = 30;
+    for (let i = 0; i < runs; i++) {
+      const start = performance.now();
+      await invoke(internetDocument);
+      samples.push(performance.now() - start);
+    }
+
+    samples.sort((a, b) => a - b);
+    const median = samples[Math.floor(runs / 2)];
+    expect(median).toBeLessThanOrEqual(5);
   });
 });

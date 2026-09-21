@@ -69,6 +69,12 @@ confirmed present as a documented property on the PHP SDK's `InternetDocument` c
 cross-checked source beyond `PayerType`/`RedeliveryString`/`Amount` naming convention shared with
 `GetDocumentPriceReq.RedeliveryCalculate` — flagged `medium` in `api-sync-report.md`.*
 
+*Package-root re-export names differ from the module-local names above: `common` already owns the
+bare `ServiceType`/`CargoType`/`PayerType` names at the package root (its own fixed literal sets), so
+`src/index.ts` re-exports this module's versions aliased as `InternetDocumentServiceType`/
+`InternetDocumentCargoType`/`InternetDocumentPayerType`. `PaymentMethod` and `BackwardDeliveryData`
+are unaliased — `common` has no colliding export for either.*
+
 ## 3. Methods
 
 One typed method per §1 in-scope InternetDocument method (8, per `spec.md` §1 / `sad.md` §5).

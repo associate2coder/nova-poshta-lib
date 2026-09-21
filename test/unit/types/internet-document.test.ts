@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { InternetDocumentModule } from "../../../src/modules/internet-document/index.js";
 import type {
   SaveDoorsToDoorsPayload,
   SaveDoorsToWarehousePayload,
@@ -10,6 +11,15 @@ import type {
   UpdateWarehouseToDoorsPayload,
   UpdateWarehouseToWarehousePayload,
 } from "../../../src/types/internet-document.js";
+
+// F2 (round-7 review, 2026-09-22): every case above types a payload against a *named* variant
+// (SaveDoorsToWarehousePayload, etc.), never against what InternetDocumentModule["save"]/["update"]
+// actually accept. Deriving the argument type from the interface itself, instead of from
+// SaveInternetDocumentPayload directly, means a future loosening of the module's own public
+// signature (spec.md §6 "Save/update discriminant guard" NFR: "100% of calls to save/update fail to
+// compile...") breaks this test even if SaveInternetDocumentPayload itself is untouched.
+type SaveCallArgument = Parameters<InternetDocumentModule["save"]>[0];
+type UpdateCallArgument = Parameters<InternetDocumentModule["update"]>[0];
 
 const saveCommon = {
   PayerType: "Sender",
@@ -149,6 +159,39 @@ describe("internet-document domain types (T1, AC-02)", () => {
     expect(missingRequiredField.ServiceType).toBe("WarehouseWarehouse");
   });
 
+  it("save: the discriminant guard holds at InternetDocumentModule's actual call-site type, not just the named payload types (AC-02, F2)", () => {
+    const valid: SaveCallArgument = {
+      ...saveCommon,
+      ServiceType: "WarehouseWarehouse",
+      CargoType: "Parcel",
+      SenderAddress: "sender-warehouse-ref",
+      RecipientAddress: "recipient-warehouse-ref",
+    };
+
+    const mixedLegs: SaveCallArgument = {
+      ...saveCommon,
+      ServiceType: "DoorsWarehouse",
+      CargoType: "Parcel",
+      // @ts-expect-error — SenderAddress belongs to the Warehouse sender leg, not Doors, even when
+      // typed as InternetDocumentModule["save"]'s own parameter rather than a named variant.
+      SenderAddress: "sender-warehouse-ref",
+      RecipientAddress: "recipient-warehouse-ref",
+    };
+
+    // @ts-expect-error — RecipientAddress is required for WarehouseWarehouse and was omitted, at
+    // the same call-site type.
+    const missingField: SaveCallArgument = {
+      ...saveCommon,
+      ServiceType: "WarehouseWarehouse",
+      CargoType: "Parcel",
+      SenderAddress: "sender-warehouse-ref",
+    };
+
+    expect(valid.ServiceType).toBe("WarehouseWarehouse");
+    expect(mixedLegs.ServiceType).toBe("DoorsWarehouse");
+    expect(missingField.ServiceType).toBe("WarehouseWarehouse");
+  });
+
   it("update: the sender leg is discriminated the same way as save (AC-02, AC-06)", () => {
     const warehouseWarehouse: UpdateWarehouseToWarehousePayload = {
       ...saveCommon,
@@ -228,5 +271,30 @@ describe("internet-document domain types (T1, AC-02)", () => {
     expect(doorsDoors.SenderCityName).toBe("Lviv");
     expect(wrongSenderLeg.ServiceType).toBe("DoorsWarehouse");
     expect(wrongRecipientLeg.ServiceType).toBe("WarehouseDoors");
+  });
+
+  it("update: the discriminant guard holds at InternetDocumentModule's actual call-site type, not just the named payload types (AC-02, F2)", () => {
+    const valid: UpdateCallArgument = {
+      ...saveCommon,
+      Ref: "waybill-1",
+      ServiceType: "WarehouseWarehouse",
+      CargoType: "Parcel",
+      SenderAddress: "sender-warehouse-ref",
+      RecipientAddress: "recipient-warehouse-ref",
+    };
+
+    const mixedLegs: UpdateCallArgument = {
+      ...saveCommon,
+      Ref: "waybill-1",
+      ServiceType: "WarehouseDoors",
+      CargoType: "Parcel",
+      SenderAddress: "sender-warehouse-ref",
+      // @ts-expect-error — RecipientAddress belongs to the Warehouse recipient leg, not Doors, even
+      // when typed as InternetDocumentModule["update"]'s own parameter rather than a named variant.
+      RecipientAddress: "recipient-warehouse-ref",
+    };
+
+    expect(valid.ServiceType).toBe("WarehouseWarehouse");
+    expect(mixedLegs.ServiceType).toBe("WarehouseDoors");
   });
 });

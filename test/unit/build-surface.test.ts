@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -91,17 +91,49 @@ function resolvedTypesPaths(): { esm: string; cjs: string } {
 
 const { esm: ESM_TYPES_PATH, cjs: CJS_TYPES_PATH } = resolvedTypesPaths();
 
+// F1 (round-7 review, 2026-09-22): "the file exists" alone doesn't prove the file reflects the
+// current source — a declaration built 5 commits ago still passes a missing-file check. Computed
+// once, at load time, from every file under src/; each test below fails loudly if the resolved
+// declaration predates it, rather than silently asserting against stale output.
+function newestSourceMtimeMs(): number {
+  let newest = 0;
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) walk(full);
+      else newest = Math.max(newest, statSync(full).mtimeMs);
+    }
+  };
+  walk(declarationPath("src"));
+  return newest;
+}
+
+const NEWEST_SOURCE_MTIME_MS = newestSourceMtimeMs();
+
+function readFreshDeclaration(relativePath: string): string {
+  const absolutePath = declarationPath(relativePath);
+  let contents: string;
+  let mtimeMs: number;
+  try {
+    contents = readFileSync(absolutePath, "utf8");
+    mtimeMs = statSync(absolutePath).mtimeMs;
+  } catch {
+    throw new Error(`${relativePath} is missing — run "npm run build" before this test`);
+  }
+  if (mtimeMs < NEWEST_SOURCE_MTIME_MS) {
+    throw new Error(
+      `${relativePath} is stale (older than the newest file under src/) — run "npm run build" before this test`,
+    );
+  }
+  return contents;
+}
+
 describe("published build surface (AC-07)", () => {
   it.each([
     [ESM_TYPES_PATH, "ESM"],
     [CJS_TYPES_PATH, "CJS"],
   ])("%s (%s) declares createCommonModule and all 15 reference-list methods as distinct identifiers", (relativePath) => {
-    let contents: string;
-    try {
-      contents = readFileSync(declarationPath(relativePath), "utf8");
-    } catch {
-      throw new Error(`${relativePath} is missing — run "npm run build" before this test`);
-    }
+    const contents = readFreshDeclaration(relativePath);
 
     expect(contents).toMatch(/\bcreateCommonModule\b/);
     for (const method of METHOD_NAMES) {
@@ -118,12 +150,7 @@ describe("published build surface (AC-07)", () => {
     [ESM_TYPES_PATH, "ESM"],
     [CJS_TYPES_PATH, "CJS"],
   ])("%s (%s) declares createAddressModule and all 12 address identifiers (AC-13)", (relativePath) => {
-    let contents: string;
-    try {
-      contents = readFileSync(declarationPath(relativePath), "utf8");
-    } catch {
-      throw new Error(`${relativePath} is missing — run "npm run build" before this test`);
-    }
+    const contents = readFreshDeclaration(relativePath);
 
     expect(contents).toMatch(/\bcreateAddressModule\b/);
     for (const method of ADDRESS_METHOD_NAMES) {
@@ -139,12 +166,7 @@ describe("published build surface (AC-07)", () => {
     [ESM_TYPES_PATH, "ESM"],
     [CJS_TYPES_PATH, "CJS"],
   ])("%s (%s) declares createCounterpartyModule and all 12 counterparty identifiers (AC-17)", (relativePath) => {
-    let contents: string;
-    try {
-      contents = readFileSync(declarationPath(relativePath), "utf8");
-    } catch {
-      throw new Error(`${relativePath} is missing — run "npm run build" before this test`);
-    }
+    const contents = readFreshDeclaration(relativePath);
 
     expect(contents).toMatch(/\bcreateCounterpartyModule\b/);
 
@@ -168,12 +190,7 @@ describe("published build surface (AC-07)", () => {
     [ESM_TYPES_PATH, "ESM"],
     [CJS_TYPES_PATH, "CJS"],
   ])("%s (%s) declares createInternetDocumentModule and all 8 internet-document identifiers (AC-19)", (relativePath) => {
-    let contents: string;
-    try {
-      contents = readFileSync(declarationPath(relativePath), "utf8");
-    } catch {
-      throw new Error(`${relativePath} is missing — run "npm run build" before this test`);
-    }
+    const contents = readFreshDeclaration(relativePath);
 
     expect(contents).toMatch(/\bcreateInternetDocumentModule\b/);
 

@@ -81,3 +81,33 @@ export type {
   UpdatePrivatePersonPayload,
   UpdateThirdPartyPayload,
 } from "./types/counterparty.js";
+
+export { createInternetDocumentModule } from "./modules/internet-document/index.js";
+export type { InternetDocumentModule } from "./modules/internet-document/index.js";
+export type {
+  BackwardDeliveryData,
+  DeleteInternetDocumentPayload,
+  DeletedInternetDocumentOutcome,
+  DocumentDeliveryDateEstimate,
+  DocumentPriceEstimate,
+  GetDocumentDeliveryDatePayload,
+  GetDocumentListFilters,
+  GetDocumentPricePayload,
+  PayerType as InternetDocumentPayerType,
+  PaymentMethod,
+  CargoType as InternetDocumentCargoType,
+  ServiceType as InternetDocumentServiceType,
+  PrintLinkPayload,
+  SaveDoorsToDoorsPayload,
+  SaveDoorsToWarehousePayload,
+  SaveInternetDocumentPayload,
+  SaveWarehouseToDoorsPayload,
+  SaveWarehouseToWarehousePayload,
+  SavedInternetDocument,
+  UpdateDoorsToDoorsPayload,
+  UpdateDoorsToWarehousePayload,
+  UpdateInternetDocumentPayload,
+  UpdateWarehouseToDoorsPayload,
+  UpdateWarehouseToWarehousePayload,
+  WaybillListItem,
+} from "./types/internet-document.js";

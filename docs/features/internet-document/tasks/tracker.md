@@ -37,21 +37,6 @@ verification — reverted to `GET` (T5), the README's remaining unguarded `count
 and a missing `NovaPoshtaSuccessEnvelope` export (T6). See `_review/review-2026-09-21-02.md` for the
 full findings table.
 
-## Post-re-review follow-ups (`/sdd:review` 2026-09-22, seventh pass)
-
-5 findings resolved via `/sdd:implement` (no new task IDs): `build-surface.test.ts` only detected a
-*missing* `dist/`, never a *stale* one (T8); AC-02's negative type tests never typed a payload
-against `InternetDocumentModule["save"/"update"]`'s own call-site parameter, only named variant
-types (T7); `sad.md` §9 still listed ADR-0001 as "Accepted" when the ADR's own file says
-`Superseded` (T1); `sad.md` flow 3 didn't show the empty-`Documents` pre-fetch throw the code and a
-test already cover (T5); no `.changeset/` entry existed for this feature (release gate). Also, per
-explicit instruction, re-consulted Nova Poshta's official documentation: `developers.novaposhta.ua`
-remains blocked (403), but a different official domain, `devcenter.novaposhta.ua`, corroborated
-(via a search-engine cache — direct fetch fails on a broken TLS handshake) the print link's `apiKey`
-embedding and single-combined-link behavior from a primary source for the first time, narrowing
-`spec.md` §8 OQ-1. This round's verdict is **PASS**, all findings doc/test-robustness/release-process
-only — no shipped behavior changed. See `_review/review-2026-09-22.md` for the full findings table.
-
 ## Post-re-review follow-ups (`/sdd:review` 2026-09-21, third pass)
 
 8 findings resolved via `/sdd:implement` (no new task IDs): a likely production-breaking `delete()`
@@ -106,3 +91,37 @@ AC-06 row didn't map round 5's new pass-through test (T7); and `review-2026-09-2
 post-fix test count was off by one (191 vs the actual 190). This round's verdict is the first **PASS** —
 every finding was a doc/JSDoc accuracy correction, no shipped behavior changed. See
 `_review/review-2026-09-21-06.md` for the full findings table.
+
+## Post-re-review follow-ups (`/sdd:review` 2026-09-22, seventh pass)
+
+5 findings resolved via `/sdd:implement` (no new task IDs): `build-surface.test.ts` only detected a
+*missing* `dist/`, never a *stale* one (T8); AC-02's negative type tests never typed a payload
+against `InternetDocumentModule["save"/"update"]`'s own call-site parameter, only named variant
+types (T7); `sad.md` §9 still listed ADR-0001 as "Accepted" when the ADR's own file says
+`Superseded` (T1); `sad.md` flow 3 didn't show the empty-`Documents` pre-fetch throw the code and a
+test already cover (T5); no `.changeset/` entry existed for this feature (release gate). Also, per
+explicit instruction, re-consulted Nova Poshta's official documentation: `developers.novaposhta.ua`
+remains blocked (403), but a different official domain, `devcenter.novaposhta.ua`, corroborated
+(via a search-engine cache — direct fetch fails on a broken TLS handshake) the print link's `apiKey`
+embedding and single-combined-link behavior from a primary source for the first time, narrowing
+`spec.md` §8 OQ-1. This round's verdict is **PASS**, all findings doc/test-robustness/release-process
+only — no shipped behavior changed. See `_review/review-2026-09-22.md` for the full findings table.
+
+## Post-re-review follow-ups (`/sdd:review` 2026-09-22, eighth pass)
+
+4 findings resolved (no new task IDs), plus one real bug the round's own verification work
+surfaced. Doc-drift findings: round 7's own docs-confirmation didn't propagate to `sad.md`
+(§2 regulatory note, §11 risk row) or `contracts/api-sync-report.md`, which still called the same
+two assumptions "unconfirmed" after `spec.md` had already updated to "confirmed" (T1); `spec.md`'s
+"match... exactly" phrasing overclaimed what the `devcenter.novaposhta.ua` source actually showed
+(T1); `spec.md`/`sad.md` frontmatter `updated_at` was stale relative to same-day edits (T1); this
+tracker's seventh-pass section was inserted out of chronological order (this file). **Real bug found
+and fixed while verifying the overclaim:** re-fetching `serj1chen/nova-poshta-sdk-php`'s
+`getPrintLink()` *implementation* (not just its constants, which round 7 had stopped at) showed
+`Copies` was never a `/copies/<value>` URL segment — `printDocument`/`printMarkings` had been
+sending Nova Poshta a URL segment it doesn't define. `"fourfold"` actually repeats each Ref's
+`orders[]/<ref>` segment twice; every other value repeats it once. Fixed in
+`buildAndVerifyPrintLink` (T5), with a new test for the `fourfold` case and the existing `Copies`
+test corrected (T7); `PrintLinkPayload.Copies`'s doc comment, `contracts/public-api.md` §3.7,
+`ADR-0003`'s amendment log, and `spec.md` §8 OQ-1 all updated to match (T1). See
+`_review/review-2026-09-22-08.md` for the full findings table.

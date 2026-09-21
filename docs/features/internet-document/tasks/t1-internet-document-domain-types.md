@@ -29,9 +29,11 @@ In `src/types/internet-document.ts`:
   `PaymentMethod`, `BackwardDeliveryData`.
 - The 4 hand-written `ServiceType`-leg variants (`SaveWarehouseToWarehousePayload`/
   `SaveWarehouseToDoorsPayload`/`SaveDoorsToWarehousePayload`/`SaveDoorsToDoorsPayload`), unioned into
-  `SaveByServiceType`, then intersected with the `CargoType` discriminant into
-  `SaveInternetDocumentPayload` (ADR-0001) — never collapsed to a single flat shape with every field
-  optional, never a single distributive-conditional formula.
+  `SaveInternetDocumentPayload` — never collapsed to a single flat shape with every field optional,
+  never a single distributive-conditional formula. **Superseded (review remediation, 2026-09-21):**
+  originally planned as this union intersected with a `CargoType` discriminant (ADR-0001); ADR-0004
+  narrows `CargoType` to a plain field on `SaveInternetDocumentPayload`, not a second structural axis —
+  no intersection with a separate `CargoType`-leg union.
 - `UpdateInternetDocumentPayload` — `Required<SaveInternetDocumentPayload> & { Ref: string }`, per the
   full-replace convention (AC-06): an omitted `BackwardDeliveryData` on update must type-check as
   clearing it, never as "leave unchanged".
@@ -46,9 +48,10 @@ No runtime code in this task — types only.
 ## Definition of Done
 
 - [ ] `src/types/internet-document.ts` compiles with zero `any`.
-- [ ] `SaveInternetDocumentPayload` is the `ServiceType`-leg union intersected with the `CargoType`
-      discriminant (not a single flat shape, not a distributive conditional type) — verified by
-      inspection in review, per ADR-0001.
+- [ ] `SaveInternetDocumentPayload` is the `ServiceType`-leg union (not a single flat shape, not a
+      distributive conditional type), with `CargoType` as a plain discriminant field on each variant,
+      not a second intersected axis — verified by inspection in review, per ADR-0004 (superseding
+      ADR-0001's original two-axis plan).
 - [ ] `UpdateInternetDocumentPayload` is derived from `SaveInternetDocumentPayload` via `Required<>`,
       not a hand-written duplicate.
 - [ ] `DeletedInternetDocumentOutcome` is an array-element shape (never wrapped in `T | undefined`),
@@ -60,8 +63,8 @@ No runtime code in this task — types only.
 
 This is the one task every app task (T2–T5) depends on — keep it strictly type-only so it can land
 first without waiting on any method's implementation. A discriminated-union mistake here (e.g.
-collapsing the `ServiceType`×`CargoType` intersection to shared fields) silently reopens AC-02, so
-give that shape extra review attention. `contracts/public-api.md` §10 flags that the real wire
-`ServiceType`/`CargoType` enums carry more values (6/8) than ADR-0001's 4/4 — this task builds to the
-already-Accepted ADR's narrower set, not the wider one; widening is a future ADR revision, not this
-task's scope.
+collapsing the `ServiceType`-leg union to shared fields, or reinstating a `CargoType`-leg intersection
+ADR-0004 rejected) silently reopens AC-02, so give that shape extra review attention.
+`contracts/public-api.md` §10 flags that the real wire `ServiceType`/`CargoType` enums carry more
+values (6/8) than the accepted 4/4 — this task builds to the already-Accepted set, not the wider one;
+widening is a future ADR revision, not this task's scope.

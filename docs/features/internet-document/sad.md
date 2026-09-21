@@ -197,8 +197,10 @@ had: 2 of its 8 methods (the print methods) don't get a JSON envelope back at al
 
 Each tactical decision in later sections traces to one of these nine. Decisions 7, 8, and 9 are the
 three genuinely new problems this module solves that neither `address` nor `counterparty` faced: a
-two-axis discriminant (vs. `counterparty`'s one-axis ADR-0001), a batch result that can legitimately be
-half-successful, and a return value that isn't JSON data at all.
+`ServiceType`-discriminated payload with an independent leg-consistency guard on each side (still a
+single structural axis, like `counterparty`'s ADR-0001 — `CargoType` is a plain field, not a second
+axis; narrowed by ADR-0004, superseding this decision's original two-axis design), a batch result that
+can legitimately be half-successful, and a return value that isn't JSON data at all.
 
 ## 5. Building block view
 
@@ -220,19 +222,24 @@ src/
 │   ├── counterparty/             # existing — unchanged
 │   └── internet-document/
 │       └── index.ts               # NEW — factory: createInternetDocumentModule(client) → 8 typed
-│                                   #   methods. 6 delegate to client.request() (save, update, delete,
+│                                   #   methods. 5 delegate to client.request() (save, update,
 │                                   #   getDocumentList, getDocumentPrice, getDocumentDeliveryDate);
+│                                   #   delete delegates to client.requestEnvelope() instead, to read
+│                                   #   Nova Poshta's success-path warnings/errors for AC-08's rejected-
+│                                   #   Ref reason (review 2026-09-21 finding 4, §4 decision 8 amendment);
 │                                   #   printDocument/printMarkings call a private, module-local
 │                                   #   buildAndVerifyPrintLink() helper that uses fetch directly
-│                                   #   (ADR-0003) — never client.request()
+│                                   #   (ADR-0003) — never client.request()/requestEnvelope()
 ├── types/
 │   ├── envelope.ts                 # existing — shared envelope/request types
 │   ├── common.ts                   # existing
 │   ├── address.ts                  # existing
 │   ├── counterparty.ts             # existing
-│   └── internet-document.ts        # NEW — ServiceType/CargoType literal types + the intersected
-│                                    #   Save/Update payload union (ADR-0001), the per-Ref delete
-│                                    #   outcome type (ADR-0002), list/price/delivery-date/print
+│   └── internet-document.ts        # NEW — ServiceType/CargoType literal types + the ServiceType-
+│                                    #   discriminated Save/Update payload union, narrowed to a single
+│                                    #   structural axis with an independent per-leg guard (ADR-0004,
+│                                    #   superseding ADR-0001's original two-axis design), the per-Ref
+│                                    #   delete outcome type (ADR-0002), list/price/delivery-date/print
 │                                    #   request+response interfaces
 └── index.ts                       # public re-exports (client + common + address + counterparty +
                                     #   internet-document + types)
@@ -502,7 +509,7 @@ module formats and type-checks the method surface).
 |---|---|---|---|
 | Security review required before release — new money-bearing fields and a credential-bearing return value (the print link) neither `address` nor `counterparty` carried (`spec.md` §6.1) | High | Schedule and complete a security review before `sdd:ship internet-document`; not performed in this design session | Security Lead |
 | Open architectural decision: re-verify the 8-method InternetDocument surface, the full `save`/`update` field shape per combination, whether the print-link methods' URL genuinely embeds the caller's API key, whether print genuinely returns one combined link per call, the print request/response format (copies, label size, PDF vs HTML), and how a caller can tell a print request failed — all currently inferred from three cross-checked community SDKs, not Nova Poshta's official docs (portal still blocks automated fetches) | Open question | Resolve before next release (`sdd:ship internet-document`); ADR-0003's construct-then-verify mechanism is built on this same unconfirmed assumption set (`spec.md` §8 OQ-1) | Tech Lead |
-| Should the shared core client be extended to expose Nova Poshta's pagination metadata (`totalCount`) and success-path warnings? `address` and `counterparty` both deferred this; carried forward unchanged here (§4 decision 6) — `getDocumentList` is the same kind of growing, transactional list `getCounterparties` already is | Open question | Resolve before `sdd:design` of any future module whose lookups depend on complete, multi-page results (`spec.md` §8 OQ-2) | Tech Lead |
+| Should the shared core client be extended to expose Nova Poshta's pagination metadata (`totalCount`) for `getDocumentList`? `address` and `counterparty` both deferred this; carried forward unchanged here (§4 decision 6) — `getDocumentList` is the same kind of growing, transactional list `getCounterparties` already is. **Narrowed (review remediation, 2026-09-21):** success-path warnings are no longer part of this open question — `requestEnvelope()` already exposes them, added for `delete`'s AC-08 fix; only `totalCount`/pagination metadata remains undecided | Open question | Resolve before `sdd:design` of any future module whose lookups depend on complete, multi-page results (`spec.md` §8 OQ-2) | Tech Lead |
 | Whether `delete`'s per-Ref outcome (AC-08) is genuinely distinguishable in Nova Poshta's live response, or whether the "mixed batch result" risk is purely theoretical for this endpoint. **Status at this design review:** the gate this open question flagged was reached in this pass and resolved via the spec's own stated default — ADR-0002's defensive reconciliation, which holds up either way — but the underlying live-API confirmation itself is still outstanding | Open question | Resolve before `sdd:ship internet-document` (re-scoped from the original pre-design due date, mirroring how `counterparty`'s equivalent OQ-2 was handled) — downgrade ADR-0002's reconciliation logic if the live API never actually returns a mixed result (`spec.md` §8 OQ-5) | Tech Lead |
 | Should the print-link methods' return type carry a stronger developer-facing warning (a distinct wrapper type, a lint-enforced doc comment) about the embedded-credential risk (AC-13), beyond the doc comment ADR-0003/QG-3 already commit to? | Open question | Resolve before `sdd:ship internet-document`; default for now is document only, no code-level warning mechanism (`spec.md` §8 OQ-4) | Tech Lead |
 | Cross-account write/list-decline behavior (AC-15) is trusted from community-sourced docs, not confirmed against a live API response (`spec.md` §6.1, same unresolved category as the OQ-1 row above) | Medium | Unit tests confirm the library surfaces whatever decline Nova Poshta sends back (mocked), not that Nova Poshta's own enforcement holds in production; the security review above should confirm this against a live call before sign-off | Security Lead |

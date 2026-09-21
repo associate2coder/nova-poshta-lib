@@ -122,9 +122,11 @@ proceeding).
 - ☑ Method↔spec: all 8 `spec.md` §1 methods have a `public-api.md` §3 entry; none added, none dropped.
 - ☑ Error-condition↔sequence: every `sad.md` §6 `alt`/`else` branch across all 4 flows maps to a row
   in `public-api.md` §6.
-- ☑ Type-shape↔decision: the intersected `ServiceType`×`CargoType` payload (ADR-0001), the per-Ref
-  delete outcome array (ADR-0002), and the construct-then-verify print link (ADR-0003) are all present
-  exactly as decided in `sad.md` §4 — no collapsing, no silent reshaping.
+- ☑ Type-shape↔decision: the `ServiceType`-discriminated payload with an independent per-leg guard,
+  `CargoType` as a plain field rather than a second structural axis (ADR-0004, superseding ADR-0001's
+  original two-axis design), the per-Ref delete outcome array (ADR-0002), and the construct-then-verify
+  print link (ADR-0003) are all present exactly as decided in `sad.md` §4 — no collapsing, no silent
+  reshaping.
 - **Flags raised (see "Drift found" above):** cardinality gap (finding 1), batch-capability gap
   (finding 2) — both resolved via Save-as-OQ with the user's explicit sign-off to proceed on the
   designed shape.

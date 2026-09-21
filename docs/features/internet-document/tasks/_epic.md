@@ -69,6 +69,10 @@ See [tracker.md](./tracker.md) for status. Machine contract: [tasks.json](../tas
 - `sad.md` §4 decision 7 / [ADR-0001](../adr/0001-compose-service-type-and-cargo-type-as-two-intersected-type-sets.md):
   `save`/`update` must stay two intersected hand-written type-sets, never collapsed to shared fields
   and never a single distributive-conditional formula. T1 owns this; T2 tests it at the compile level.
+  **Superseded (review remediation, 2026-09-21):** [ADR-0004](../adr/0004-cargo-type-is-a-plain-discriminant-field-not-a-structural-variant-axis.md)
+  narrows this to a single `ServiceType`-leg axis with an independent per-leg guard on each side —
+  `CargoType` is a plain discriminant field, not a second structural axis. The "never collapsed to
+  shared fields" rule still holds for the `ServiceType` axis; it no longer applies to `CargoType`.
 - `sad.md` §4 decision 8 / [ADR-0002](../adr/0002-per-ref-outcome-array-for-batch-delete.md): `delete`
   must return a per-Ref outcome array, never `T | undefined` — the one deliberate divergence from
   every other write method in this library. T1 owns the type, T3 owns the reconciliation logic, T7

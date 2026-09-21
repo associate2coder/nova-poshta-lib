@@ -130,6 +130,7 @@ describe("internet-document module — delete (T3, AC-07/AC-08)", () => {
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(sentBody.modelName).toBe("InternetDocument");
     expect(sentBody.calledMethod).toBe("delete");
+    expect(sentBody.methodProperties).toEqual({ DocumentRefs: ["waybill-1"] });
   });
 
   it("a batch delete returns one outcome entry per submitted Ref, all removed", async () => {
@@ -332,6 +333,33 @@ describe("internet-document module — printDocument/printMarkings (T5, AC-11/AC
     // OQ-1), so verification uses the same verb a browser would and discards the body itself
     // (finding 11) rather than betting on an unconfirmed method.
     expect(fetchMock.mock.calls[0]![1]).toMatchObject({ method: "GET" });
+  });
+
+  it("printDocument discards the verification response body instead of holding the connection open (finding 11, P6)", async () => {
+    const cancel = vi.fn(() => Promise.resolve());
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, status: 200, body: { cancel } })),
+    );
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await internetDocument.printDocument({ Documents: ["waybill-1"] });
+
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("printDocument doesn't reject when the response body's cancel() itself rejects (P5)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        body: { cancel: () => Promise.reject(new Error("stream already errored")) },
+      })),
+    );
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    await expect(internetDocument.printDocument({ Documents: ["waybill-1"] })).resolves.toBeDefined();
   });
 
   it("printDocument builds the Type and Copies segments into the URL when supplied (AC-11)", async () => {
@@ -543,7 +571,7 @@ describe("internet-document module — no local Ref validation (T7, AC-18)", () 
     await internetDocument.delete({ Documents: [arbitraryRef] });
 
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
-    expect(sentBody.methodProperties.Documents).toEqual([arbitraryRef]);
+    expect(sentBody.methodProperties.DocumentRefs).toEqual([arbitraryRef]);
   });
 
   it("only Nova Poshta's own decline rejects an out-of-scope Ref — the library performs no check of its own before sending", async () => {

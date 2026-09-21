@@ -88,7 +88,10 @@ async function buildAndVerifyPrintLink(
     );
   }
 
-  void response.body?.cancel();
+  // Best-effort discard: an already-errored stream can reject cancel() itself. Verification's
+  // outcome is decided below by response.ok, not by this cleanup, so swallow it here rather than
+  // letting it surface as an unhandled rejection.
+  void response.body?.cancel()?.catch(() => {});
 
   if (!response.ok) {
     throw new NovaPoshtaApiError(`Nova Poshta print-link verification for ${kind} failed with status ${response.status}`);
@@ -114,11 +117,11 @@ export function createInternetDocumentModule(client: NovaPoshtaClient): Internet
         payload as unknown as Record<string, unknown>,
       ),
     delete: async (payload: DeleteInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome[]> => {
-      const envelope = await client.requestEnvelope<{ Ref: string }>(
-        "InternetDocument",
-        "delete",
-        payload as unknown as Record<string, unknown>,
-      );
+      // contracts/api-sync-report.md:94-99: the wire field is `DocumentRefs`, not `Documents` —
+      // `Documents` is only this module's public field name.
+      const envelope = await client.requestEnvelope<{ Ref: string }>("InternetDocument", "delete", {
+        DocumentRefs: payload.Documents,
+      });
       const removedRefs = new Set(envelope.data.map((item) => item.Ref));
       // AC-08: Nova Poshta's own reason, when it gives one. The confirmed-removed response shape
       // carries only Ref per item (no per-item outcome field — see ADR-0002), so a rejected Ref's

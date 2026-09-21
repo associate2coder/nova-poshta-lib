@@ -200,9 +200,12 @@ update(payload: UpdateInternetDocumentPayload): Promise<SavedInternetDocument | 
  *  confirms removed. NOTE: 2 of the 3 cross-checked SDKs (Go, TypeScript) type the wire
  *  `DocumentRefs` field as a SINGLE ref, not an array — only the PHP SDK forces a one-element array
  *  client-side. This contract still models the batch shape ADR-0002 already fixed; §10 finding 2 /
- *  api-sync-report.md carries the unconfirmed-batch-capability flag forward. */
+ *  api-sync-report.md carries the unconfirmed-batch-capability flag forward. Field-name note (review
+ *  2026-09-21, third pass, finding P1): `Documents` below is this module's own public field name —
+ *  the module maps it to the wire's actual `DocumentRefs` field before sending; the two names are
+ *  deliberately different. */
 export interface DeleteInternetDocumentPayload {
-  Documents: string[]; // one or more waybill Refs
+  Documents: string[]; // one or more waybill Refs — sent on the wire as DocumentRefs
 }
 
 /** ADR-0002: one entry per submitted Ref, reconciled by this module — never Nova Poshta's raw
@@ -211,8 +214,10 @@ export interface DeleteInternetDocumentPayload {
  *  Nova Poshta's confirmed-removed list). Reason is read from the envelope's success-path
  *  `warnings`/`errors` (via `client.requestEnvelope()`, review 2026-09-21 finding 4) when Nova
  *  Poshta provides one — best-effort: the envelope's warnings/errors aren't themselves keyed by
- *  Ref, so every rejected Ref in one batch shares the same joined text, falling back to a
- *  library-generated message when Nova Poshta gives no warnings/errors at all (spec.md §8 OQ-5). */
+ *  Ref, so this module first tries to match each rejected Ref to whichever warning/error message
+ *  names that Ref, falling back to every warning/error joined together only when nothing names it,
+ *  and to a library-generated message when Nova Poshta gives no warnings/errors at all (review
+ *  2026-09-21-02 finding N3; spec.md §8 OQ-5). */
 export interface DeletedInternetDocumentOutcome {
   Ref: string;
   Removed: boolean;

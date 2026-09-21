@@ -21,7 +21,7 @@ with none of this library's typed shapes or shared error contract. See
 ```ts
 import { createClient, createInternetDocumentModule } from "nova-poshta-lib";
 
-const client = createClient({ apiKey: "..." });
+const client = createClient(process.env.NOVA_POSHTA_API_KEY!);
 const internetDocument = createInternetDocumentModule(client);
 
 const waybill = await internetDocument.save({

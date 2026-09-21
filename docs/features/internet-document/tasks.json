@@ -1,0 +1,89 @@
+{
+  "slug": "internet-document",
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Define internet-document domain types",
+      "layer": "domain",
+      "deps": [],
+      "acs": ["AC-02", "AC-05", "AC-06", "AC-07", "AC-08"],
+      "dod": "src/types/internet-document.ts compiles with zero any; SaveInternetDocumentPayload/UpdateInternetDocumentPayload are the ServiceType x CargoType intersected type-sets per ADR-0001, never collapsed to shared fields; DeletedInternetDocumentOutcome is a per-Ref array shape, never T | undefined (ADR-0002); tsc --noEmit and lint pass",
+      "files_hint": ["src/types/internet-document.ts"]
+    },
+    {
+      "id": "T2",
+      "title": "Implement save and update methods",
+      "layer": "app",
+      "deps": ["T1"],
+      "acs": ["AC-01", "AC-02", "AC-05", "AC-06"],
+      "dod": "save/update each have a happy-path unit test (returns the saved/updated waybill incl. Ref and IntDocNumber) and an empty-on-success test (resolves undefined, does not throw); a compile-time test proves a payload mixing ServiceType/CargoType fields from different combinations fails to compile",
+      "files_hint": ["src/modules/internet-document/index.ts"]
+    },
+    {
+      "id": "T3",
+      "title": "Implement delete with per-Ref outcome reconciliation",
+      "layer": "app",
+      "deps": ["T1"],
+      "acs": ["AC-07", "AC-08"],
+      "dod": "delete has a unit test asserting a single-Ref call resolves a one-element outcome array, and a batch call reconciles submitted Refs against Nova Poshta's confirmed-removed set so a Ref missing from the response surfaces as Removed:false with a Reason, never silently dropped",
+      "files_hint": ["src/modules/internet-document/index.ts"]
+    },
+    {
+      "id": "T4",
+      "title": "Implement getDocumentList, getDocumentPrice, and getDocumentDeliveryDate",
+      "layer": "app",
+      "deps": ["T1"],
+      "acs": ["AC-03", "AC-04", "AC-09", "AC-10"],
+      "dod": "each of the three methods has a unit test for the unfiltered/no-linkage happy path, and getDocumentList has a second test asserting a documented filter (e.g. a date range) is passed through unmodified with no client-side re-filtering and no auto-paging when Page is omitted",
+      "files_hint": ["src/modules/internet-document/index.ts"]
+    },
+    {
+      "id": "T5",
+      "title": "Implement printDocument and printMarkings via a construct-then-verify helper",
+      "layer": "app",
+      "deps": ["T1"],
+      "acs": ["AC-11", "AC-12", "AC-13"],
+      "dod": "a private buildAndVerifyPrintLink() helper builds the print URL and issues one fetch-based verification check, never through client.request(); printDocument/printMarkings each have a unit test for the success path (returns the URL string) and a mocked-fetch-failure test (throws NovaPoshtaApiError, never an empty or unverified link)",
+      "files_hint": ["src/modules/internet-document/index.ts"]
+    },
+    {
+      "id": "T6",
+      "title": "Wire internet-document module into the public package surface",
+      "layer": "wiring",
+      "deps": ["T2", "T3", "T4", "T5"],
+      "acs": ["AC-17", "AC-18"],
+      "dod": "createInternetDocumentModule and its types import and type-check from nova-poshta-lib's public entry point; no cross-module runtime call to address or counterparty is added, and no Ref validation of its own is introduced",
+      "files_hint": ["src/index.ts"]
+    },
+    {
+      "id": "T7",
+      "title": "Unit test suite for internet-document",
+      "layer": "tests",
+      "deps": ["T6"],
+      "acs": [
+        "AC-01", "AC-02", "AC-03", "AC-04", "AC-05", "AC-06", "AC-07", "AC-08", "AC-09", "AC-10",
+        "AC-11", "AC-12", "AC-13", "AC-14", "AC-15", "AC-16", "AC-17", "AC-18"
+      ],
+      "dod": "npm test passes with every AC-01..AC-18 covered by a named/tagged test, including the shared error-contract block (AC-14/AC-15/AC-16) exercised across all 8 methods with fetch mocked, and the <=5ms overhead benchmark across all 8 methods",
+      "files_hint": ["test/unit/modules/internet-document.test.ts"]
+    },
+    {
+      "id": "T8",
+      "title": "Extend published-build type-surface check",
+      "layer": "tests",
+      "deps": ["T6"],
+      "acs": ["AC-19"],
+      "dod": "test/unit/build-surface.test.ts fails if any of internet-document's 8 method identifiers is missing from dist/index.d.ts or dist/index.d.cts, and passes after npm run build",
+      "files_hint": ["test/unit/build-surface.test.ts"]
+    },
+    {
+      "id": "T9",
+      "title": "Update README usage example",
+      "layer": "docs",
+      "deps": ["T6"],
+      "acs": [],
+      "dod": "README's Usage section shows a real, type-checked internet-document save call and documents the print-ready link's credential-bearing nature (AC-13) next to the printDocument/printMarkings example",
+      "files_hint": ["README.md"]
+    }
+  ]
+}

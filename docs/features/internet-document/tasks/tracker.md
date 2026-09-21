@@ -26,3 +26,13 @@ reason (T3), print-link URL test/HEAD-request fixes (T5), README AC-05 guard (T9
 deferral note for AC-01/03/04/06/07/10/11/12, owner: Tech Lead). AC-19's shallow build-surface check
 (T8) deferred to `spec.md` §8 as a cross-module, address/counterparty-shared gap. See
 `_review/review-2026-09-21.md` for the full findings table.
+
+## Post-re-review follow-ups (`/sdd:review` 2026-09-21, second pass)
+
+7 findings resolved via `/sdd:implement`, verifying the round above's fixes and closing what they
+introduced/missed (no new task IDs): ADR-0004/client.ts doc drift across `sad.md`, `api-sync-report.md`,
+`tasks.json` (T1, T2), an untested recipient-leg AC-02 axis (T2), delete-rejection reason mis-attribution
+when both warnings and errors are present (T3), an unconfirmed `HEAD`-verb assumption on print-link
+verification — reverted to `GET` (T5), the README's remaining unguarded `counterparty.save()` line (T9),
+and a missing `NovaPoshtaSuccessEnvelope` export (T6). See `_review/review-2026-09-21-02.md` for the
+full findings table.

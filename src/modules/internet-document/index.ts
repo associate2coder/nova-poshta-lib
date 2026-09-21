@@ -64,7 +64,14 @@ const PRINT_BASE_URL = "https://my.novaposhta.ua/orders";
  *  confirmed against Nova Poshta's own devcenter.novaposhta.ua docs — spec.md §1/§8 OQ-1, seventh-
  *  pass narrowing) — embeds every submitted Ref plus the caller's own apiKey — then issues one
  *  live verification check against that exact URL, never routed through client.request()'s envelope
- *  unwrap. Only returns the URL if that check succeeds; otherwise raises the standard error. */
+ *  unwrap. Only returns the URL if that check succeeds; otherwise raises the standard error.
+ *
+ *  `Copies` is not its own URL segment (review, eighth pass, 2026-09-22 — re-fetched
+ *  serj1chen/nova-poshta-sdk-php's private `getPrintLink()` implementation directly, not just its
+ *  public constants): "fourfold" repeats each Ref's `orders[]/<ref>` segment twice; every other value,
+ *  including "double" and omitting `Copies` entirely, repeats it once. There is no `/copies/...` path
+ *  segment in the real URL — an earlier pass invented one from the field's mere *existence* on the
+ *  cross-checked SDK's request struct, without re-fetching how that struct is actually consumed. */
 async function buildAndVerifyPrintLink(
   client: NovaPoshtaClient,
   kind: "printDocument" | "printMarkings",
@@ -74,10 +81,13 @@ async function buildAndVerifyPrintLink(
     throw new NovaPoshtaApiError(`Nova Poshta ${kind} requires at least one waybill Ref`);
   }
 
-  const refsPath = payload.Documents.map((ref) => `orders[]/${encodeURIComponent(ref)}`).join("/");
+  const refSegments = payload.Documents.flatMap((ref) => {
+    const segment = `orders[]/${encodeURIComponent(ref)}`;
+    return payload.Copies === "fourfold" ? [segment, segment] : [segment];
+  });
+  const refsPath = refSegments.join("/");
   const typeSegment = payload.Type ? `/type/${payload.Type}` : "";
-  const copiesSegment = payload.Copies ? `/copies/${payload.Copies}` : "";
-  const url = `${PRINT_BASE_URL}/${kind}/${refsPath}${typeSegment}${copiesSegment}/apiKey/${client.apiKey}`;
+  const url = `${PRINT_BASE_URL}/${kind}/${refsPath}${typeSegment}/apiKey/${client.apiKey}`;
 
   let response: { ok: boolean; status?: number; body?: ReadableStream | null };
   try {

@@ -207,5 +207,8 @@ export interface DocumentDeliveryDateEstimate {
 export interface PrintLinkPayload {
   Documents: string[]; // one or more waybill Refs
   Type?: "Pdf" | "Html";
+  /** "fourfold" repeats each Ref's URL segment twice; "double" (and omitting this field) are
+   *  equivalent — neither adds a distinct URL segment of its own (confirmed against
+   *  serj1chen/nova-poshta-sdk-php's getPrintLink() implementation, not just its constants). */
   Copies?: "double" | "fourfold";
 }

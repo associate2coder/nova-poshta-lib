@@ -353,7 +353,10 @@ export interface DocumentDeliveryDateEstimate {
 export interface PrintLinkPayload {
   Documents: string[]; // one or more waybill Refs
   Type?: "Pdf" | "Html"; // confirmed values, re-fetched (PRINT_TYPE_PDF/PRINT_TYPE_HTML)
-  Copies?: "double" | "fourfold"; // confirmed values, re-fetched (PRINT_COPIES_DOUBLE/FOURFOLD)
+  // Not a URL segment of its own (review, eighth pass, 2026-09-22 — re-fetched getPrintLink()'s
+  // actual implementation, not just the PRINT_COPIES_* constants): "fourfold" repeats each Ref's
+  // URL segment twice; "double" and omitting this field both behave identically to each other.
+  Copies?: "double" | "fourfold";
 }
 
 printDocument(payload: PrintLinkPayload): Promise<string>;
@@ -366,9 +369,15 @@ caller's own API key as the URL's final segment (confirms `spec.md` §8 OQ-1's c
 assumption and the single-combined-link assumption at `high` confidence — no longer "unconfirmed
 against the live/official docs" for this specific point; see `api-sync-report.md`). **Confirmed
 directly against Nova Poshta's own documentation (review, seventh pass, 2026-09-22):** Nova Poshta's
-`devcenter.novaposhta.ua` developer blog documents this exact same URL pattern —
-`.../orders[]/<ref or number>/.../apiKey/<key>` — independently corroborating both assumptions from
-a primary source, not just a community SDK; see `spec.md` §8 OQ-1. A failure to
+`devcenter.novaposhta.ua` developer blog documents the same structural pattern — repeated
+`orders[]/<ref or number>` segments followed by `apiKey/<key>` as the URL's final segment —
+independently corroborating the combined-link and credential-embedding assumptions from a primary
+source, not just a community SDK; see `spec.md` §8 OQ-1. **This does not extend to the exact `type`
+value casing or to `Copies`** — those remain SDK-sourced only, not covered by that primary source.
+**Correction (review, eighth pass, 2026-09-22):** the seventh pass re-fetched only `getPrintLink()`'s
+constant *declarations*; re-fetching its actual *implementation* found `Copies` is not a URL segment
+at all — see the `PrintLinkPayload.Copies` field comment above and ADR-0003's amendment. That bug
+(an invented `/copies/<value>` segment) is now fixed. A failure to
 obtain the link (empty `Documents`, an invalid Ref, a document not yet materialized) throws
 `NovaPoshtaApiError` per the construct-then-verify check (AC-11, AC-12) — the PHP SDK's own
 `getPrintLink()` returns an empty string on an empty ref list, which this contract explicitly does

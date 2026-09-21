@@ -93,6 +93,16 @@ guarantee, not an oversight.
   on a `200` response that this ADR's Context section names as the risk a save-then-print race could
   produce. That residual gap is real and open, not yet closed by this decision — see `spec.md` §8 OQ-1,
   sharpened to track it explicitly.
+- **Amendment (review remediation, eighth pass, 2026-09-22):** the shipped URL builder invented a
+  `/copies/<value>` path segment from `Copies`'s mere presence on the cross-checked PHP SDK's request
+  struct (`api-sync-report.md`'s Copies row), without re-fetching how that SDK's own `getPrintLink()`
+  helper actually consumes the field. Re-fetching it directly found no `/copies/...` segment exists at
+  all — `Copies: "fourfold"` instead repeats each Ref's `orders[]/<ref>` segment twice; every other
+  value, including `"double"` and omitting `Copies`, repeats it once. Fixed in
+  `src/modules/internet-document/index.ts`'s `buildAndVerifyPrintLink`; a caller who previously
+  relied on the (never-real) `/copies/double` segment saw no behavior change (it was a no-op segment
+  Nova Poshta never defined), but a caller passing `Copies: "fourfold"` gets a materially different,
+  now-correct URL.
 
 **Neutral**
 - One narrow, additive shared-client change (`NovaPoshtaClient.apiKey`, read-only) was needed after all

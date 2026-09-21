@@ -416,7 +416,7 @@ describe("internet-document module — printDocument/printMarkings (T5, AC-11/AC
     await expect(internetDocument.printDocument({ Documents: ["waybill-1"] })).resolves.toBeDefined();
   });
 
-  it("printDocument builds the Type and Copies segments into the URL when supplied (AC-11)", async () => {
+  it("printDocument builds the Type segment into the URL when supplied (AC-11)", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ ok: true, status: 200 })),
@@ -429,8 +429,28 @@ describe("internet-document module — printDocument/printMarkings (T5, AC-11/AC
       Copies: "double",
     });
 
+    // "double" has no URL segment of its own — same URL as omitting Copies entirely (getPrintLink()
+    // re-fetch, review eighth pass, 2026-09-22).
     expect(link).toBe(
-      "https://my.novaposhta.ua/orders/printDocument/orders[]/waybill-1/type/Pdf/copies/double/apiKey/test-api-key",
+      "https://my.novaposhta.ua/orders/printDocument/orders[]/waybill-1/type/Pdf/apiKey/test-api-key",
+    );
+  });
+
+  it("printDocument repeats each Ref's URL segment when Copies is fourfold, with no separate /copies/ segment (AC-11)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, status: 200 })),
+    );
+    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+
+    const link = await internetDocument.printDocument({
+      Documents: ["waybill-1", "waybill-2"],
+      Copies: "fourfold",
+    });
+
+    expect(link).toBe(
+      "https://my.novaposhta.ua/orders/printDocument/orders[]/waybill-1/orders[]/waybill-1" +
+        "/orders[]/waybill-2/orders[]/waybill-2/apiKey/test-api-key",
     );
   });
 

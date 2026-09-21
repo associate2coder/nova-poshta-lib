@@ -34,7 +34,12 @@ automated fetch attempted while drafting both the spec and this design.
 - `spec.md` §1 decision override — the print methods must never be routed through the shared
   envelope-unwrap path.
 - `spec.md` §3 non-goal — the shared core client (`src/client.ts`) must not be changed to give print a
-  non-JSON transport path of its own; the distinct path lives entirely inside this module.
+  non-JSON transport path of its own; the distinct path lives entirely inside this module. **Amendment
+  2 (review remediation, third pass, 2026-09-21):** this held for the transport path, but building the
+  URL still needs the caller's own API key, which was previously private to `client.ts`'s closure — so
+  the shared client gained one narrow, additive, read-only `apiKey` member (non-enumerable, so it never
+  leaks through `JSON.stringify`/`console.log`) rather than this module re-deriving or duplicating the
+  key. See `spec.md` §3 non-goal's amendment 2.
 - `spec.md` §6.1 / AC-13 — the returned link's credential-bearing nature must be documented, not
   silently discovered.
 
@@ -76,8 +81,17 @@ guarantee, not an oversight.
 - The exact verification mechanism (what a "successful" check response looks like from Nova Poshta) is
   still unconfirmed against the live/official docs (`spec.md` §8 OQ-1) — implementation must re-verify
   before this ships, tracked in §11.
+- **Amendment (review remediation, third pass, 2026-09-21):** the implemented verification issues a
+  `GET` (not `HEAD` — Nova Poshta's `HEAD` support was never confirmed either) and deliberately
+  discards the response body unread, to avoid holding open a connection to a real PDF/label endpoint.
+  This means verification can only detect a non-2xx status; it cannot detect the blank/error HTML page
+  on a `200` response that this ADR's Context section names as the risk a save-then-print race could
+  produce. That residual gap is real and open, not yet closed by this decision — see `spec.md` §8 OQ-1,
+  sharpened to track it explicitly.
 
 **Neutral**
+- One narrow, additive shared-client change (`NovaPoshtaClient.apiKey`, read-only) was needed after all
+  to build the URL — see the amended Decision drivers above.
 - If `spec.md` §8 OQ-1 resolves to reveal a different actual wire shape (e.g. the JSON API itself
   returns the link inside a still-parseable envelope), this ADR's *intent* (verify before returning)
   survives even if the specific construct-a-URL mechanic needs revision — the decision that matters is

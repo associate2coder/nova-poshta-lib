@@ -49,7 +49,7 @@ source found in any cross-checked source — modeled defensively, no field inven
 | `SaveInternetDocumentPayload` base fields (`DateTime`, `Weight`, `SeatsAmount`, `Description`, `Cost`, `CitySender`, `Sender`, `SenderAddress`, `ContactSender`, `SendersPhone`, `CityRecipient`, `Recipient`, `ContactRecipient`, `RecipientsPhone`) | `platx/go-nova-poshta` `api/internetdocument/request.go`, `SaveReq` (re-fetched) | high |
 | Warehouse-leg fields (`RecipientAddress` as warehouse Ref) | `platx/go-nova-poshta` `request.go`, inferred from `WarehouseSaveReq` embedding `SaveReq` with no additional door-address fields | medium |
 | Door-leg fields (`RecipientCityName`, `RecipientArea`, `RecipientAddressName`, `RecipientHouse`, `RecipientFlat`) | `platx/go-nova-poshta` `request.go`, `AddressSaveReq` (re-fetched) | high |
-| `CargoType`-specific field variance (i.e., which fields change per cargo type) | No cross-checked source models cargo-detail fields as varying by `CargoType` — every source keeps `Weight`/`SeatsAmount`/`CargoDetails` uniform regardless of cargo type | **flagged** — contract's `CargoTypeDetail` intersection carries only the discriminant field itself, no invented per-type fields |
+| `CargoType`-specific field variance (i.e., which fields change per cargo type) | No cross-checked source models cargo-detail fields as varying by `CargoType` — every source keeps `Weight`/`SeatsAmount`/`CargoDetails` uniform regardless of cargo type | **flagged, since resolved** — ADR-0004 narrowed `CargoType` to a plain discriminant field on `SaveCommonFields`/`UpdateCommonFields`, identical across every variant; the `CargoTypeDetail` intersection this row originally described was never implemented |
 | `BackwardDeliveryData` (property exists) | `serj1chen/nova-poshta-sdk-php`'s `InternetDocument` class docblock, `@property array BackwardDeliveryData` (re-fetched) | high (existence) |
 | `BackwardDeliveryData` sub-fields (`PayerType`, `CargoType`, `RedeliveryString`, `Amount`) | Inferred from `GetDocumentPriceReq.RedeliveryCalculate{CargoType,Amount}`'s naming convention — no source directly documents `BackwardDeliveryData`'s own sub-field set | medium |
 | `SavedInternetDocument` response fields (`Ref`, `CostOnSite`, `EstimatedDeliveryDate`, `IntDocNumber`, `TypeDocument`) | `platx/go-nova-poshta` `response.go`, `SaveItem` (re-fetched) | high |
@@ -160,9 +160,9 @@ proceeding).
   real at all, not just whether a mixed result within one is real.
 - `BackwardDeliveryData`'s own sub-field set — modeled at `medium` confidence (§2); worth a live-API
   check alongside OQ-1.
-- `CargoType`-specific field variance — no source models it; this contract's `CargoTypeDetail`
-  intersection stays minimal (the discriminant field only) rather than inventing per-cargo-type
-  fields. Worth resolving alongside OQ-1/finding 1.
+- `CargoType`-specific field variance — no source models it; resolved by ADR-0004, which narrowed
+  `CargoType` to a plain discriminant field (no per-cargo-type fields invented). Still worth
+  re-confirming alongside OQ-1/finding 1 once Nova Poshta's official docs are reachable.
 
 ## Lint
 

@@ -61,6 +61,32 @@ is exactly the silent half-success risk `spec.md` §1's decision override and AC
 consuming developer must never be able to mistake "this Ref wasn't in the response" for "this Ref was
 removed."
 
+## Amendment (review remediation, 2026-09-21)
+
+The independent review found `Reason` was a hardcoded placeholder string on every rejected Ref,
+never actually read from Nova Poshta's response (AC-08 stage-1 gap). The confirmed-removed response
+shape `request()` returns carries only `Ref` per item — no per-item reason — so the real reason, when
+Nova Poshta gives one, can only come from the envelope's success-path `warnings`/`errors`, which
+`request()` discards. Fixing this required exposing those fields somewhere; the options were (a) add
+a second entry point to `client.ts` that returns the full envelope, or (b) duplicate `client.ts`'s
+request-building/error-handling logic inside `internet-document` itself to reach the raw envelope
+without touching the shared client.
+
+**Chosen:** (a) — `client.ts` gained `requestEnvelope()`, sharing `sendRequest()`'s existing
+validation/error contract with `request()`, differing only in returning `{data, errors, warnings}`
+instead of just `data`. Duplicating request/error-handling logic per module (b) would have
+reintroduced exactly the inconsistency risk the shared client exists to prevent, for a difference of
+one return shape. This is a narrow, additive change — `request()`'s behavior and signature are
+unchanged, `NovaPoshtaSuccessEnvelope<T>` is a new exported type, nothing existing was removed. It
+supersedes `spec.md` §3's non-goal and narrows §8 OQ-2 (see both, updated in place) — those docs
+previously stated the shared client stays unchanged this feature; that held for the print path
+(ADR-0003) but not for `delete`.
+
+`delete`'s own reconciliation logic (Option 1 above) is unaffected: it still builds one outcome entry
+per submitted Ref, defensively, against whichever Refs Nova Poshta's response confirms removed — the
+`Reason` on a rejected entry now comes from the envelope's own warning/error text (matched against the
+Ref where possible, falling back to the combined text), rather than a fixed placeholder.
+
 ## Consequences
 
 **Positive**

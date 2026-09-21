@@ -7,7 +7,7 @@
       "layer": "domain",
       "deps": [],
       "acs": ["AC-02", "AC-05", "AC-06", "AC-07", "AC-08"],
-      "dod": "src/types/internet-document.ts compiles with zero any; SaveInternetDocumentPayload/UpdateInternetDocumentPayload are the ServiceType x CargoType intersected type-sets per ADR-0001, never collapsed to shared fields; DeletedInternetDocumentOutcome is a per-Ref array shape, never T | undefined (ADR-0002); tsc --noEmit and lint pass",
+      "dod": "src/types/internet-document.ts compiles with zero any; SaveInternetDocumentPayload/UpdateInternetDocumentPayload are the 4 hand-written ServiceType variants per ADR-0001, never collapsed to shared fields, with CargoType as a plain discriminant field per ADR-0004 (superseding ADR-0001's original cargo axis); DeletedInternetDocumentOutcome is a per-Ref array shape, never T | undefined (ADR-0002); tsc --noEmit and lint pass",
       "files_hint": ["src/types/internet-document.ts"]
     },
     {
@@ -16,7 +16,7 @@
       "layer": "app",
       "deps": ["T1"],
       "acs": ["AC-01", "AC-02", "AC-05", "AC-06"],
-      "dod": "save/update each have a happy-path unit test (returns the saved/updated waybill incl. Ref and IntDocNumber) and an empty-on-success test (resolves undefined, does not throw); a compile-time test proves a payload mixing ServiceType/CargoType fields from different combinations fails to compile",
+      "dod": "save/update each have a happy-path unit test (returns the saved/updated waybill incl. Ref and IntDocNumber) and an empty-on-success test (resolves undefined, does not throw); a compile-time test proves a payload mixing ServiceType location fields from a different leg fails to compile, on both the sender and recipient side (ADR-0004: CargoType is not part of this guard)",
       "files_hint": ["src/modules/internet-document/index.ts"]
     },
     {

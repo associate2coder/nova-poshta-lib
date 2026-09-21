@@ -24,16 +24,18 @@ developer who has already resolved a sender Ref, a recipient Ref, and a location
 makes `internet-document` the authoritative, typed source of waybill `Ref`/`IntDocNumber` values that
 the roadmap's next two modules (`scan-sheet`, `additional-service`) will depend on, mirroring the role
 `address` and `counterparty` already play for their own Refs — and it is the first module in the
-library whose write payload must stay a discriminated union across **two** independent axes
-(`ServiceType` × `CargoType`, up to 16 combinations) rather than `counterparty`'s single axis
-(`CounterpartyType`, 3 variants).
+library whose write payload must stay a discriminated union across the `ServiceType` axis (4 delivery
+legs), one axis wider in variant count than `counterparty`'s single-axis `CounterpartyType` (3
+variants). `CargoType` was originally scoped as a second, independent axis (up to 16 combinations);
+ADR-0004 narrowed it to a plain discriminant field after implementation found no cross-checked source
+confirming Nova Poshta's wire format varies required fields by cargo type — see §4 decision 7.
 
 **Top-3 quality goals (1-liners; full scenarios in §10):**
 
 1. Type-safety — all 8 in-scope methods fully typed, zero `any` in public signatures, and the
-   `save`/`update` payload fails to compile if any field required by the chosen delivery-method/
-   cargo-type combination is missing, or if the payload mixes fields belonging to a different
-   combination (AC-02).
+   `save`/`update` payload fails to compile if any field required by the chosen delivery-method leg
+   is missing, or if the payload mixes location fields belonging to a different leg (AC-02);
+   `CargoType` is a plain discriminant field, not part of this structural guard (ADR-0004).
 2. Error-contract correctness — every declined, malformed, or network-failed call throws the same
    `NovaPoshtaApiError`, including the batch-delete case where some waybills in the same call succeed
    and others are rejected — that case is represented per-Ref, never collapsed into one boolean
@@ -64,8 +66,8 @@ library whose write payload must stay a discriminated union across **two** indep
 
 **Organisational.**
 - Effort budget: sized M per `.size` — bigger than `address`/`counterparty`'s S, driven mainly by the
-  two-axis (`ServiceType` × `CargoType`) discriminated payload and the print sub-flow's distinct code
-  path
+  `ServiceType`-discriminated payload (originally scoped two-axis with `CargoType`, narrowed to one
+  axis by ADR-0004) and the print sub-flow's distinct code path
 - No hard deadline stated in `spec.md`
 - Team: single maintainer (project owner)
 
@@ -140,10 +142,12 @@ had: 2 of its 8 methods (the print methods) don't get a JSON envelope back at al
    `counterparty` already established and the only fit for this repo (no server, no UI). Written to
    this document's frontmatter (`target_surfaces: ["library-sdk"]`); §5 draws one container for it,
    alongside the already-shipped `common`, `address`, and `counterparty` modules.
-2. **Synchronous, direct calls into the existing core client — unchanged, for the 6 JSON-enveloped
-   methods.** `save`, `update`, `delete`, `getDocumentList`, `getDocumentPrice`, and
-   `getDocumentDeliveryDate` call `NovaPoshtaClient.request()` directly, exactly like `common`/
-   `address`/`counterparty`. No client-level change.
+2. **Synchronous, direct calls into the existing core client, for the 6 JSON-enveloped methods.**
+   `save`, `update`, `getDocumentList`, `getDocumentPrice`, and `getDocumentDeliveryDate` call
+   `NovaPoshtaClient.request()` directly, exactly like `common`/`address`/`counterparty`. `delete`
+   also calls the core client directly, but through a second, narrower entry point —
+   `requestEnvelope()` — added to `client.ts` during review remediation; see decision 8's amendment
+   and ADR-0002's update.
 3. **Stateless — no persistence, no caching.** Per the non-goal fixed in `spec.md` §3: a price or
    delivery-date estimate is never linked to a later `save` call; a developer who needs a fresh number
    must request it again immediately before saving.
@@ -157,22 +161,30 @@ had: 2 of its 8 methods (the print methods) don't get a JSON envelope back at al
    `counterparty`.** Every documented parameter, including any date-range/pagination field, stays
    optional at the type level; no client-side page-walking, no injected default (AC-09, matching
    `spec.md` §8 OQ-2's carried-forward default).
-7. **`save`/`update` payload: two independent hand-written type-sets (`ServiceType` × `CargoType`)
-   composed by TypeScript into all valid combinations — ADR-0001.** 4 hand-written `ServiceType`
-   variants (each requiring the location fields its leg needs) and 4 hand-written `CargoType`
-   variants (parcel, cargo, documents, pallet — each requiring its own cargo-detail fields) are
-   written once each, then intersected so
-   TypeScript itself produces every valid delivery-method/cargo-type combination — never 16 fully
-   duplicated interfaces, and never one generic distributive-conditional formula (the style
-   `counterparty` ADR-0001 already rejected, at a much smaller scale, for readability). Closes
-   `spec.md` §8 OQ-3. See ADR-0001.
+7. **`save`/`update` payload: 4 hand-written `ServiceType` variants, one per delivery-method leg,
+   each requiring the sender-leg and recipient-leg location fields that leg needs — ADR-0001, as
+   narrowed by ADR-0004.** ADR-0001 originally scoped this as two independent axes (`ServiceType` ×
+   `CargoType`, up to 16 combinations); implementation found no cross-checked source confirming Nova
+   Poshta's wire format varies required fields by cargo type, so ADR-0004 (Accepted, superseding
+   ADR-0001's cargo axis) narrowed `CargoType` to one plain discriminant field, identical across every
+   variant. The 4 `ServiceType` variants are still written once each and unioned — never one generic
+   distributive-conditional formula (the style `counterparty` ADR-0001 already rejected, at a much
+   smaller scale, for readability). Closes `spec.md` §8 OQ-3. See ADR-0001, ADR-0004.
 8. **`delete`'s result: a hand-built per-Ref outcome array, cross-checked defensively against the
    submitted Refs — ADR-0002.** Every `delete` call, single-Ref or batch, returns one outcome entry
    per submitted Ref (`Ref`, `Removed`, an optional rejection `Reason`) — reconciled by this module
    against whichever Refs Nova Poshta's own response actually confirms removed, so a Ref silently
    missing from that response still surfaces as "not removed" rather than vanishing (AC-07, AC-08).
    This is a deliberate, spec-mandated break from the `T | undefined` shape every other write method in
-   this library uses (`spec.md` §8 OQ-5's own stated default: "build defensively"). See ADR-0002.
+   this library uses (`spec.md` §8 OQ-5's own stated default: "build defensively"). **Amendment
+   (review remediation, 2026-09-21):** a rejected Ref's `Reason` must carry Nova Poshta's own
+   explanation, not a hardcoded placeholder (AC-08) — but the confirmed-removed response shape
+   `request()` returns carries no per-item reason. `client.ts` gained a second entry point,
+   `requestEnvelope()`, returning the full success-path envelope (`data`/`errors`/`warnings`)
+   instead of just `data`, so `delete` can read Nova Poshta's own warning/error text. This is a
+   narrow, additive change to the shared core client — the first this feature makes — recorded
+   against `spec.md` §3's non-goal and §8 OQ-2, both of which previously said the client stays
+   unchanged; see ADR-0002.
 9. **Print methods (`printDocument`/`printMarkings`): construct the link, then verify it with one real
    network check, entirely inside this module — ADR-0003.** Both methods build the print URL per Nova
    Poshta's documented pattern (embedding the caller's own `apiKey` and the submitted Refs), then issue
@@ -200,7 +212,8 @@ client entirely for just those 2 of 8 methods.
 
 ```
 src/
-├── client.ts                     # core: request(), NovaPoshtaApiError — unchanged by this feature
+├── client.ts                     # core: request(), requestEnvelope() (NEW — added for delete's
+                                   #   AC-08 remediation, §4 decision 8 amendment), NovaPoshtaApiError
 ├── modules/
 │   ├── common/                   # existing — unchanged
 │   ├── address/                  # existing — unchanged
@@ -258,9 +271,10 @@ C4Container
 package) as a boundary holding five pieces: the existing core client and the three existing modules
 (all unchanged by this feature), and the new `internet-document` module. `internet-document` is the
 first module with two distinct relationships to the outside world: it delegates 6 of its 8 methods to
-the shared core client exactly like every earlier module, but its 2 print methods talk to Nova Poshta
-directly via their own `fetch` call (ADR-0003), entirely inside this module's own files — the shared
-core client stays untouched (§2, §4 decision 9, `spec.md` §3 non-goal). `internet-document` does not
+the shared core client exactly like every earlier module (5 through `request()` unchanged, `delete`
+through the new `requestEnvelope()` entry point, §4 decision 8 amendment), but its 2 print methods
+talk to Nova Poshta directly via their own `fetch` call (ADR-0003), entirely inside this module's own
+files (§2, §4 decision 9, `spec.md` §3 non-goal). `internet-document` does not
 call `address` or `counterparty` at runtime — a Ref from either is only ever a plain string input,
 never a live cross-module call (AC-18, §8).*
 
@@ -409,7 +423,7 @@ values already shown crossing the wire in Flows 1 and 4, not a distinct runtime 
 | Error handling | Single `NovaPoshtaApiError` for all 8 methods, including the two print methods via their own verification check (ADR-0003) — no subclassing, no per-method error type | `src/client.ts`; `CLAUDE.md`; `spec.md` §6.1 |
 | Write-return shape (save/update) | `T \| undefined` when a successful write's data is empty | `address` ADR-0001 (reused unchanged) |
 | Write-return shape (delete) | A per-Ref outcome array, never `T \| undefined` — the one deliberate divergence from every other write method in this library | `internet-document` ADR-0002 |
-| Discriminated-type modeling | Two intersected type-sets (`ServiceType` × `CargoType`), composed by TypeScript into all valid combinations — a new pattern, distinct from `counterparty`'s single-axis three-hand-written-types approach | `internet-document` ADR-0001 |
+| Discriminated-type modeling | 4 hand-written `ServiceType` variants, unioned — one axis, narrowed from an originally-scoped two-axis (`ServiceType` × `CargoType`) design after ADR-0004 found no source confirming a cargo-type axis exists on the wire; still a new pattern vs. `counterparty`'s single-axis three-hand-written-types approach | `internet-document` ADR-0001, ADR-0004 |
 | Non-JSON transport path | The print methods bypass the shared core client entirely, using a module-local `fetch`-based helper — the only code path in this library that doesn't go through `NovaPoshtaClient.request()` | `internet-document` ADR-0003; `spec.md` §3 non-goal (shared client stays unchanged) |
 | Cross-module type reuse | None new — unlike `counterparty`'s import of `address`'s `SavedAddress`, `internet-document` takes every cross-module value (sender/recipient/contact-person/location Refs) as a plain `string`, performing no cross-module type import and no runtime check of its own (AC-18) | `spec.md` §3 non-goal, AC-18 |
 | ID strategy | N/A — the library holds no persistent IDs of its own; a waybill's `Ref`/`IntDocNumber` are Nova Poshta's, passed through live (AC-17) | `architecture-map.md` |
@@ -425,9 +439,10 @@ values already shown crossing the wire in Flows 1 and 4, not a distinct runtime 
 
 | # | Title | Status | Section |
 |---|---|---|---|
-| 0001 | Compose ServiceType and CargoType as two intersected type-sets | Accepted | §4 |
-| 0002 | Represent batch delete as a defensively reconciled per-Ref outcome array | Accepted | §4 |
+| 0001 | Compose ServiceType and CargoType as two intersected type-sets | Accepted (cargo axis superseded by 0004) | §4 |
+| 0002 | Represent batch delete as a defensively reconciled per-Ref outcome array | Accepted (amended: `delete` reads its Reason via `client.ts`'s new `requestEnvelope()`) | §4 |
 | 0003 | Construct the print link, then verify it with one live check | Accepted | §4 |
+| 0004 | CargoType is a plain discriminant field, not a structural variant axis | Accepted | §1, §4 |
 
 ADR files live under `docs/features/internet-document/adr/`. This feature also relies on `common`'s
 already-Accepted `0001-array-shape-only-validation.md` and `address`'s already-Accepted
@@ -515,9 +530,9 @@ module formats and type-checks the method surface).
 | Waybill (internet document) | The shipment record Nova Poshta creates for a single parcel/cargo, identified by a `Ref` (UUID, used to update/delete it) and an `IntDocNumber` (the printed/tracked number). NOT the `Ref` alone — a waybill is trackable and printable by its `IntDocNumber` even by someone who never sees its `Ref`. |
 | `Ref` | A UUID Nova Poshta assigns to identify a specific record so it can be passed into later API calls. NOT a human-readable name or address string. |
 | Backward delivery | Nova Poshta's cash-on-delivery/return-to-sender mechanism, configured as a payer/amount instruction on a waybill. NOT a return shipment — a return shipment is a separate later action against an already-delivered parcel (`additional-service`'s future scope); backward delivery is a payment instruction on the outbound waybill itself. |
-| `ServiceType` | This module's own fixed, compile-time set of delivery-method literal values (warehouse-to-warehouse, warehouse-to-door, door-to-warehouse, door-to-door) — one axis of the discriminated `save`/`update` payload (ADR-0001). NOT `common`'s runtime `getServiceTypes` lookup, which returns `{Ref?, Description?}` records for display/validation, kept in sync by hand. |
-| `CargoType` | This module's own fixed, compile-time set of cargo-classification literal values (parcel, cargo, documents, pallet) — the second axis of the discriminated `save`/`update` payload (ADR-0001). NOT `common`'s runtime `getCargoTypes` lookup, same relationship as `ServiceType` above. |
-| Discriminated `ServiceType` × `CargoType` payload | The type-level mechanism (`internet-document` ADR-0001) composing two independently hand-written type-sets into all valid delivery-method/cargo-type combinations — never 16 fully duplicated interfaces, never a single generic distributive-conditional formula. |
+| `ServiceType` | This module's own fixed, compile-time set of delivery-method literal values (warehouse-to-warehouse, warehouse-to-door, door-to-warehouse, door-to-door) — the axis of the discriminated `save`/`update` payload (ADR-0001, as narrowed by ADR-0004). NOT `common`'s runtime `getServiceTypes` lookup, which returns `{Ref?, Description?}` records for display/validation, kept in sync by hand. |
+| `CargoType` | This module's own fixed, compile-time set of cargo-classification literal values (parcel, cargo, documents, pallet) — a plain discriminant field on every `save`/`update` payload variant, not a structural axis of its own (ADR-0004, superseding ADR-0001's originally-scoped second axis). NOT `common`'s runtime `getCargoTypes` lookup, same relationship as `ServiceType` above. |
+| Discriminated `ServiceType` payload | The type-level mechanism (`internet-document` ADR-0001) writing one hand-written type-set per delivery-method leg and unioning them — never 4 fully duplicated interfaces beyond what's needed, never a single generic distributive-conditional formula. Originally scoped as a second axis crossed with `CargoType`; narrowed to this one axis by ADR-0004. |
 | Per-Ref outcome array | `delete`'s return shape (`internet-document` ADR-0002): one entry per submitted Ref, each reporting whether it was removed and, if not, Nova Poshta's own reason — reconciled defensively against the submitted Ref set so a Ref missing from Nova Poshta's response is never mistaken for a successful removal. The one write method in this library that returns an array, not `T \| undefined`. |
 | Print-ready link | The URL string `printDocument`/`printMarkings` return (`internet-document` ADR-0003) — constructed per Nova Poshta's documented pattern and verified with one live check before being returned. Carries the caller's own API key embedded in it: whoever holds the link can act with the caller's full account privileges, not merely view the document (AC-13, §6.1). This library performs no redaction, scoping, or expiry of it. |
 | `NovaPoshtaApiError` | The library's single standard error class (extends `Error`), carrying `errors[]`/`errorCodes[]`/`warnings[]` — thrown on any declined call, malformed response, transport failure, or (for the print methods) a failed construct-then-verify check. |

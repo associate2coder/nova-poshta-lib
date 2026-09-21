@@ -1,5 +1,5 @@
 export { createClient, NovaPoshtaApiError } from "./client.js";
-export type { NovaPoshtaClient } from "./client.js";
+export type { NovaPoshtaClient, NovaPoshtaSuccessEnvelope } from "./client.js";
 export type { NovaPoshtaEnvelope, NovaPoshtaRequest } from "./types/envelope.js";
 
 export { createCommonModule } from "./modules/common/index.js";

@@ -33,6 +33,12 @@ const recipient = await counterparty.save({
   Phone: "380501234567",
 });
 
+// save() can resolve undefined, or a record with no Ref, when Nova Poshta reports success with no
+// record (AC-05) — always check before using the result, rather than asserting it's present.
+if (!recipient?.Ref) {
+  throw new Error("Nova Poshta reported success but returned no counterparty record");
+}
+
 const waybill = await internetDocument.save({
   ServiceType: "WarehouseWarehouse",
   CargoType: "Parcel",
@@ -49,7 +55,7 @@ const waybill = await internetDocument.save({
   ContactSender: "<contact person ref>",
   SendersPhone: "380501234567",
   CityRecipient: "<city ref>",
-  Recipient: recipient!.Ref!,
+  Recipient: recipient.Ref,
   ContactRecipient: "<recipient contact person ref>",
   RecipientsPhone: "380501234567",
   RecipientAddress: "<recipient warehouse ref>",

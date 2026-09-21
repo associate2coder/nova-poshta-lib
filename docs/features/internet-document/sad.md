@@ -443,7 +443,29 @@ and CJS output — AC-19, verified by a post-build CI step).
 
 ## 11. Risks and technical debt
 
-<!-- pending -->
+| Risk / debt | Severity | Mitigation | Owner |
+|---|---|---|---|
+| Security review required before release — new money-bearing fields and a credential-bearing return value (the print link) neither `address` nor `counterparty` carried (`spec.md` §6.1) | High | Schedule and complete a security review before `sdd:ship internet-document`; not performed in this design session | Security Lead |
+| Open architectural decision: re-verify the 8-method InternetDocument surface, the full `save`/`update` field shape per combination, whether the print-link methods' URL genuinely embeds the caller's API key, whether print genuinely returns one combined link per call, the print request/response format (copies, label size, PDF vs HTML), and how a caller can tell a print request failed — all currently inferred from three cross-checked community SDKs, not Nova Poshta's official docs (portal still blocks automated fetches) | Open question | Resolve before next release (`sdd:ship internet-document`); ADR-0003's construct-then-verify mechanism is built on this same unconfirmed assumption set (`spec.md` §8 OQ-1) | Tech Lead |
+| Should the shared core client be extended to expose Nova Poshta's pagination metadata (`totalCount`) and success-path warnings? `address` and `counterparty` both deferred this; carried forward unchanged here (§4 decision 6) — `getDocumentList` is the same kind of growing, transactional list `getCounterparties` already is | Open question | Resolve before `sdd:design` of any future module whose lookups depend on complete, multi-page results (`spec.md` §8 OQ-2) | Tech Lead |
+| Whether `delete`'s per-Ref outcome (AC-08) is genuinely distinguishable in Nova Poshta's live response, or whether the "mixed batch result" risk is purely theoretical for this endpoint. **Status at this design review:** the gate this open question flagged was reached in this pass and resolved via the spec's own stated default — ADR-0002's defensive reconciliation, which holds up either way — but the underlying live-API confirmation itself is still outstanding | Open question | Resolve before `sdd:ship internet-document` (re-scoped from the original pre-design due date, mirroring how `counterparty`'s equivalent OQ-2 was handled) — downgrade ADR-0002's reconciliation logic if the live API never actually returns a mixed result (`spec.md` §8 OQ-4) | Tech Lead |
+| Should the print-link methods' return type carry a stronger developer-facing warning (a distinct wrapper type, a lint-enforced doc comment) about the embedded-credential risk (AC-13), beyond the doc comment ADR-0003/QG-3 already commit to? | Open question | Resolve before `sdd:ship internet-document`; default for now is document only, no code-level warning mechanism (`spec.md` §8 OQ-3) | Tech Lead |
+| Cross-account write/list-decline behavior (AC-15) is trusted from community-sourced docs, not confirmed against a live API response (`spec.md` §6.1, same unresolved category as the OQ-1 row above) | Medium | Unit tests confirm the library surfaces whatever decline Nova Poshta sends back (mocked), not that Nova Poshta's own enforcement holds in production; the security review above should confirm this against a live call before sign-off | Security Lead |
+| The print methods' construct-then-verify mechanism (ADR-0003) makes two real network round-trips per call instead of one, unlike every other method in this library — real-world latency for `printDocument`/`printMarkings` will be measurably higher than the rest of the surface, even though the ≤5ms NFR (measured with `fetch` stubbed to near-zero latency) still technically passes | Low | Document the two-round-trip behavior for print methods specifically in the public API docs, so a developer doesn't assume uniform latency across all 8 methods | Tech Lead |
+
+**Accepted debt (acceptable in v1, plan to fix later):**
+- No client-side pagination walking and no surfaced success-path warnings for `getDocumentList`
+  (`spec.md` §1 Decision override, §4 decision 6) — the project owner's deliberate choice to keep the
+  shared core client's scope unchanged for this feature, not a shortcut awaiting cleanup by default.
+  Revisit only when a future module's lookups genuinely need complete multi-page results (§8 OQ-2
+  above).
+- No client-side check that a sender/recipient/contact-person Ref or a location Ref supplied to this
+  module actually belongs to the caller's own account, or was resolved by `address`/`counterparty`
+  rather than typed by hand (AC-18) — matches the library's stateless, no-cross-call-bookkeeping
+  architecture; Nova Poshta's own response is the sole judge.
+- No redaction, scoping, or expiry of the credential-bearing print link (AC-13, `spec.md` §3
+  non-goal) — that link's authentication mechanism is Nova Poshta's own design, external to this
+  library.
 
 ## 12. Glossary
 

@@ -189,7 +189,79 @@ half-successful, and a return value that isn't JSON data at all.
 
 ## 5. Building block view
 
-<!-- pending -->
+Layered per the existing modular-domain convention (project-level ADR-0002): a thin
+`internet-document` domain module sits on top of the shared core client, exactly like `common`,
+`address`, and `counterparty` — with one addition none of the earlier modules needed: an internal
+print-link helper that calls native `fetch` directly (§4 decision 9, ADR-0003), bypassing the shared
+client entirely for just those 2 of 8 methods.
+
+**Internal decomposition:**
+
+```
+src/
+├── client.ts                     # core: request(), NovaPoshtaApiError — unchanged by this feature
+├── modules/
+│   ├── common/                   # existing — unchanged
+│   ├── address/                  # existing — unchanged
+│   ├── counterparty/             # existing — unchanged
+│   └── internet-document/
+│       └── index.ts               # NEW — factory: createInternetDocumentModule(client) → 8 typed
+│                                   #   methods. 6 delegate to client.request() (save, update, delete,
+│                                   #   getDocumentList, getDocumentPrice, getDocumentDeliveryDate);
+│                                   #   printDocument/printMarkings call a private, module-local
+│                                   #   buildAndVerifyPrintLink() helper that uses fetch directly
+│                                   #   (ADR-0003) — never client.request()
+├── types/
+│   ├── envelope.ts                 # existing — shared envelope/request types
+│   ├── common.ts                   # existing
+│   ├── address.ts                  # existing
+│   ├── counterparty.ts             # existing
+│   └── internet-document.ts        # NEW — ServiceType/CargoType literal types + the intersected
+│                                    #   Save/Update payload union (ADR-0001), the per-Ref delete
+│                                    #   outcome type (ADR-0002), list/price/delivery-date/print
+│                                    #   request+response interfaces
+└── index.ts                       # public re-exports (client + common + address + counterparty +
+                                    #   internet-document + types)
+```
+
+`tsup`'s existing dual ESM+CJS build (project-level ADR-0002) already emits matching `.d.ts`/`.d.cts`
+declarations for whatever `src/index.ts` re-exports — no new build step is needed to satisfy AC-19
+(every method discoverable via autocomplete in both published formats); `tasks`/`plan-tests` verify
+the *published* output, not just the source, exactly as the three existing modules already do.
+
+**C4 Container (L2):**
+
+```mermaid
+C4Container
+    title internet-document — Containers
+
+    Person(dev, "Consuming developer")
+
+    Container_Boundary(lib, "nova-poshta-lib") {
+        Container(client, "Core client", "TypeScript", "Builds/sends requests, unwraps the envelope, checks data is array-shaped, throws NovaPoshtaApiError")
+        Container(common, "common module", "TypeScript", "Reference-list methods (existing, unchanged)")
+        Container(address, "address module", "TypeScript", "Location lookup + write methods (existing, unchanged)")
+        Container(counterparty, "counterparty module", "TypeScript", "Counterparty + contact-person methods (existing, unchanged)")
+        Container(idoc, "internet-document module", "TypeScript", "8 typed methods: save/update/delete/getDocumentList/getDocumentPrice/getDocumentDeliveryDate via the core client, plus printDocument/printMarkings via their own fetch-based helper (ADR-0003)")
+    }
+
+    System_Ext(np_api, "Nova Poshta API", "External REST/JSON-RPC-style API, plus a non-JSON print-link sub-service")
+
+    Rel(dev, idoc, "imports, calls typed methods")
+    Rel(idoc, client, "delegates 6 of 8 methods, receives typed + array-checked data")
+    Rel(idoc, np_api, "direct fetch for printDocument/printMarkings only (ADR-0003) — bypasses the core client")
+    Rel(client, np_api, "HTTPS POST, apiKey auth")
+```
+
+*The Containers view draws the one declared surface (`library-sdk`, the whole `nova-poshta-lib`
+package) as a boundary holding five pieces: the existing core client and the three existing modules
+(all unchanged by this feature), and the new `internet-document` module. `internet-document` is the
+first module with two distinct relationships to the outside world: it delegates 6 of its 8 methods to
+the shared core client exactly like every earlier module, but its 2 print methods talk to Nova Poshta
+directly via their own `fetch` call (ADR-0003), entirely inside this module's own files — the shared
+core client stays untouched (§2, §4 decision 9, `spec.md` §3 non-goal). `internet-document` does not
+call `address` or `counterparty` at runtime — a Ref from either is only ever a plain string input,
+never a live cross-module call (AC-18, §8).*
 
 ## 6. Runtime view
 

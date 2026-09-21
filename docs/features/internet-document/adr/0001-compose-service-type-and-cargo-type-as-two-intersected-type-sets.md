@@ -1,5 +1,5 @@
 ---
-status: Accepted
+status: Superseded
 owner: "Architect"
 reviewers: ["Tech Lead"]
 updated_at: "2026-09-21"
@@ -9,9 +9,19 @@ ticket: ""
 
 # 0001 — Compose ServiceType and CargoType as two intersected type-sets
 
-- **Status:** Accepted
+- **Status:** Superseded by [[0004-cargotype-is-a-plain-discriminant-field-not-a-structural-variant-axis]] (2026-09-21, review finding)
 - **Date:** 2026-09-21
 - **Deciders:** User (project owner) + Architect (design session)
+
+> **Superseded note (2026-09-21, `/sdd:review` finding):** the CargoType axis this ADR chose (Option
+> 1's "~4–5 CargoType variants, each requiring only its own cargo-detail fields") was never actually
+> implemented as designed — `implement` shipped `CargoType` as one plain field shared by every
+> variant, and no cross-checked community SDK confirms Nova Poshta's wire format varies required
+> fields by `CargoType` at all (`contracts/public-api.md` §10 finding 1 already flagged this as
+> unconfirmed). Inventing cargo-detail fields with no evidentiary basis would fabricate part of the
+> contract, so ADR-0004 keeps CargoType a plain field and narrows AC-02's compile-time guarantee to
+> the `ServiceType` leg only — this ADR's `ServiceType`-axis decision (the 4 hand-written per-leg
+> variants) stands and is unaffected.
 
 ## Context
 

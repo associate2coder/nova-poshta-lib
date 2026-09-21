@@ -97,35 +97,21 @@ describe("internet-document module — save/update (T2, AC-01/AC-02/AC-05/AC-06)
   it("update without a previously-set BackwardDeliveryData clears it, per the full-replace convention (AC-06)", async () => {
     const fetchMock = mockFetchOnce(() => successEnvelope([savedWaybill]));
     const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
+    const { BackwardDeliveryData, ...payloadWithoutBackwardDelivery } = validUpdatePayload;
+    void BackwardDeliveryData;
 
     await internetDocument.update({ ...validUpdatePayload, BackwardDeliveryData: undefined });
 
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
-    expect(sentBody.methodProperties.BackwardDeliveryData).toBeUndefined();
+    // Falsifiable form: the sent body is exactly the caller's payload minus the omitted field —
+    // not merely "the key parses to undefined", which JSON.stringify would guarantee regardless
+    // of module behavior.
+    expect(sentBody.methodProperties).toEqual(payloadWithoutBackwardDelivery);
   });
 
-  it("rejects a save payload mixing ServiceType/CargoType fields from a different combination at compile time (AC-02)", () => {
-    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
-
-    void internetDocument.save({
-      ...validSavePayload,
-      // @ts-expect-error — RecipientCityName belongs to the WarehouseDoors/DoorsDoors legs, not WarehouseWarehouse.
-      RecipientCityName: "Kyiv",
-    });
-
-    expect(true).toBe(true);
-  });
-
-  it("rejects an update payload missing a required field (e.g. omitted DateTime) at compile time (AC-02)", () => {
-    const internetDocument = createInternetDocumentModule(createClient("test-api-key"));
-
-    const { DateTime, ...incomplete } = validUpdatePayload;
-    void DateTime;
-    // @ts-expect-error — DateTime is required on UpdateInternetDocumentPayload.
-    void internetDocument.update(incomplete);
-
-    expect(true).toBe(true);
-  });
+  // AC-02's compile-time discriminated-payload coverage (every ServiceType leg, both sender and
+  // recipient sides, plus CargoType) lives in test/unit/types/internet-document.test.ts, per this
+  // repo's convention (address/counterparty keep type-level tests in a separate file).
 });
 
 describe("internet-document module — delete (T3, AC-07/AC-08)", () => {

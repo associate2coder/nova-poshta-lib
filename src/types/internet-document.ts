@@ -12,7 +12,7 @@ export interface BackwardDeliveryData {
   Amount?: number;
 }
 
-interface SaveBase {
+interface SaveCommonFields {
   PayerType: PayerType;
   PaymentMethod: PaymentMethod;
   DateTime: string;
@@ -22,36 +22,36 @@ interface SaveBase {
   Cost: number;
   CitySender: string;
   Sender: string;
-  SenderAddress: string;
   ContactSender: string;
   SendersPhone: string;
   CityRecipient: string;
   Recipient: string;
   ContactRecipient: string;
   RecipientsPhone: string;
+  /** ADR-0004: a plain discriminant field, not a per-CargoType structural variant — see ADR-0004,
+   *  which supersedes ADR-0001's cargo axis (no cross-checked source confirms CargoType varies the
+   *  required field set; only the ServiceType leg below does, per AC-02). */
+  CargoType: CargoType;
   BackwardDeliveryData?: BackwardDeliveryData;
 }
 
-/** ADR-0001 axis 1 (ServiceType leg): one hand-written variant per delivery method, each requiring
- *  only the location fields its own leg needs. */
-export interface SaveWarehouseToWarehousePayload extends SaveBase {
-  ServiceType: "WarehouseWarehouse";
+/** Warehouse-ending leg: the location is a warehouse Ref, shared shape for sender and recipient. */
+interface SenderWarehouseLeg {
+  SenderAddress: string; // warehouse Ref
+}
+interface RecipientWarehouseLeg {
   RecipientAddress: string; // warehouse Ref
 }
-export interface SaveWarehouseToDoorsPayload extends SaveBase {
-  ServiceType: "WarehouseDoors";
-  RecipientCityName: string;
-  RecipientArea: string;
-  RecipientAddressName: string;
-  RecipientHouse: string;
-  RecipientFlat?: string;
+
+/** Door-ending leg: the full street address, shared shape for sender and recipient. */
+interface SenderDoorsLeg {
+  SenderCityName: string;
+  SenderArea: string;
+  SenderAddressName: string;
+  SenderHouse: string;
+  SenderFlat?: string;
 }
-export interface SaveDoorsToWarehousePayload extends SaveBase {
-  ServiceType: "DoorsWarehouse";
-  RecipientAddress: string; // warehouse Ref
-}
-export interface SaveDoorsToDoorsPayload extends SaveBase {
-  ServiceType: "DoorsDoors";
+interface RecipientDoorsLeg {
   RecipientCityName: string;
   RecipientArea: string;
   RecipientAddressName: string;
@@ -59,20 +59,27 @@ export interface SaveDoorsToDoorsPayload extends SaveBase {
   RecipientFlat?: string;
 }
 
-type SaveByServiceType =
+/** ADR-0001 (as narrowed by ADR-0004): one hand-written variant per delivery method, each requiring
+ *  only the sender-leg AND recipient-leg location fields that leg needs (AC-02 covers both legs, not
+ *  the recipient leg alone). */
+export interface SaveWarehouseToWarehousePayload extends SaveCommonFields, SenderWarehouseLeg, RecipientWarehouseLeg {
+  ServiceType: "WarehouseWarehouse";
+}
+export interface SaveWarehouseToDoorsPayload extends SaveCommonFields, SenderWarehouseLeg, RecipientDoorsLeg {
+  ServiceType: "WarehouseDoors";
+}
+export interface SaveDoorsToWarehousePayload extends SaveCommonFields, SenderDoorsLeg, RecipientWarehouseLeg {
+  ServiceType: "DoorsWarehouse";
+}
+export interface SaveDoorsToDoorsPayload extends SaveCommonFields, SenderDoorsLeg, RecipientDoorsLeg {
+  ServiceType: "DoorsDoors";
+}
+
+export type SaveInternetDocumentPayload =
   | SaveWarehouseToWarehousePayload
   | SaveWarehouseToDoorsPayload
   | SaveDoorsToWarehousePayload
   | SaveDoorsToDoorsPayload;
-
-/** ADR-0001 axis 2 (CargoType classification), intersected with the ServiceType leg so the compiler
- *  distributes both axes into every valid combination automatically — never one flat shape with every
- *  field merely optional. */
-interface CargoTypeDetail {
-  CargoType: CargoType;
-}
-
-export type SaveInternetDocumentPayload = SaveByServiceType & CargoTypeDetail;
 
 export interface SavedInternetDocument {
   Ref: string;
@@ -89,7 +96,7 @@ export interface SavedInternetDocument {
  *  `counterparty` ADR-0001's explicit-variants precedent, rather than a generic `Required<union>`
  *  wrapper (which would force BackwardDeliveryData mandatory too and make AC-06's "omit to clear"
  *  case impossible to express). */
-interface UpdateBase {
+interface UpdateCommonFields {
   PayerType: PayerType;
   PaymentMethod: PaymentMethod;
   DateTime: string;
@@ -99,7 +106,6 @@ interface UpdateBase {
   Cost: number;
   CitySender: string;
   Sender: string;
-  SenderAddress: string;
   ContactSender: string;
   SendersPhone: string;
   CityRecipient: string;
@@ -111,29 +117,20 @@ interface UpdateBase {
   Ref: string;
 }
 
-export interface UpdateWarehouseToWarehousePayload extends UpdateBase {
+export interface UpdateWarehouseToWarehousePayload
+  extends UpdateCommonFields,
+    SenderWarehouseLeg,
+    RecipientWarehouseLeg {
   ServiceType: "WarehouseWarehouse";
-  RecipientAddress: string;
 }
-export interface UpdateWarehouseToDoorsPayload extends UpdateBase {
+export interface UpdateWarehouseToDoorsPayload extends UpdateCommonFields, SenderWarehouseLeg, RecipientDoorsLeg {
   ServiceType: "WarehouseDoors";
-  RecipientCityName: string;
-  RecipientArea: string;
-  RecipientAddressName: string;
-  RecipientHouse: string;
-  RecipientFlat?: string;
 }
-export interface UpdateDoorsToWarehousePayload extends UpdateBase {
+export interface UpdateDoorsToWarehousePayload extends UpdateCommonFields, SenderDoorsLeg, RecipientWarehouseLeg {
   ServiceType: "DoorsWarehouse";
-  RecipientAddress: string;
 }
-export interface UpdateDoorsToDoorsPayload extends UpdateBase {
+export interface UpdateDoorsToDoorsPayload extends UpdateCommonFields, SenderDoorsLeg, RecipientDoorsLeg {
   ServiceType: "DoorsDoors";
-  RecipientCityName: string;
-  RecipientArea: string;
-  RecipientAddressName: string;
-  RecipientHouse: string;
-  RecipientFlat?: string;
 }
 
 export type UpdateInternetDocumentPayload =

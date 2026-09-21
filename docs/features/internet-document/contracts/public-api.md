@@ -90,15 +90,16 @@ AC-16) — not repeated per row.
 ### 3.1 `save`
 
 ```ts
-/** sad.md §4 decision 7, ADR-0001: two independent hand-written type-sets (ServiceType leg ×
- *  CargoType classification), intersected by TypeScript into every valid combination — never one
- *  flat shape with every field merely optional. Location-field shape per leg is confirmed from
- *  platx/go-nova-poshta's SaveReq/WarehouseSaveReq/AddressSaveReq/PostomatSaveReq (re-fetched);
- *  the CargoType-specific field split is NOT separately confirmed by any cross-checked source —
- *  CargoType there is a plain enum field on one shared struct, not a struct-varying discriminant
- *  (§10 finding 1 / api-sync-report.md, flagged).
+/** sad.md §4 decision 7, ADR-0001 (as narrowed by ADR-0004): one hand-written variant per
+ *  ServiceType leg, each requiring only the sender-leg AND recipient-leg location fields that leg
+ *  needs — never one flat shape with every field merely optional. Location-field shape per leg is
+ *  confirmed from platx/go-nova-poshta's SaveReq/WarehouseSaveReq/AddressSaveReq/PostomatSaveReq
+ *  (re-fetched). CargoType is a plain discriminant field, not a structural variant axis — ADR-0004
+ *  supersedes ADR-0001's original two-axis design: no cross-checked source confirms Nova Poshta's
+ *  wire format varies required fields by CargoType (§10 finding 1 / api-sync-report.md, still
+ *  flagged; see spec.md §8 OQ-1/OQ-3).
  */
-interface SaveBase {
+interface SaveCommonFields {
   PayerType: PayerType;
   PaymentMethod: PaymentMethod;
   DateTime: string;
@@ -108,34 +109,30 @@ interface SaveBase {
   Cost: number;
   CitySender: string;
   Sender: string;
-  SenderAddress: string;
   ContactSender: string;
   SendersPhone: string;
   CityRecipient: string;
   Recipient: string;
   ContactRecipient: string;
   RecipientsPhone: string;
+  CargoType: CargoType;
   BackwardDeliveryData?: BackwardDeliveryData;
 }
 
-export interface SaveWarehouseToWarehousePayload extends SaveBase {
-  ServiceType: "WarehouseWarehouse";
+interface SenderWarehouseLeg {
+  SenderAddress: string; // warehouse Ref
+}
+interface RecipientWarehouseLeg {
   RecipientAddress: string; // warehouse Ref
 }
-export interface SaveWarehouseToDoorsPayload extends SaveBase {
-  ServiceType: "WarehouseDoors";
-  RecipientCityName: string;
-  RecipientArea: string;
-  RecipientAddressName: string;
-  RecipientHouse: string;
-  RecipientFlat?: string;
+interface SenderDoorsLeg {
+  SenderCityName: string;
+  SenderArea: string;
+  SenderAddressName: string;
+  SenderHouse: string;
+  SenderFlat?: string;
 }
-export interface SaveDoorsToWarehousePayload extends SaveBase {
-  ServiceType: "DoorsWarehouse";
-  RecipientAddress: string; // warehouse Ref
-}
-export interface SaveDoorsToDoorsPayload extends SaveBase {
-  ServiceType: "DoorsDoors";
+interface RecipientDoorsLeg {
   RecipientCityName: string;
   RecipientArea: string;
   RecipientAddressName: string;
@@ -143,20 +140,24 @@ export interface SaveDoorsToDoorsPayload extends SaveBase {
   RecipientFlat?: string;
 }
 
-type SaveByServiceType =
+export interface SaveWarehouseToWarehousePayload extends SaveCommonFields, SenderWarehouseLeg, RecipientWarehouseLeg {
+  ServiceType: "WarehouseWarehouse";
+}
+export interface SaveWarehouseToDoorsPayload extends SaveCommonFields, SenderWarehouseLeg, RecipientDoorsLeg {
+  ServiceType: "WarehouseDoors";
+}
+export interface SaveDoorsToWarehousePayload extends SaveCommonFields, SenderDoorsLeg, RecipientWarehouseLeg {
+  ServiceType: "DoorsWarehouse";
+}
+export interface SaveDoorsToDoorsPayload extends SaveCommonFields, SenderDoorsLeg, RecipientDoorsLeg {
+  ServiceType: "DoorsDoors";
+}
+
+export type SaveInternetDocumentPayload =
   | SaveWarehouseToWarehousePayload
   | SaveWarehouseToDoorsPayload
   | SaveDoorsToWarehousePayload
   | SaveDoorsToDoorsPayload;
-
-/** ADR-0001's second axis. CargoType-specific fields are the `flagged`-confidence part of this
- *  contract — no cross-checked source models a cargo-detail field set that varies by CargoType;
- *  SeatsAmount/Weight/CargoDetails apply uniformly regardless of CargoType in every source read. */
-interface CargoTypeDetail {
-  CargoType: CargoType;
-}
-
-export type SaveInternetDocumentPayload = SaveByServiceType & CargoTypeDetail;
 
 save(payload: SaveInternetDocumentPayload): Promise<SavedInternetDocument | undefined>;
 ```
@@ -390,10 +391,12 @@ path — the library performs no inspection of `errorCodes[]` to tell them apart
 
 These `sad.md` §6 marks as non-runtime (N/A in the coverage table) but that still bind this contract:
 
-- **AC-02 (discriminated payload guard):** enforced entirely by §2/§3.1's intersected type
-  (`ServiceType` leg × `CargoType` axis) — a compile error, not a runtime check. It verifies the
-  payload's own internal consistency only; it cannot verify a location Ref actually resolves to a real
-  matching location (that surfaces as AC-14).
+- **AC-02 (discriminated payload guard):** enforced entirely by §2/§3.1's per-`ServiceType`-leg
+  variants (sender leg AND recipient leg both discriminated independently) — a compile error, not a
+  runtime check. `CargoType` is a plain field, not part of this structural guard (ADR-0004
+  supersedes ADR-0001's original two-axis design). It verifies the payload's own internal
+  consistency only; it cannot verify a location Ref actually resolves to a real matching location
+  (that surfaces as AC-14).
 - **AC-13 (credential-bearing print link):** documented here explicitly — the string `printDocument`/
   `printMarkings` return carries the same access as the caller's own API key (re-confirmed at `high`
   confidence, §3.7). This library performs no redaction, scoping, or expiry of it.

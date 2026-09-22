@@ -25,7 +25,7 @@ available as a typed, tested, documented module in `nova-poshta-lib`, published 
 | 2 | address — typed Address domain module (11 methods + `findCityByName` convenience) | `docs/features/address/spec.md` §1 | S | shipped |
 | 3 | counterparty — typed Counterparty + ContactPerson module (11 methods + `findCounterparty` convenience) | `docs/features/counterparty/spec.md` §1 | S | shipped |
 | 4 | internet-document — typed shipment/waybill creation module, built on address + counterparty `Ref`s and common's reference types | [`docs/features/internet-document/spec.md`](features/internet-document/spec.md) | M | shipped |
-| 5 | tracking-document — typed module for tracking a shipment by document number + phone, independent of internet-document | `docs/architecture-map.md` §Module inventory (target) | S | idea |
+| 5 | tracking-document — typed module (1 raw method + 1 single-waybill convenience) for tracking a shipment by waybill number + optional phone, independent of internet-document and `common` | [`docs/features/tracking-document/spec.md`](features/tracking-document/spec.md) | S | shipped |
 | 6 | scan-sheet — typed module for batching waybills into a scan sheet for courier handoff | `docs/architecture-map.md` §Constraints & known tech-debt | S | idea |
 | 7 | additional-service — typed module for post-creation shipment actions: returns, redirections, waybill edits | `docs/architecture-map.md` §Constraints & known tech-debt | M | idea |
 | 8 | documentation — TSDoc comments on every exported symbol across all modules + TypeDoc-generated static API reference, wired into CI/publish | `docs/architecture-map.md` §Intent ("documented" listed as a foundation requirement; no step covers it — the README has usage snippets but no generated reference) | S | idea |
@@ -68,13 +68,20 @@ is where its unresolved detail lives)*
   `counterparty`, which folds in `ContactPerson`) is closed, cross-checked against
   `platx/go-nova-poshta` + `maddsua/NovaPoshtaREST` →
   [`docs/architecture-map.md`](architecture-map.md) §Constraints & known tech-debt
+- `tracking-document` does **not** depend on `common`, reversing this graph's original
+  "reuses `DocumentStatus` type" edge below — nothing confirms `common.getDocumentStatuses()`'s
+  values correspond to `TrackingDocument`'s own status code, and the library already had a third,
+  independent status representation (`internet-document`'s `StateId`/`StateName`) the original edge
+  didn't account for either. `tracking-document` defines its own status representation instead,
+  matching the hardcode-and-hand-sync precedent `internet-document` set for `ServiceType`/`CargoType`
+  → [`docs/features/tracking-document/spec.md`](features/tracking-document/spec.md) §1 Decision override
 
 ## Dependency graph
 
 ```mermaid
 flowchart LR
   s1["1 · common"] -->|reuses PaymentForm/ServiceType/CargoType/Pallet/Tray/TireWheel/PayerType types| s4["4 · internet-document"]
-  s1 -->|reuses DocumentStatus type| s5["5 · tracking-document"]
+  s5["5 · tracking-document"]
   s2["2 · address"] -->|needs city/street/warehouse Ref| s4
   s3["3 · counterparty"] -->|needs sender/recipient/contact-person Ref| s4
   s4 -->|InsertDocuments/RemoveDocuments need waybill Refs| s6["6 · scan-sheet"]
@@ -111,3 +118,4 @@ picture, not a headless graph.
 | address | 2026-09-20 | [PR #3](https://github.com/associate2coder/nova-poshta-lib/pull/3) |
 | counterparty | 2026-09-20 | [PR #4](https://github.com/associate2coder/nova-poshta-lib/pull/4) |
 | internet-document | 2026-09-22 | [PR #6](https://github.com/associate2coder/nova-poshta-lib/pull/6) |
+| tracking-document | 2026-09-22 | [PR #9](https://github.com/associate2coder/nova-poshta-lib/pull/9) |

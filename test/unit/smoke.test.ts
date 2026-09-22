@@ -4,6 +4,8 @@ import {
   createClient,
   createCounterpartyModule,
   createInternetDocumentModule,
+  createTrackingDocumentModule,
+  TRACKING_STATUS_CODES,
 } from "../../src/index.js";
 
 describe("package entry point", () => {
@@ -25,5 +27,11 @@ describe("package entry point", () => {
   it("imports and exports createInternetDocumentModule, type-checked against a real client (T6, AC-17/AC-18)", () => {
     expect(typeof createInternetDocumentModule).toBe("function");
     expect(() => createInternetDocumentModule(createClient("test-api-key"))).not.toThrow();
+  });
+
+  it("imports and exports createTrackingDocumentModule + TRACKING_STATUS_CODES, type-checked against a real client (T4)", () => {
+    expect(typeof createTrackingDocumentModule).toBe("function");
+    expect(() => createTrackingDocumentModule(createClient("test-api-key"))).not.toThrow();
+    expect(TRACKING_STATUS_CODES[3]).toBe("Номер не знайдено");
   });
 });

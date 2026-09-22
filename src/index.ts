@@ -111,3 +111,12 @@ export type {
   UpdateWarehouseToWarehousePayload,
   WaybillListItem,
 } from "./types/internet-document.js";
+
+export { createTrackingDocumentModule } from "./modules/tracking-document/index.js";
+export type { TrackingDocumentModule } from "./modules/tracking-document/index.js";
+export { TRACKING_STATUS_CODES } from "./types/tracking-document.js";
+export type {
+  GetStatusDocumentsPayload,
+  TrackingDocumentFilter,
+  TrackingStatus,
+} from "./types/tracking-document.js";

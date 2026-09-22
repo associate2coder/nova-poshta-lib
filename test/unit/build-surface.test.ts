@@ -62,6 +62,8 @@ const INTERNET_DOCUMENT_METHOD_NAMES = [
   "printMarkings",
 ];
 
+const TRACKING_DOCUMENT_METHOD_NAMES = ["getStatusDocuments", "getDocumentStatus"];
+
 function declarationPath(relativePath: string): string {
   return fileURLToPath(new URL(`../../${relativePath.replace(/^\.\//, "")}`, import.meta.url));
 }
@@ -204,6 +206,25 @@ describe("published build surface (AC-07)", () => {
 
     for (const method of INTERNET_DOCUMENT_METHOD_NAMES) {
       expect(interfaceBody, `expected ${relativePath}'s InternetDocumentModule to declare ${method}`).toMatch(
+        new RegExp(`\\b${method}\\b`),
+      );
+    }
+  });
+
+  it.each([
+    [ESM_TYPES_PATH, "ESM"],
+    [CJS_TYPES_PATH, "CJS"],
+  ])("%s (%s) declares createTrackingDocumentModule and both tracking-document identifiers (T6)", (relativePath) => {
+    const contents = readFreshDeclaration(relativePath);
+
+    expect(contents).toMatch(/\bcreateTrackingDocumentModule\b/);
+
+    const interfaceMatch = contents.match(/interface TrackingDocumentModule \{([\s\S]*?)\n\}/);
+    expect(interfaceMatch, `expected ${relativePath} to declare a TrackingDocumentModule interface`).not.toBeNull();
+    const interfaceBody = interfaceMatch![1];
+
+    for (const method of TRACKING_DOCUMENT_METHOD_NAMES) {
+      expect(interfaceBody, `expected ${relativePath}'s TrackingDocumentModule to declare ${method}`).toMatch(
         new RegExp(`\\b${method}\\b`),
       );
     }

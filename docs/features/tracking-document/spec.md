@@ -102,6 +102,8 @@ type DocumentStatus struct {
 
 **Resolved during clarify:** the module types every one of the 91 documented fields in `DocumentStatus` (not just the PII-relevant subset trimmed above for readability), matching `address`/`common`'s existing precedent of exhaustive field typing rather than a partial type plus a catch-all — per §6's "zero `any` in public signatures" target. This is a genuine sizing risk against the feature's current `S` estimate; `classify-size` should be re-run once `sdd:tasks` breaks the work down, since the module's actual field count is materially larger than the ~12 fields quoted above.
 
+**Correction (api-contract pass, 2026-09-22):** the "91 fields" figure above was an inaccurate estimate — re-fetching both cross-checked SDKs' *current* source during the `api` skill's contract-derivation pass (per CLAUDE.md's sourcing policy) found `platx/go-nova-poshta`'s `DocumentStatus` struct actually declares **114** fields and `maddsua/NovaPoshtaREST`'s `i_getStatusDocuments_result` declares **105** — a **118-field union** once deduplicated by name (103 fields both agree on, 11 Go-only, 4 TypeScript-only). `docs/features/tracking-document/contracts/public-api.md` §2 now types the full 118-field union (forward-compatible per AC-07, not the intersection) — see `contracts/api-sync-report.md` for the full field-origins table and per-field confidence.
+
 **Status-code semantics** (the source for AC-06's "not found is data, not an error" claim — two independent sources, not the CONTEXT.md glossary entry that merely restates this):
 
 ```go

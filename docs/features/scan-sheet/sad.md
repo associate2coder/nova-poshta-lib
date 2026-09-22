@@ -42,7 +42,7 @@ friction for the common "add to today's still-open batch" case.
 | Consuming developer | Calls the 6 typed methods to batch/inspect/undo waybill-to-scan-sheet membership | No |
 | Tech Lead | SAD approval; owns the `spec.md` §8 open questions this design pass inherits, and performs the §6.1 security review this module requires before `sdd:ship` (`spec.md` §8) | Yes |
 
-<!-- Decision overrides (¶4) — none raised during this design pass; the spec's own 12 §1 Decision
+<!-- Decision overrides (¶4) — none raised during this design pass; the spec's own 9 §1 Decision
      overrides are inherited unchanged, not re-litigated here — see §4. -->
 
 ## 2. Constraints
@@ -399,19 +399,22 @@ Each top-3 goal from §1 expanded into a full scenario:
   newest `DateTime` is chosen, plus a zero-match fixture asserting a new sheet is created (`spec.md`
   test plan AC-03 row).
 
-Two further `spec.md` §6 NFR rows apply library-wide, not to one specific quality goal above, and are
-still binding: **Type-safety coverage** (100% of the 6 in-scope methods carry zero `any` in their
-public signatures, static check in CI); and **Library-added overhead per call** (median ≤5ms beyond
-the underlying network round-trip for the 5 raw methods, `addToTodaysScanSheet` explicitly excluded
-since its two-call cost is by design — benchmarked with `fetch` stubbed to near-zero latency across
-≥30 repeated single-item calls, always runs in CI).
+Three further `spec.md` §6 NFR rows apply library-wide, not to one specific quality goal above, and
+are still binding: **Type-safety coverage** (100% of the 6 in-scope methods carry zero `any` in their
+public signatures, static check in CI); **Method-surface completeness** (100% of the 5 raw methods + 1
+convenience method have a corresponding typed method, asserted exported/callable in the unit suite);
+and **Library-added overhead per call** (median ≤5ms beyond the underlying network round-trip for the
+5 raw methods, `addToTodaysScanSheet` explicitly excluded since its two-call cost is by design —
+benchmarked with `fetch` stubbed to near-zero latency across ≥30 repeated single-item calls, always
+runs in CI).
 
 ## 11. Risks and technical debt
 
 | Risk / debt | Severity | Mitigation | Owner |
 |---|---|---|---|
 | Security review required before release — sender PII (`Sender`, `SenderAddress`) returned from a call whose only scoping (`CounterpartyRef`) is enforced entirely by Nova Poshta, not this library (`spec.md` §6.1) | Medium | Performed by the Tech Lead during `sdd:review`/before `sdd:ship`, matching `tracking-document`'s precedent — no code change expected unless the review finds one | Tech Lead |
-| `getScanSheetList`'s "still unprinted" sentinel value is a best guess (`Printed === "0"`) — no source confirms Nova Poshta's exact literal for "not printed" vs. "printed" (§4 decision 3, ledger assumption) | Medium | Live-API check before or shortly after ship; if wrong, `addToTodaysScanSheet` could miss an open sheet or treat a printed one as open — fix is a one-line comparison change, no public-signature impact | Tech Lead |
+| `getScanSheetList`'s "still unprinted" sentinel value is a best guess (`Printed === "0"`) — no source confirms Nova Poshta's exact literal for "not printed" vs. "printed" (§4 decision 3, ledger assumption) | Medium | **Must be resolved before `sdd:ship`** (live-API check during `sdd:review`), per CLAUDE.md's API-contract sourcing policy — an unresolved API-contract question blocks ship, the same bar that excluded `printScanSheet` above; if wrong, `addToTodaysScanSheet` could miss an open sheet or treat a printed one as open — fix is a one-line comparison change, no public-signature impact | Tech Lead |
+| Does saving an unprinted waybill via `internet-document` (needed to seed this module's integration tests) incur any real cost on a live account? (`spec.md` §8 OQ) | Low | Default: proceed with the create-then-delete integration test design; if it turns out costly, switch to a pre-existing-`Ref` env var instead (spec's own fallback) | Tech Lead — due before `sdd:tasks` |
 | Does `getScanSheetList` return every scan sheet regardless of account volume, or can it be capped/paginated? No source shows a `Page`/`Limit` parameter (`spec.md` §8 OQ) — `addToTodaysScanSheet` depends on this list being complete to reliably find today's sheet | Medium | Default: assume the list is always complete, no client-side paging added; re-verify against the live API once reachable (`spec.md` §8) | Tech Lead |
 | `printScanSheet` — single-sourced only (1 of 4 cross-checked SDKs), excluded from this module's confirmed 6-method surface (`spec.md` §1 Decision override, §8 OQ) | Low | Tracked as an open question, not shipped as an AC; revisit once a 2nd agreeing source or the official docs are reachable | Tech Lead |
 | Re-verify the 5-raw-method `ScanSheet` surface and `insertDocuments`'s empty-string-creates-new-sheet semantics against Nova Poshta's live/official documentation once the portal is reachable by automated tooling — the 3-SDK cross-check agrees field-for-field but is still a third-party source, the same caveat every shipped spec in this repo already carries (`spec.md` §8 OQ) | Low | Re-attempt during `sdd:review`/`sdd:ship`, same schedule every sibling module's equivalent OQ follows | Tech Lead |

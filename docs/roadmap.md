@@ -107,3 +107,4 @@ picture, not a headless graph.
 | address | 2026-09-20 | [PR #3](https://github.com/associate2coder/nova-poshta-lib/pull/3) |
 | counterparty | 2026-09-20 | [PR #4](https://github.com/associate2coder/nova-poshta-lib/pull/4) |
 | internet-document | 2026-09-22 | [PR #6](https://github.com/associate2coder/nova-poshta-lib/pull/6) |
+| tracking-document | 2026-09-22 | [PR #9](https://github.com/associate2coder/nova-poshta-lib/pull/9) |

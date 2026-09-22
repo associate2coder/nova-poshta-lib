@@ -449,6 +449,7 @@ describe("scan-sheet module — shared error contract (T2, AC-11/AC-12/AC-13)", 
 describe("scan-sheet module — addToTodaysScanSheet (T3, AC-03)", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("picks the most recently created still-unprinted today-sheet when 2+ match (AC-03)", async () => {
@@ -543,6 +544,15 @@ describe("scan-sheet module — addToTodaysScanSheet (T3, AC-03)", () => {
   });
 
   it("picks the correct most-recent sheet when getScanSheetList mixes DateTime formats across items (AC-03, format-agnostic)", async () => {
+    // Pinned to a day-of-month <= 19 (2026-01-05): raw string comparison of "DD.MM.YYYY..." vs.
+    // "YYYY-MM-DD..." is only wrong on days whose leading digit ('0' or '1') sorts below the ISO
+    // string's leading '2' — day 5 reproduces that failure mode. Without pinning, this test would
+    // vacuously pass on any day 21-31, silently losing its ability to catch a reintroduced raw
+    // comparison (confirmed empirically during review: it passed against the reverted code on
+    // 2026-09-23's real date).
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-05T12:00:00Z"));
+
     const today = kyivTodayDateString();
     const [year, month, day] = today.split("-");
     const dottedToday = `${day}.${month}.${year}`;

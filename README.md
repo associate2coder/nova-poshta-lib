@@ -16,12 +16,14 @@ import {
   createAddressModule,
   createCounterpartyModule,
   createInternetDocumentModule,
+  createTrackingDocumentModule,
 } from "nova-poshta-lib";
 
 const client = createClient(process.env.NOVA_POSHTA_API_KEY!);
 const address = createAddressModule(client);
 const counterparty = createCounterpartyModule(client);
 const internetDocument = createInternetDocumentModule(client);
+const trackingDocument = createTrackingDocumentModule(client);
 
 const cities = await address.getCities({ FindByString: "Київ" });
 
@@ -76,10 +78,22 @@ if (waybill) {
 // it is not a single Nova Poshta batch call (see DeleteInternetDocumentPayload's doc comment).
 await internetDocument.delete({ Ref: "<waybill ref>" });
 await internetDocument.deleteBatch({ Documents: ["<waybill ref 1>", "<waybill ref 2>"] });
+
+// tracking-document works for any waybill number — one this library created, one imported from
+// Nova Poshta's own portal, or one a third party shipped — with no dependency on internet-document.
+const status = await trackingDocument.getDocumentStatus("20400048799000");
+
+// A "not found" or "removed" waybill (StatusCode 2 or 3) resolves as a normal status record, not
+// an error (AC-06) — check StatusCode yourself rather than wrapping this call in try/catch to
+// detect it. getDocumentStatus resolves undefined only when zero returned records match the
+// requested waybill number, which is distinct from AC-06's "not found" status.
+if (status) {
+  console.log(status.Status, status.StatusCode);
+}
 ```
 
-> `common`, `address`, `counterparty`, and `internet-document` are the domain modules shipped so
-> far — more are added incrementally under `src/modules/`.
+> `common`, `address`, `counterparty`, `internet-document`, and `tracking-document` are the domain
+> modules shipped so far — more are added incrementally under `src/modules/`.
 
 ## Development
 

@@ -162,9 +162,11 @@ describe("tracking-document module — getStatusDocuments raw batch (T2, AC-01/A
     expect(sentBody.modelName).toBe("TrackingDocument");
     expect(sentBody.calledMethod).toBe("getStatusDocuments");
     expect(sentBody.methodProperties.Documents).toEqual(documents);
+    // AC-03: a multi-waybill request is passed through as ONE call, never split into several.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("returns a short/reordered/longer-than-requested response with every record's own Number field intact (AC-05)", async () => {
+  it("returns a longer-than-requested, reordered response with every record's own Number field intact (AC-05)", async () => {
     mockFetchOnce(() =>
       successEnvelope([
         record({ Number: "20400048799002" }),
@@ -186,6 +188,31 @@ describe("tracking-document module — getStatusDocuments raw batch (T2, AC-01/A
       "20400048799000",
       "20400048799003",
     ]);
+  });
+
+  it("returns a shorter-than-requested response — the one returned record's own Number field intact, not padded or reindexed (AC-05)", async () => {
+    mockFetchOnce(() => successEnvelope([record({ Number: "20400048799000" })]));
+    const trackingDocument = createTrackingDocumentModule(createClient("test-api-key"));
+
+    const result = await trackingDocument.getStatusDocuments({
+      Documents: [
+        { DocumentNumber: "20400048799000", Phone: "" },
+        { DocumentNumber: "20400048799001", Phone: "" },
+        { DocumentNumber: "20400048799002", Phone: "" },
+      ],
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.Number).toBe("20400048799000");
+  });
+
+  it("resolves a validly-shaped, zero-record response as success, not an error — the smallest instance of AC-05", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const trackingDocument = createTrackingDocumentModule(createClient("test-api-key"));
+
+    await expect(
+      trackingDocument.getStatusDocuments({ Documents: [{ DocumentNumber: "20400048799000", Phone: "" }] }),
+    ).resolves.toEqual([]);
   });
 
   it("resolves a not-found/removed status code (2 or 3) as a normal record, no exception (AC-06)", async () => {
@@ -240,6 +267,13 @@ describe("tracking-document module — getDocumentStatus convenience (T3, AC-04)
 
   it("resolves undefined when zero returned records match the requested Number", async () => {
     mockFetchOnce(() => successEnvelope([record({ Number: "some-other-waybill" })]));
+    const trackingDocument = createTrackingDocumentModule(createClient("test-api-key"));
+
+    await expect(trackingDocument.getDocumentStatus("20400048799000")).resolves.toBeUndefined();
+  });
+
+  it("resolves undefined on a whitespace/case mismatch — exact comparison only, no trimming or case-folding (AC-04)", async () => {
+    mockFetchOnce(() => successEnvelope([record({ Number: " 20400048799000 " })]));
     const trackingDocument = createTrackingDocumentModule(createClient("test-api-key"));
 
     await expect(trackingDocument.getDocumentStatus("20400048799000")).resolves.toBeUndefined();

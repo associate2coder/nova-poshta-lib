@@ -1,0 +1,77 @@
+{
+  "slug": "tracking-document",
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Define tracking-document domain types",
+      "layer": "domain",
+      "deps": [],
+      "acs": ["AC-07"],
+      "dod": "src/types/tracking-document.ts compiles with zero any; TrackingDocumentFilter/GetStatusDocumentsPayload match contracts/public-api.md §2 field-for-field; TrackingStatus types the full 118-field union (not the 103-field intersection) with StatusCode as a plain number and the 5 disputed fields as boolean | string per public-api.md §2; TRACKING_STATUS_CODES is exported as a documentation-only const, never used to narrow StatusCode; tsc --noEmit and lint pass",
+      "files_hint": ["src/types/tracking-document.ts"]
+    },
+    {
+      "id": "T2",
+      "title": "Implement getStatusDocuments (raw batch method)",
+      "layer": "app",
+      "deps": ["T1"],
+      "acs": ["AC-01", "AC-02", "AC-03", "AC-05", "AC-06", "AC-11"],
+      "dod": "getStatusDocuments delegates to client.request(\"TrackingDocument\", \"getStatusDocuments\", { Documents }) with the caller's Documents array passed through unmodified (no split/cap/reorder); a supplied Phone defaults to an empty string when omitted; a mocked-fetch unit test asserts a short/reordered/longer-than-requested response array is returned with every record's own Number field intact and unmodified; src/modules/tracking-document/index.ts imports nothing from src/modules/internet-document",
+      "files_hint": ["src/modules/tracking-document/index.ts"]
+    },
+    {
+      "id": "T3",
+      "title": "Implement getDocumentStatus (single-waybill convenience, match-by-identity)",
+      "layer": "app",
+      "deps": ["T1"],
+      "acs": ["AC-04"],
+      "dod": "getDocumentStatus makes exactly one call carrying a single-item Documents array, then resolves the result by exact string comparison of the returned record's Number field against the requested documentNumber (no trimming/case-folding); zero matches resolves undefined; more than one match throws NovaPoshtaApiError; each of the three outcomes has a mocked-fetch unit test",
+      "files_hint": ["src/modules/tracking-document/index.ts"]
+    },
+    {
+      "id": "T4",
+      "title": "Wire tracking-document module into the public package surface",
+      "layer": "wiring",
+      "deps": ["T2", "T3"],
+      "acs": [],
+      "dod": "src/index.ts exports createTrackingDocumentModule, TrackingDocumentModule, and every type from src/types/tracking-document.ts (including TRACKING_STATUS_CODES); npm run build succeeds with matching dist/index.d.ts and dist/index.d.cts output",
+      "files_hint": ["src/index.ts"]
+    },
+    {
+      "id": "T5",
+      "title": "Unit test suite for tracking-document",
+      "layer": "tests",
+      "deps": ["T4"],
+      "acs": ["AC-01", "AC-02", "AC-03", "AC-04", "AC-05", "AC-06", "AC-07", "AC-08", "AC-09", "AC-10", "AC-11"],
+      "dod": "test/unit/modules/tracking-document.test.ts covers AC-01..AC-11 (100% of declined/malformed/network-failure branches throw NovaPoshtaApiError; 0% throw when a document merely comes back not-found/removed) and asserts median library-added overhead <=5ms across >=30 stubbed single-waybill calls, per spec.md §6 NFR row 4",
+      "files_hint": ["test/unit/modules/tracking-document.test.ts"]
+    },
+    {
+      "id": "T6",
+      "title": "Extend published-build type-surface check",
+      "layer": "tests",
+      "deps": ["T4"],
+      "acs": [],
+      "dod": "test/unit/build-surface.test.ts asserts dist/index.d.ts and dist/index.d.cts both contain getStatusDocuments and getDocumentStatus after npm run build",
+      "files_hint": ["test/unit/build-surface.test.ts"]
+    },
+    {
+      "id": "T7",
+      "title": "Opt-in integration smoke test",
+      "layer": "tests",
+      "deps": ["T4"],
+      "acs": ["AC-01"],
+      "dod": "test/integration/tracking-document.test.ts calls getStatusDocuments against the real API for one waybill read from NOVA_POSHTA_TEST_WAYBILL, skipped automatically whenever NOVA_POSHTA_TEST_API_KEY or NOVA_POSHTA_TEST_WAYBILL is absent, and is never wired into a CI job that lacks the key",
+      "files_hint": ["test/integration/tracking-document.test.ts"]
+    },
+    {
+      "id": "T8",
+      "title": "Update README usage example",
+      "layer": "docs",
+      "deps": ["T4"],
+      "acs": [],
+      "dod": "README's Usage section shows a type-checked tracking-document call (getDocumentStatus or getStatusDocuments) and documents that a \"not found\"/\"removed\" waybill resolves as normal data, not an error (AC-06)",
+      "files_hint": ["README.md"]
+    }
+  ]
+}

@@ -1,0 +1,122 @@
+{
+  "slug": "scan-sheet",
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Define scan-sheet domain types",
+      "layer": "domain",
+      "deps": [],
+      "acs": [],
+      "dod": "src/types/scan-sheet.ts exports InsertDocumentsPayload/InsertDocumentsItem, GetScanSheetPayload/ScanSheetDetail, ScanSheetListItem, DeleteScanSheetPayload/DeleteScanSheetItem, RemoveDocumentsPayload/RemoveDocumentsItem matching spec.md §1's quoted structs field-for-field; every Ref/DocumentRefs/ScanSheetRefs/CounterpartyRef field is inlined as string, no shared Ref alias imported from internet-document (sad.md §5); Count/DateTime/Date/Printed stay raw unparsed strings (sad.md §4 decision 6); zero any; tsc --noEmit and lint pass",
+      "files_hint": ["src/types/scan-sheet.ts"]
+    },
+    {
+      "id": "T2",
+      "title": "Implement the 5 raw ScanSheet pass-through methods",
+      "layer": "app",
+      "deps": ["T1"],
+      "acs": ["AC-01", "AC-02", "AC-04", "AC-05", "AC-06", "AC-07", "AC-08", "AC-09", "AC-10", "AC-11", "AC-12", "AC-13"],
+      "dod": "insertDocuments, getScanSheet, getScanSheetList, removeDocuments, and deleteScanSheet each delegate straight to client.request(\"ScanSheet\", <method>, ...) with no requestEnvelope() use (sad.md §4 decision 2); insertDocuments passes DocumentRefs through unmodified and creates a new sheet on an omitted/empty Ref (AC-01) or adds to the given Ref (AC-02); getScanSheet accepts either Ref or CounterpartyRef and passes whichever is supplied through unmodified (AC-04, AC-05); removeDocuments/deleteScanSheet pass ScanSheetRefs/DocumentRefs through unmodified with no split/cap/reorder (AC-07, AC-09) and never call any waybill-invalidating endpoint (AC-08, AC-10); a mocked-fetch unit test per method asserts the request body shape and that a declined/malformed/network-failed call throws NovaPoshtaApiError (AC-11, AC-12, AC-13)",
+      "files_hint": ["src/modules/scan-sheet/index.ts"]
+    },
+    {
+      "id": "T3",
+      "title": "Implement addToTodaysScanSheet (convenience, match-or-create)",
+      "layer": "app",
+      "deps": ["T2"],
+      "acs": ["AC-03"],
+      "dod": "addToTodaysScanSheet computes today's Europe/Kyiv calendar date via a module-local Intl.DateTimeFormat helper, calls getScanSheetList exactly once, filters to today's still-unprinted (Printed === \"0\") sheets and picks the highest DateTime when ≥1 match, then calls insertDocuments exactly once with the matched Ref (or an empty string to create a new one) and today's date (sad.md §6 Flow 2); a failed getScanSheetList call propagates its NovaPoshtaApiError without falling through to create a new sheet; mocked-fetch unit tests cover a 2+-match fixture (newest DateTime chosen), a zero-match fixture (new sheet created), and the getScanSheetList-failure propagation case",
+      "files_hint": ["src/modules/scan-sheet/index.ts"]
+    },
+    {
+      "id": "T4",
+      "title": "Wire scan-sheet module into the public package surface",
+      "layer": "wiring",
+      "deps": ["T2", "T3"],
+      "acs": [],
+      "dod": "src/index.ts exports createScanSheetModule, ScanSheetModule, and every type from src/types/scan-sheet.ts; npm run build succeeds with matching dist/index.d.ts and dist/index.d.cts output",
+      "files_hint": ["src/index.ts"]
+    },
+    {
+      "id": "T5",
+      "title": "Unit test suite for scan-sheet",
+      "layer": "tests",
+      "deps": ["T4"],
+      "acs": ["AC-01", "AC-02", "AC-03", "AC-04", "AC-05", "AC-06", "AC-07", "AC-08", "AC-09", "AC-10", "AC-11", "AC-12", "AC-13"],
+      "dod": "test/unit/modules/scan-sheet.test.ts covers AC-01..AC-13 (100% of declined/malformed/network-failed calls throw NovaPoshtaApiError; 0% throw on a per-item Error/Errors value or an empty-but-successful batch array — ADR-0001, dedicated empty-array fixture for insertDocuments/removeDocuments/deleteScanSheet) and asserts median library-added overhead ≤5ms across ≥30 stubbed single-item calls to a raw method, addToTodaysScanSheet excluded, per spec.md §6 NFR row 5",
+      "files_hint": ["test/unit/modules/scan-sheet.test.ts"]
+    },
+    {
+      "id": "T6",
+      "title": "Extend published-build type-surface check",
+      "layer": "tests",
+      "deps": ["T4"],
+      "acs": [],
+      "dod": "test/unit/build-surface.test.ts asserts dist/index.d.ts and dist/index.d.cts both contain insertDocuments, getScanSheet, getScanSheetList, removeDocuments, deleteScanSheet, and addToTodaysScanSheet after npm run build",
+      "files_hint": ["test/unit/build-surface.test.ts"]
+    },
+    {
+      "id": "T7",
+      "title": "Opt-in integration smoke test",
+      "layer": "tests",
+      "deps": ["T4"],
+      "acs": ["AC-01", "AC-04", "AC-06", "AC-09"],
+      "dod": "test/integration/scan-sheet.test.ts creates a throwaway waybill via internet-document's save() to obtain a real Ref, exercises insertDocuments/getScanSheet/getScanSheetList/deleteScanSheet against the real API, then cleans up via this module's own deleteScanSheet and internet-document's delete; skipped automatically whenever NOVA_POSHTA_TEST_API_KEY is absent and never wired into a CI job that lacks the key",
+      "files_hint": ["test/integration/scan-sheet.test.ts"]
+    },
+    {
+      "id": "T8",
+      "title": "Update README usage example",
+      "layer": "docs",
+      "deps": ["T4"],
+      "acs": [],
+      "dod": "README's Usage section shows a type-checked scan-sheet call (insertDocuments or addToTodaysScanSheet) and documents the empty-batch-result rule (ADR-0001: an empty-but-successful array is returned as-is, not thrown) and that a per-item Error/Errors value never throws",
+      "files_hint": ["README.md"]
+    },
+    {
+      "id": "T9",
+      "title": "Make addToTodaysScanSheet's DateTime comparison format-agnostic + guard malformed fields",
+      "layer": "app",
+      "deps": ["T4"],
+      "acs": ["AC-03"],
+      "dod": "review-2026-09-22.md findings 1/3/4 — a new extractDatePart() helper in src/modules/scan-sheet/index.ts parses either plausible Nova Poshta DateTime wire format (ISO YYYY-MM-DD... or DD.MM.YYYY..., the two formats this repo's own precedent has used) into a comparable YYYY-MM-DD before comparing to kyivTodayDateString(); a missing/null DateTime or Printed value degrades to a safely-excluded sheet, never a raw TypeError; unit tests cover both DateTime formats (mixed within one getScanSheetList fixture) and confirm the correct sheet is still matched",
+      "files_hint": ["src/modules/scan-sheet/index.ts", "test/unit/modules/scan-sheet.test.ts"]
+    },
+    {
+      "id": "T10",
+      "title": "Fix README/changeset examples to pass a Ref, not a tracking number",
+      "layer": "docs",
+      "deps": ["T8"],
+      "acs": [],
+      "dod": "review-2026-09-22.md finding 5 — README.md's addToTodaysScanSheet example and .changeset/scan-sheet.md's example both pass two waybill Refs (never a printed tracking/IntDocNumber), matching sad.md §12's glossary distinction",
+      "files_hint": ["README.md", ".changeset/scan-sheet.md"]
+    },
+    {
+      "id": "T11",
+      "title": "Fix integration test's Kyiv-timezone helper and document its required env vars",
+      "layer": "tests",
+      "deps": ["T7"],
+      "acs": [],
+      "dod": "review-2026-09-22.md finding 6 — todayAsIsoDate() in test/integration/scan-sheet.test.ts computes the date via Intl.DateTimeFormat with timeZone: \"Europe/Kyiv\" instead of host-local time; spec.md's Test data section documents the ~10 NOVA_POSHTA_TEST_* env vars this suite requires beyond NOVA_POSHTA_TEST_API_KEY",
+      "files_hint": ["test/integration/scan-sheet.test.ts", "docs/features/scan-sheet/spec.md"]
+    },
+    {
+      "id": "T12",
+      "title": "Add missing unit test coverage: insertDocuments per-item Errors, empty-request pass-through, deleted-sheet absence",
+      "layer": "tests",
+      "deps": ["T9"],
+      "acs": ["AC-01", "AC-07", "AC-09"],
+      "dod": "review-2026-09-22.md findings 7/8 — test/unit/modules/scan-sheet.test.ts gains: (1) an insertDocuments fixture with a populated per-item Errors value that resolves without throwing, mirroring the existing removeDocuments/deleteScanSheet tests; (2) a test asserting an empty DocumentRefs/ScanSheetRefs request array reaches the wire unmodified; (3) a test asserting a deleted scan sheet's Ref is absent from a subsequent getScanSheetList fixture",
+      "files_hint": ["test/unit/modules/scan-sheet.test.ts"]
+    },
+    {
+      "id": "T13",
+      "title": "Record review sign-off and close ship gates",
+      "layer": "docs",
+      "deps": ["T9", "T10", "T11", "T12"],
+      "acs": [],
+      "dod": "review-2026-09-22.md finding 9 — spec.md §8 records the §6.1 security review as performed during sdd:review (this pass), plus the Printed==='0' sentinel and DateTime/Date wire-format questions as still-open (owner Tech Lead, due next live-API verification pass); spec.md and sad.md frontmatter status flips from Draft to Reviewed once T9-T12 are committed",
+      "files_hint": ["docs/features/scan-sheet/spec.md", "docs/features/scan-sheet/sad.md"]
+    }
+  ]
+}

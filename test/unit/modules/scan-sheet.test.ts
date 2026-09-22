@@ -296,6 +296,18 @@ describe("scan-sheet module — removeDocuments (T2, AC-07/AC-08)", () => {
       scanSheet.removeDocuments({ Ref: "sheet-ref-1", DocumentRefs: ["waybill-ref-1", "waybill-ref-2"] }),
     ).resolves.toEqual([]);
   });
+
+  // review-2026-09-22.md finding 8 (re-review) — T12's DoD covers DocumentRefs/ScanSheetRefs on
+  // both write methods, not just insertDocuments's DocumentRefs.
+  it("passes an empty DocumentRefs request array through to the wire unmodified (AC-07, pass-through non-goal)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([]));
+    const scanSheet = createScanSheetModule(createClient("test-api-key"));
+
+    await scanSheet.removeDocuments({ Ref: "sheet-ref-1", DocumentRefs: [] });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.methodProperties.DocumentRefs).toEqual([]);
+  });
 });
 
 describe("scan-sheet module — deleteScanSheet (T2, AC-09/AC-10)", () => {
@@ -347,6 +359,18 @@ describe("scan-sheet module — deleteScanSheet (T2, AC-09/AC-10)", () => {
     await expect(
       scanSheet.deleteScanSheet({ ScanSheetRefs: ["sheet-ref-1", "sheet-ref-2"] }),
     ).resolves.toEqual([]);
+  });
+
+  // review-2026-09-22.md finding 8 (re-review) — T12's DoD covers DocumentRefs/ScanSheetRefs on
+  // both write methods, not just insertDocuments's DocumentRefs.
+  it("passes an empty ScanSheetRefs request array through to the wire unmodified (AC-09, pass-through non-goal)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([]));
+    const scanSheet = createScanSheetModule(createClient("test-api-key"));
+
+    await scanSheet.deleteScanSheet({ ScanSheetRefs: [] });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.methodProperties.ScanSheetRefs).toEqual([]);
   });
 
   // review-2026-09-22.md finding 8 — AC-09's "a subsequent getScanSheetList call no longer includes
@@ -518,23 +542,28 @@ describe("scan-sheet module — addToTodaysScanSheet (T3, AC-03)", () => {
     expect(result).toEqual([insertItem({ Ref: "dotted-today-ref" })]);
   });
 
-  it("matches today's still-unprinted sheet when getScanSheetList mixes DateTime formats across items (AC-03, format-agnostic)", async () => {
+  it("picks the correct most-recent sheet when getScanSheetList mixes DateTime formats across items (AC-03, format-agnostic)", async () => {
     const today = kyivTodayDateString();
     const [year, month, day] = today.split("-");
     const dottedToday = `${day}.${month}.${year}`;
+    // The later (20:00) sheet is dotted-formatted, the earlier (08:00) one is ISO-formatted — a
+    // raw string comparison across these two formats is not reliably ordered by actual time (e.g.
+    // "05.01.2026 20:00:00" < "2026-01-05 08:00:00" lexically despite being the later timestamp),
+    // so this only passes if the module normalizes both through a shared comparable form first.
     const isoTodayOlder = listItem({ Ref: "iso-today-ref", DateTime: `${today} 08:00:00`, Printed: "0" });
     const dottedTodayNewer = listItem({ Ref: "dotted-today-ref", DateTime: `${dottedToday} 20:00:00`, Printed: "0" });
 
     const fetchMock = mockFetchSequence([
       () => successEnvelope([isoTodayOlder, dottedTodayNewer]),
-      () => successEnvelope([insertItem()]),
+      () => successEnvelope([insertItem({ Ref: "dotted-today-ref" })]),
     ]);
     const scanSheet = createScanSheetModule(createClient("test-api-key"));
 
-    await scanSheet.addToTodaysScanSheet(["waybill-ref-1"]);
+    const result = await scanSheet.addToTodaysScanSheet(["waybill-ref-1"]);
 
     const secondBody = JSON.parse(fetchMock.mock.calls[1]![1]!.body as string);
-    expect(["iso-today-ref", "dotted-today-ref"]).toContain(secondBody.methodProperties.Ref);
+    expect(secondBody.methodProperties.Ref).toBe("dotted-today-ref");
+    expect(result).toEqual([insertItem({ Ref: "dotted-today-ref" })]);
   });
 
   // review-2026-09-22.md finding 4 — a malformed/missing DateTime or Printed field must still raise

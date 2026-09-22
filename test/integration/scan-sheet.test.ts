@@ -33,13 +33,23 @@ const hasWaybillFixtures = Boolean(
     recipientWarehouseRef,
 );
 
-/** DD.MM.YYYY — matches internet-document's own DateTime convention (test/unit/modules/internet-
- *  document.test.ts), not scan-sheet's own YYYY-MM-DD Date field below. */
+/** DD.MM.YYYY, Europe/Kyiv calendar date — matches internet-document's own DateTime convention
+ *  (test/unit/modules/internet-document.test.ts), not scan-sheet's own YYYY-MM-DD Date field
+ *  below. Computed via Intl.DateTimeFormat, not the host machine's local clock — the same
+ *  host-clock bug fixed in todayAsIsoDate() below applied here too (review-2026-09-22.md
+ *  finding 6): a run late in the Kyiv evening on a host in an earlier timezone would otherwise
+ *  send yesterday's date to the internet-document save() call that seeds this whole suite. */
 function todayAsSlashDate(): string {
-  const now = new Date();
-  const day = String(now.getDate()).padStart(2, "0");
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  return `${day}.${month}.${now.getFullYear()}`;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Kyiv",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .format(new Date())
+    .split("-");
+  const [year, month, day] = parts;
+  return `${day}.${month}.${year}`;
 }
 
 /** YYYY-MM-DD, Europe/Kyiv calendar date — matches scan-sheet's own insertDocuments Date

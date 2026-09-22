@@ -53,6 +53,18 @@ function extractDatePart(dateTime: unknown): string {
   return value.slice(0, 10);
 }
 
+/** Normalizes a Nova Poshta timestamp into a `YYYY-MM-DD HH:MM:SS`-shaped string that sorts
+ *  correctly regardless of which of the two plausible wire formats produced it. Raw `DateTime`
+ *  strings can't be compared directly across formats — e.g. `"05.01.2026 20:00:00"` sorts before
+ *  `"2026-01-05 08:00:00"` lexicographically even though it's a later timestamp — so
+ *  `addToTodaysScanSheet`'s "most recently created" tie-break normalizes both sides through this
+ *  first (review-2026-09-22.md re-review finding: mixed-format ordering). */
+function toComparableTimestamp(dateTime: unknown): string {
+  const value = String(dateTime ?? "");
+  const timeMatch = /(\d{2}:\d{2}:\d{2})/.exec(value);
+  return `${extractDatePart(dateTime)} ${timeMatch ? timeMatch[1] : ""}`;
+}
+
 export function createScanSheetModule(client: NovaPoshtaClient): ScanSheetModule {
   const insertDocuments = (payload: InsertDocumentsPayload) =>
     client.request<InsertDocumentsItem>("ScanSheet", "insertDocuments", {
@@ -88,7 +100,7 @@ export function createScanSheetModule(client: NovaPoshtaClient): ScanSheetModule
       const targetRef =
         todaysUnprinted.length > 0
           ? todaysUnprinted.reduce((latest, sheet) =>
-              String(sheet.DateTime ?? "") > String(latest.DateTime ?? "") ? sheet : latest,
+              toComparableTimestamp(sheet.DateTime) > toComparableTimestamp(latest.DateTime) ? sheet : latest,
             ).Ref
           : "";
 

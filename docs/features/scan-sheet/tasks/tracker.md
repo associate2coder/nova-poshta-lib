@@ -13,5 +13,10 @@
 | T6 | Build-surface completeness check | tests | Tech Lead | S | T4 | done |
 | T7 | Opt-in integration smoke test | tests | Tech Lead | M | T4 | done |
 | T8 | README usage example | docs | Tech Lead | S | T4 | done |
+| T9 | Format-agnostic addToTodaysScanSheet date match + malformed-field guard | app | Tech Lead | S | T4 | done |
+| T10 | Fix README/changeset Ref-vs-tracking-number examples | docs | Tech Lead | S | T8 | done |
+| T11 | Fix integration test Kyiv-timezone helper + document env vars | tests | Tech Lead | S | T7 | done |
+| T12 | Missing unit coverage: insertDocuments Errors, empty-request, delete-then-list | tests | Tech Lead | S | T9 | done |
+| T13 | Record review sign-off, close ship gates | docs | Tech Lead | S | T9, T10, T11, T12 | done |
 
-**Total:** 8 tasks, ~1 person-week.
+**Total:** 13 tasks (8 original + 5 review follow-ups, `_review/review-2026-09-22.md`), ~1 person-week.

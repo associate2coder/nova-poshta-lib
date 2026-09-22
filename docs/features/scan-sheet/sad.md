@@ -1,5 +1,5 @@
 ---
-status: Draft
+status: Reviewed
 owner: "Architect"
 reviewers: ["Tech Lead"]
 updated_at: "2026-09-22"
@@ -527,7 +527,7 @@ runs in CI).
 | Risk / debt | Severity | Mitigation | Owner |
 |---|---|---|---|
 | Security review required before release — sender PII (`Sender`, `SenderAddress`) returned from a call whose only scoping (`CounterpartyRef`) is enforced entirely by Nova Poshta, not this library (`spec.md` §6.1) | Medium | Performed by the Tech Lead during `sdd:review`/before `sdd:ship`, matching `tracking-document`'s precedent — no code change expected unless the review finds one | Tech Lead |
-| `getScanSheetList`'s "still unprinted" sentinel value is a best guess (`Printed === "0"`) — no source confirms Nova Poshta's exact literal for "not printed" vs. "printed" (§4 decision 3, ledger assumption) | Medium | **Must be resolved before `sdd:ship`** (live-API check during `sdd:review`), per CLAUDE.md's API-contract sourcing policy — an unresolved API-contract question blocks ship, the same bar that excluded `printScanSheet` above; if wrong, `addToTodaysScanSheet` could miss an open sheet or treat a printed one as open — fix is a one-line comparison change, no public-signature impact | Tech Lead |
+| `getScanSheetList`'s "still unprinted" sentinel value is a best guess (`Printed === "0"`), and `DateTime`/`Date`'s exact wire format is likewise unconfirmed — no source confirms either literal (§4 decision 3, ledger assumption) | Medium | **Reviewed, 2026-09-22 (`_review/review-2026-09-22.md` findings 1-3):** no live API key was available to confirm either directly; the `DateTime` comparison was made format-agnostic (`extractDatePart()`) so a wrong format guess degrades safely instead of silently misclassifying every sheet, but the `Printed` sentinel and outgoing `Date` format remain genuinely open — carried into spec.md §8, due next live-API verification pass, per CLAUDE.md's sourcing policy | Tech Lead |
 | Does saving an unprinted waybill via `internet-document` (needed to seed this module's integration tests) incur any real cost on a live account? (`spec.md` §8 OQ) | Low | Default: proceed with the create-then-delete integration test design; if it turns out costly, switch to a pre-existing-`Ref` env var instead (spec's own fallback) | Tech Lead — due before `sdd:tasks` |
 | Does `getScanSheetList` return every scan sheet regardless of account volume, or can it be capped/paginated? No source shows a `Page`/`Limit` parameter (`spec.md` §8 OQ) — `addToTodaysScanSheet` depends on this list being complete to reliably find today's sheet | Medium | Default: assume the list is always complete, no client-side paging added; re-verify against the live API once reachable (`spec.md` §8) | Tech Lead |
 | `printScanSheet` — single-sourced only (1 of 4 cross-checked SDKs), excluded from this module's confirmed 6-method surface (`spec.md` §1 Decision override, §8 OQ) | Low | Tracked as an open question, not shipped as an AC; revisit once a 2nd agreeing source or the official docs are reachable | Tech Lead |

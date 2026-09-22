@@ -5,13 +5,13 @@
 
 | # | Task | Layer | Owner | Estimate | Blocked by | Status |
 |---|---|---|---|---|---|---|
-| T1 | Define scan-sheet domain types | domain | \<TBD lead\> | S | — | todo |
-| T2 | Implement the 5 raw pass-through methods | app | \<TBD lead\> | M | T1 | todo |
-| T3 | Implement addToTodaysScanSheet | app | \<TBD lead\> | M | T2 | todo |
-| T4 | Wire public exports | wiring | \<TBD lead\> | S | T2, T3 | todo |
-| T5 | Unit test suite | tests | \<TBD lead\> | M | T4 | todo |
-| T6 | Build-surface completeness check | tests | \<TBD lead\> | S | T4 | todo |
-| T7 | Opt-in integration smoke test | tests | \<TBD lead\> | M | T4 | todo |
-| T8 | README usage example | docs | \<TBD lead\> | S | T4 | todo |
+| T1 | Define scan-sheet domain types | domain | Tech Lead | S | — | done |
+| T2 | Implement the 5 raw pass-through methods | app | Tech Lead | M | T1 | done |
+| T3 | Implement addToTodaysScanSheet | app | Tech Lead | M | T2 | done |
+| T4 | Wire public exports | wiring | Tech Lead | S | T2, T3 | done |
+| T5 | Unit test suite | tests | Tech Lead | M | T4 | done |
+| T6 | Build-surface completeness check | tests | Tech Lead | S | T4 | done |
+| T7 | Opt-in integration smoke test | tests | Tech Lead | M | T4 | done |
+| T8 | README usage example | docs | Tech Lead | S | T4 | done |
 
 **Total:** 8 tasks, ~1 person-week.

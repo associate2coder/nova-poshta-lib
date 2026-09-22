@@ -15,7 +15,7 @@ updated_at: "2026-09-22"
 
 Every Nova Poshta API domain — reference data, addresses, counterparties, shipment creation,
 tracking, scan-sheet batching, and post-creation service actions (returns/redirects/edits) — is
-available as a typed, tested module in `nova-poshta-lib`, published to npm.
+available as a typed, tested, documented module in `nova-poshta-lib`, published to npm.
 
 ## Steps
 
@@ -28,12 +28,15 @@ available as a typed, tested module in `nova-poshta-lib`, published to npm.
 | 5 | tracking-document — typed module for tracking a shipment by document number + phone, independent of internet-document | `docs/architecture-map.md` §Module inventory (target) | S | idea |
 | 6 | scan-sheet — typed module for batching waybills into a scan sheet for courier handoff | `docs/architecture-map.md` §Constraints & known tech-debt | S | idea |
 | 7 | additional-service — typed module for post-creation shipment actions: returns, redirections, waybill edits | `docs/architecture-map.md` §Constraints & known tech-debt | M | idea |
+| 8 | documentation — TSDoc comments on every exported symbol across all modules + TypeDoc-generated static API reference, wired into CI/publish | `docs/architecture-map.md` §Intent ("documented" listed as a foundation requirement; no step covers it — the README has usage snippets but no generated reference) | S | idea |
 
 Sizing note: 4 and 7 are called **M** rather than **S** like their shipped precedents because each
 has a genuinely broader method surface than `common`/`address`/`counterparty` — 4 adds
 creation + pricing/date-calculator + report/printing sub-flows; 7 adds five distinct write-payload
 shapes (plain return, return-to-new-address, return-to-new-warehouse, redirect, waybill edit) —
-even though PR count may land near the S/M border same as the shipped modules.
+even though PR count may land near the S/M border same as the shipped modules. 8 is **S**: no new
+module/API/migration and no breaking changes, just a TSDoc pass over the existing public surface
+plus a TypeDoc + CI publish step (2–5 PRs).
 
 ## Not yet specified
 
@@ -79,6 +82,13 @@ flowchart LR
   s4 -->|every write needs an IntDocNumber (waybill) Ref| s7["7 · additional-service"]
   s2 -->|SaveReturnNewAddress needs settlement/street Refs| s7
   s3 -->|SaveRedirecting needs a recipient counterparty Ref| s7
+  s1 -->|documents the complete public surface only once every module has shipped| s8["8 · documentation"]
+  s2 --> s8
+  s3 --> s8
+  s4 --> s8
+  s5 --> s8
+  s6 --> s8
+  s7 --> s8
 ```
 
 ## Execution path
@@ -87,9 +97,10 @@ flowchart LR
 |:---:|---|---|---|
 | 1 | 1 ∥ 2 ∥ 3 | 1: `src/modules/common` · 2: `src/modules/address` · 3: `src/modules/counterparty` (disjoint) | 4, 5 |
 | 2 | 4 ∥ 5 | 4: `src/modules/internet-document` (new) · 5: `src/modules/tracking-document` (new) (disjoint) | 6, 7 |
-| 3 | 6 ∥ 7 | 6: `src/modules/scan-sheet` (new) · 7: `src/modules/additional-service` (new) (disjoint) | — |
+| 3 | 6 ∥ 7 | 6: `src/modules/scan-sheet` (new) · 7: `src/modules/additional-service` (new) (disjoint) | 8 |
+| 4 | 8 | 8: cross-cutting — TSDoc comments in every `src/modules/*` + new `typedoc.json` + `.github/workflows/*` docs-publish step (whole repo, not disjoint with anything — runs alone) | — |
 
-Wave 1 is history (already shipped) — shown for completeness so waves 2–3 read against a full
+Wave 1 is history (already shipped) — shown for completeness so waves 2–4 read against a full
 picture, not a headless graph.
 
 ## Shipped

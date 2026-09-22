@@ -141,6 +141,15 @@ describe("scan-sheet module — insertDocuments (T2, AC-01/AC-02)", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result).toEqual([insertItem({ Ref: "existing-sheet-ref" })]);
   });
+
+  it("resolves with [] and does not throw when success is true but data is a completely empty array (AC-01, ADR-0001)", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const scanSheet = createScanSheetModule(createClient("test-api-key"));
+
+    await expect(
+      scanSheet.insertDocuments({ DocumentRefs: ["waybill-ref-1", "waybill-ref-2"], Date: "2026-09-22" }),
+    ).resolves.toEqual([]);
+  });
 });
 
 describe("scan-sheet module — getScanSheet (T2, AC-04/AC-05)", () => {
@@ -247,6 +256,15 @@ describe("scan-sheet module — removeDocuments (T2, AC-07/AC-08)", () => {
     expect(calledMethods).toEqual(["removeDocuments"]);
     expect(calledMethods).not.toContain("delete");
   });
+
+  it("resolves with [] and does not throw when success is true but data is a completely empty array (AC-07, ADR-0001)", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const scanSheet = createScanSheetModule(createClient("test-api-key"));
+
+    await expect(
+      scanSheet.removeDocuments({ Ref: "sheet-ref-1", DocumentRefs: ["waybill-ref-1", "waybill-ref-2"] }),
+    ).resolves.toEqual([]);
+  });
 });
 
 describe("scan-sheet module — deleteScanSheet (T2, AC-09/AC-10)", () => {
@@ -289,6 +307,15 @@ describe("scan-sheet module — deleteScanSheet (T2, AC-09/AC-10)", () => {
     expect(modelNames).toEqual(["ScanSheet"]);
     expect(calledMethods).toEqual(["deleteScanSheet"]);
     expect(calledMethods).not.toContain("delete");
+  });
+
+  it("resolves with [] and does not throw when success is true but data is a completely empty array (AC-09, ADR-0001)", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const scanSheet = createScanSheetModule(createClient("test-api-key"));
+
+    await expect(
+      scanSheet.deleteScanSheet({ ScanSheetRefs: ["sheet-ref-1", "sheet-ref-2"] }),
+    ).resolves.toEqual([]);
   });
 });
 
@@ -414,5 +441,28 @@ describe("scan-sheet module — addToTodaysScanSheet (T3, AC-03)", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const calledMethods = fetchMock.mock.calls.map((call) => JSON.parse(call[1]!.body as string).calledMethod);
     expect(calledMethods).not.toContain("insertDocuments");
+  });
+});
+
+describe("scan-sheet module — overhead benchmark for insertDocuments (T5, spec.md §6 NFR row 5)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("insertDocuments median library-added overhead is <=5ms across >=30 stubbed single-item calls", async () => {
+    mockFetchOnce(() => successEnvelope([insertItem()]));
+    const scanSheet = createScanSheetModule(createClient("test-api-key"));
+
+    const samples: number[] = [];
+    const runs = 30;
+    for (let i = 0; i < runs; i++) {
+      const start = performance.now();
+      await scanSheet.insertDocuments({ DocumentRefs: ["waybill-ref-1"], Date: "2026-09-22" });
+      samples.push(performance.now() - start);
+    }
+
+    samples.sort((a, b) => a - b);
+    const median = samples[Math.floor(runs / 2)];
+    expect(median).toBeLessThanOrEqual(5);
   });
 });

@@ -18,6 +18,37 @@ function mockFetchOnce(handler: (body: unknown) => { ok: boolean; status?: numbe
   return fetchMock;
 }
 
+/** Sequential per-call fetch mock (addToTodaysScanSheet, T3, AC-03) — call N gets handlers[N],
+ *  or the last handler if there are more calls than handlers. Lets a test control
+ *  getScanSheetList's response distinctly from insertDocuments's. */
+function mockFetchSequence(
+  handlers: Array<(body: { calledMethod: string; methodProperties: Record<string, unknown> }) => {
+    ok: boolean;
+    json: () => Promise<unknown>;
+  }>,
+) {
+  let call = 0;
+  const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(init.body as string);
+    const handler = handlers[call] ?? handlers[handlers.length - 1]!;
+    call += 1;
+    return handler(body);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+/** T3/AC-03 — today's Europe/Kyiv calendar date as YYYY-MM-DD, computed independently of the
+ *  module under test so the fixtures stay correct regardless of when the suite runs. */
+function kyivTodayDateString(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Kyiv",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 function successEnvelope(data: unknown[]) {
   return { ok: true, json: () => Promise.resolve({ success: true, data, errors: [], warnings: [] }) };
 }
@@ -314,5 +345,74 @@ describe("scan-sheet module — shared error contract (T2, AC-11/AC-12/AC-13)", 
     const scanSheet = createScanSheetModule(createClient("test-api-key"));
 
     await expect(scanSheet.getScanSheetList()).rejects.toThrow(NovaPoshtaApiError);
+  });
+});
+
+describe("scan-sheet module — addToTodaysScanSheet (T3, AC-03)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("picks the most recently created still-unprinted today-sheet when 2+ match (AC-03)", async () => {
+    const today = kyivTodayDateString();
+    const olderTodayUnprinted = listItem({ Ref: "older-today-ref", DateTime: `${today} 09:00:00`, Printed: "0" });
+    const newerTodayUnprinted = listItem({ Ref: "newer-today-ref", DateTime: `${today} 15:30:00`, Printed: "0" });
+    const todayButPrinted = listItem({ Ref: "printed-today-ref", DateTime: `${today} 23:00:00`, Printed: "1" });
+    const otherDayUnprinted = listItem({ Ref: "other-day-ref", DateTime: "2020-01-01 10:00:00", Printed: "0" });
+
+    const fetchMock = mockFetchSequence([
+      () => successEnvelope([olderTodayUnprinted, newerTodayUnprinted, todayButPrinted, otherDayUnprinted]),
+      () => successEnvelope([insertItem({ Ref: "newer-today-ref" })]),
+    ]);
+    const scanSheet = createScanSheetModule(createClient("test-api-key"));
+
+    const documentRefs = ["waybill-ref-1", "waybill-ref-2"];
+    const result = await scanSheet.addToTodaysScanSheet(documentRefs);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    const secondBody = JSON.parse(fetchMock.mock.calls[1]![1]!.body as string);
+    expect(firstBody.calledMethod).toBe("getScanSheetList");
+    expect(secondBody.calledMethod).toBe("insertDocuments");
+    expect(secondBody.methodProperties.Ref).toBe("newer-today-ref");
+    expect(secondBody.methodProperties.DocumentRefs).toEqual(documentRefs);
+    expect(secondBody.methodProperties.Date).toBe(today);
+    expect(result).toEqual([insertItem({ Ref: "newer-today-ref" })]);
+  });
+
+  it("creates a new sheet (empty-string Ref) when no today-unprinted sheet exists (AC-03)", async () => {
+    const today = kyivTodayDateString();
+    const todayButPrinted = listItem({ Ref: "printed-today-ref", DateTime: `${today} 08:00:00`, Printed: "1" });
+    const otherDayUnprinted = listItem({ Ref: "other-day-ref", DateTime: "2020-01-01 10:00:00", Printed: "0" });
+
+    const fetchMock = mockFetchSequence([
+      () => successEnvelope([todayButPrinted, otherDayUnprinted]),
+      () => successEnvelope([insertItem({ Ref: "brand-new-ref" })]),
+    ]);
+    const scanSheet = createScanSheetModule(createClient("test-api-key"));
+
+    const documentRefs = ["waybill-ref-1"];
+    const result = await scanSheet.addToTodaysScanSheet(documentRefs);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondBody = JSON.parse(fetchMock.mock.calls[1]![1]!.body as string);
+    expect(secondBody.calledMethod).toBe("insertDocuments");
+    expect(secondBody.methodProperties.Ref).toBe("");
+    expect(secondBody.methodProperties.DocumentRefs).toEqual(documentRefs);
+    expect(secondBody.methodProperties.Date).toBe(today);
+    expect(result).toEqual([insertItem({ Ref: "brand-new-ref" })]);
+  });
+
+  it("propagates getScanSheetList's NovaPoshtaApiError without falling through to insertDocuments (AC-03 edge case)", async () => {
+    const fetchMock = mockFetchSequence([() => declinedEnvelope(["Invalid API key"], ["401"])]);
+    const scanSheet = createScanSheetModule(createClient("bad-api-key"));
+
+    const err = await scanSheet.addToTodaysScanSheet(["waybill-ref-1"]).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Invalid API key"]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const calledMethods = fetchMock.mock.calls.map((call) => JSON.parse(call[1]!.body as string).calledMethod);
+    expect(calledMethods).not.toContain("insertDocuments");
   });
 });

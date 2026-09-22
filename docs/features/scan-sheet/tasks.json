@@ -72,6 +72,51 @@
       "acs": [],
       "dod": "README's Usage section shows a type-checked scan-sheet call (insertDocuments or addToTodaysScanSheet) and documents the empty-batch-result rule (ADR-0001: an empty-but-successful array is returned as-is, not thrown) and that a per-item Error/Errors value never throws",
       "files_hint": ["README.md"]
+    },
+    {
+      "id": "T9",
+      "title": "Make addToTodaysScanSheet's DateTime comparison format-agnostic + guard malformed fields",
+      "layer": "app",
+      "deps": ["T4"],
+      "acs": ["AC-03"],
+      "dod": "review-2026-09-22.md findings 1/3/4 — a new extractDatePart() helper in src/modules/scan-sheet/index.ts parses either plausible Nova Poshta DateTime wire format (ISO YYYY-MM-DD... or DD.MM.YYYY..., the two formats this repo's own precedent has used) into a comparable YYYY-MM-DD before comparing to kyivTodayDateString(); a missing/null DateTime or Printed value degrades to a safely-excluded sheet, never a raw TypeError; unit tests cover both DateTime formats (mixed within one getScanSheetList fixture) and confirm the correct sheet is still matched",
+      "files_hint": ["src/modules/scan-sheet/index.ts", "test/unit/modules/scan-sheet.test.ts"]
+    },
+    {
+      "id": "T10",
+      "title": "Fix README/changeset examples to pass a Ref, not a tracking number",
+      "layer": "docs",
+      "deps": ["T8"],
+      "acs": [],
+      "dod": "review-2026-09-22.md finding 5 — README.md's addToTodaysScanSheet example and .changeset/scan-sheet.md's example both pass two waybill Refs (never a printed tracking/IntDocNumber), matching sad.md §12's glossary distinction",
+      "files_hint": ["README.md", ".changeset/scan-sheet.md"]
+    },
+    {
+      "id": "T11",
+      "title": "Fix integration test's Kyiv-timezone helper and document its required env vars",
+      "layer": "tests",
+      "deps": ["T7"],
+      "acs": [],
+      "dod": "review-2026-09-22.md finding 6 — todayAsIsoDate() in test/integration/scan-sheet.test.ts computes the date via Intl.DateTimeFormat with timeZone: \"Europe/Kyiv\" instead of host-local time; spec.md's Test data section documents the ~10 NOVA_POSHTA_TEST_* env vars this suite requires beyond NOVA_POSHTA_TEST_API_KEY",
+      "files_hint": ["test/integration/scan-sheet.test.ts", "docs/features/scan-sheet/spec.md"]
+    },
+    {
+      "id": "T12",
+      "title": "Add missing unit test coverage: insertDocuments per-item Errors, empty-request pass-through, deleted-sheet absence",
+      "layer": "tests",
+      "deps": ["T9"],
+      "acs": ["AC-01", "AC-07", "AC-09"],
+      "dod": "review-2026-09-22.md findings 7/8 — test/unit/modules/scan-sheet.test.ts gains: (1) an insertDocuments fixture with a populated per-item Errors value that resolves without throwing, mirroring the existing removeDocuments/deleteScanSheet tests; (2) a test asserting an empty DocumentRefs/ScanSheetRefs request array reaches the wire unmodified; (3) a test asserting a deleted scan sheet's Ref is absent from a subsequent getScanSheetList fixture",
+      "files_hint": ["test/unit/modules/scan-sheet.test.ts"]
+    },
+    {
+      "id": "T13",
+      "title": "Record review sign-off and close ship gates",
+      "layer": "docs",
+      "deps": ["T9", "T10", "T11", "T12"],
+      "acs": [],
+      "dod": "review-2026-09-22.md finding 9 — spec.md §8 records the §6.1 security review as performed during sdd:review (this pass), plus the Printed==='0' sentinel and DateTime/Date wire-format questions as still-open (owner Tech Lead, due next live-API verification pass); spec.md and sad.md frontmatter status flips from Draft to Reviewed once T9-T12 are committed",
+      "files_hint": ["docs/features/scan-sheet/spec.md", "docs/features/scan-sheet/sad.md"]
     }
   ]
 }

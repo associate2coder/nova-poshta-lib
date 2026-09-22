@@ -37,6 +37,22 @@ function kyivTodayDateString(): string {
   }).format(new Date());
 }
 
+/** Extracts a comparable YYYY-MM-DD date part from a Nova Poshta timestamp string, tolerating
+ *  either wire format this library's own precedent has seen for a Nova Poshta date field —
+ *  ISO-ish (`YYYY-MM-DD...`) or `DD.MM.YYYY...` (internet-document's confirmed-working DateTime
+ *  convention). The exact ScanSheet wire format is an open question (spec.md §8, no live key
+ *  available to confirm it) — this keeps the "today" match correct either way instead of silently
+ *  picking the wrong sheet or none at all. A missing/malformed value degrades to a string that
+ *  can't match any real date, never a thrown error. */
+function extractDatePart(dateTime: unknown): string {
+  const value = String(dateTime ?? "");
+  const isoMatch = /^(\d{4}-\d{2}-\d{2})/.exec(value);
+  if (isoMatch) return isoMatch[1]!;
+  const dottedMatch = /^(\d{2})\.(\d{2})\.(\d{4})/.exec(value);
+  if (dottedMatch) return `${dottedMatch[3]}-${dottedMatch[2]}-${dottedMatch[1]}`;
+  return value.slice(0, 10);
+}
+
 export function createScanSheetModule(client: NovaPoshtaClient): ScanSheetModule {
   const insertDocuments = (payload: InsertDocumentsPayload) =>
     client.request<InsertDocumentsItem>("ScanSheet", "insertDocuments", {
@@ -66,12 +82,14 @@ export function createScanSheetModule(client: NovaPoshtaClient): ScanSheetModule
       const today = kyivTodayDateString();
       const sheets = await getScanSheetList();
       const todaysUnprinted = sheets.filter(
-        (sheet) => sheet.DateTime.slice(0, 10) === today && sheet.Printed === "0",
+        (sheet) => extractDatePart(sheet.DateTime) === today && String(sheet.Printed) === "0",
       );
 
       const targetRef =
         todaysUnprinted.length > 0
-          ? todaysUnprinted.reduce((latest, sheet) => (sheet.DateTime > latest.DateTime ? sheet : latest)).Ref
+          ? todaysUnprinted.reduce((latest, sheet) =>
+              String(sheet.DateTime ?? "") > String(latest.DateTime ?? "") ? sheet : latest,
+            ).Ref
           : "";
 
       return insertDocuments({ DocumentRefs: documentRefs, Ref: targetRef, Date: today });

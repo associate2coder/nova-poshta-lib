@@ -442,6 +442,72 @@ describe("scan-sheet module — addToTodaysScanSheet (T3, AC-03)", () => {
     const calledMethods = fetchMock.mock.calls.map((call) => JSON.parse(call[1]!.body as string).calledMethod);
     expect(calledMethods).not.toContain("insertDocuments");
   });
+
+  // review-2026-09-22.md finding 1/3 — spec.md §8 tracks the real DateTime/Date wire format as an
+  // open question (no live API key available). Nova Poshta date fields have shipped in this repo
+  // as both ISO-ish (this feature's own fixtures above) and DD.MM.YYYY (internet-document's
+  // confirmed convention) — the "today" match must be correct either way.
+  it("matches today's still-unprinted sheet when DateTime is DD.MM.YYYY-formatted (AC-03, format-agnostic)", async () => {
+    const today = kyivTodayDateString();
+    const [year, month, day] = today.split("-");
+    const dottedToday = `${day}.${month}.${year}`;
+    const todayUnprintedDotted = listItem({
+      Ref: "dotted-today-ref",
+      DateTime: `${dottedToday} 09:00:00`,
+      Printed: "0",
+    });
+    const otherDayDotted = listItem({ Ref: "other-day-dotted-ref", DateTime: "01.01.2020 10:00:00", Printed: "0" });
+
+    const fetchMock = mockFetchSequence([
+      () => successEnvelope([todayUnprintedDotted, otherDayDotted]),
+      () => successEnvelope([insertItem({ Ref: "dotted-today-ref" })]),
+    ]);
+    const scanSheet = createScanSheetModule(createClient("test-api-key"));
+
+    const result = await scanSheet.addToTodaysScanSheet(["waybill-ref-1"]);
+
+    const secondBody = JSON.parse(fetchMock.mock.calls[1]![1]!.body as string);
+    expect(secondBody.methodProperties.Ref).toBe("dotted-today-ref");
+    expect(result).toEqual([insertItem({ Ref: "dotted-today-ref" })]);
+  });
+
+  it("matches today's still-unprinted sheet when getScanSheetList mixes DateTime formats across items (AC-03, format-agnostic)", async () => {
+    const today = kyivTodayDateString();
+    const [year, month, day] = today.split("-");
+    const dottedToday = `${day}.${month}.${year}`;
+    const isoTodayOlder = listItem({ Ref: "iso-today-ref", DateTime: `${today} 08:00:00`, Printed: "0" });
+    const dottedTodayNewer = listItem({ Ref: "dotted-today-ref", DateTime: `${dottedToday} 20:00:00`, Printed: "0" });
+
+    const fetchMock = mockFetchSequence([
+      () => successEnvelope([isoTodayOlder, dottedTodayNewer]),
+      () => successEnvelope([insertItem()]),
+    ]);
+    const scanSheet = createScanSheetModule(createClient("test-api-key"));
+
+    await scanSheet.addToTodaysScanSheet(["waybill-ref-1"]);
+
+    const secondBody = JSON.parse(fetchMock.mock.calls[1]![1]!.body as string);
+    expect(["iso-today-ref", "dotted-today-ref"]).toContain(secondBody.methodProperties.Ref);
+  });
+
+  // review-2026-09-22.md finding 4 — a malformed/missing DateTime or Printed field must still raise
+  // the library's single NovaPoshtaApiError-or-nothing contract, never a raw TypeError.
+  it("does not throw a raw error when a sheet's DateTime/Printed field is missing (AC-11/AC-13 contract)", async () => {
+    const malformedSheet = { Ref: "malformed-ref", Number: "1" } as unknown as ScanSheetListItem;
+
+    const fetchMock = mockFetchSequence([
+      () => successEnvelope([malformedSheet]),
+      () => successEnvelope([insertItem({ Ref: "brand-new-ref" })]),
+    ]);
+    const scanSheet = createScanSheetModule(createClient("test-api-key"));
+
+    const result = await scanSheet.addToTodaysScanSheet(["waybill-ref-1"]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondBody = JSON.parse(fetchMock.mock.calls[1]![1]!.body as string);
+    expect(secondBody.methodProperties.Ref).toBe("");
+    expect(result).toEqual([insertItem({ Ref: "brand-new-ref" })]);
+  });
 });
 
 describe("scan-sheet module — overhead benchmark for insertDocuments (T5, spec.md §6 NFR row 5)", () => {

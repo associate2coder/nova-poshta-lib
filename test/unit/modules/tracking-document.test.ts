@@ -263,3 +263,132 @@ describe("tracking-document module — getDocumentStatus convenience (T3, AC-04)
     await expect(trackingDocument.getDocumentStatus("20400048799000")).rejects.toThrow(NovaPoshtaApiError);
   });
 });
+
+describe("tracking-document module — forward-compatible status (T5, AC-07)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("preserves a status code/description not previously documented, unchanged", async () => {
+    mockFetchOnce(() =>
+      successEnvelope([record({ Number: "20400048799000", StatusCode: 9999, Status: "A brand-new status Nova Poshta added later" })]),
+    );
+    const trackingDocument = createTrackingDocumentModule(createClient("test-api-key"));
+
+    const result = await trackingDocument.getStatusDocuments({
+      Documents: [{ DocumentNumber: "20400048799000", Phone: "" }],
+    });
+
+    expect(result[0]!.StatusCode).toBe(9999);
+    expect(result[0]!.Status).toBe("A brand-new status Nova Poshta added later");
+  });
+});
+
+describe("tracking-document module — shared error contract (T5, AC-08/AC-09/AC-10)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("throws NovaPoshtaApiError when Nova Poshta declines the request (AC-08)", async () => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: false,
+          data: [],
+          errors: ["Unsupported filter value"],
+          errorCodes: ["400"],
+          warnings: [],
+        }),
+    }));
+    const trackingDocument = createTrackingDocumentModule(createClient("test-api-key"));
+
+    const err = await trackingDocument
+      .getStatusDocuments({ Documents: [{ DocumentNumber: "20400048799000", Phone: "" }] })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Unsupported filter value"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["400"]);
+  });
+
+  it("throws NovaPoshtaApiError when success is true but data isn't array-shaped (AC-08)", async () => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () => Promise.resolve({ success: true, data: { not: "a list" }, errors: [], warnings: [] }),
+    }));
+    const trackingDocument = createTrackingDocumentModule(createClient("test-api-key"));
+
+    await expect(
+      trackingDocument.getStatusDocuments({ Documents: [{ DocumentNumber: "20400048799000", Phone: "" }] }),
+    ).rejects.toThrow(NovaPoshtaApiError);
+  });
+
+  it("does not throw when a document merely comes back not-found/removed — 0% of AC-06 cases raise (AC-08 contrast)", async () => {
+    mockFetchOnce(() => successEnvelope([record({ Number: "20400048799000", StatusCode: 2, Status: "Видалено" })]));
+    const trackingDocument = createTrackingDocumentModule(createClient("test-api-key"));
+
+    await expect(
+      trackingDocument.getStatusDocuments({ Documents: [{ DocumentNumber: "20400048799000", Phone: "" }] }),
+    ).resolves.not.toThrow();
+  });
+
+  it("throws NovaPoshtaApiError with Nova Poshta's own message on an invalid/expired API key (AC-09)", async () => {
+    mockFetchOnce(() => ({
+      ok: true,
+      json: () =>
+        Promise.resolve({ success: false, data: [], errors: ["Invalid API key"], errorCodes: ["401"], warnings: [] }),
+    }));
+    const trackingDocument = createTrackingDocumentModule(createClient("test-api-key"));
+
+    const err = await trackingDocument
+      .getStatusDocuments({ Documents: [{ DocumentNumber: "20400048799000", Phone: "" }] })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Invalid API key"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["401"]);
+  });
+
+  it("throws NovaPoshtaApiError (not a raw error) on a network/transport failure (AC-10)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+    const trackingDocument = createTrackingDocumentModule(createClient("test-api-key"));
+
+    await expect(
+      trackingDocument.getStatusDocuments({ Documents: [{ DocumentNumber: "20400048799000", Phone: "" }] }),
+    ).rejects.toThrow(NovaPoshtaApiError);
+  });
+
+  it("throws NovaPoshtaApiError (not a raw error) when the response body isn't valid JSON (AC-10)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: () => Promise.reject(new SyntaxError("Unexpected token")) }),
+    );
+    const trackingDocument = createTrackingDocumentModule(createClient("test-api-key"));
+
+    await expect(
+      trackingDocument.getStatusDocuments({ Documents: [{ DocumentNumber: "20400048799000", Phone: "" }] }),
+    ).rejects.toThrow(NovaPoshtaApiError);
+  });
+});
+
+describe("tracking-document module — overhead benchmark (T5, spec.md §6 NFR row 4)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("median library-added overhead is <=5ms across >=30 stubbed single-waybill calls", async () => {
+    mockFetchOnce(() => successEnvelope([record({ Number: "20400048799000" })]));
+    const trackingDocument = createTrackingDocumentModule(createClient("test-api-key"));
+
+    const samples: number[] = [];
+    const runs = 30;
+    for (let i = 0; i < runs; i++) {
+      const start = performance.now();
+      await trackingDocument.getDocumentStatus("20400048799000");
+      samples.push(performance.now() - start);
+    }
+
+    samples.sort((a, b) => a - b);
+    const median = samples[Math.floor(runs / 2)];
+    expect(median).toBeLessThanOrEqual(5);
+  });
+});

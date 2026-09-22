@@ -32,8 +32,20 @@ quotes directly —
 `maddsua/NovaPoshtaREST/lib/models/TrackingDocument.ts`. (`daaner/NovaPoshta`'s PHP source and
 `sirkostya009/go-novapost`'s status-code doc-comment, both already quoted verbatim in `spec.md` §1,
 were not independently re-fetched again here — their relevant content is the request shape and the
-21-value status-code list, both already confirmed identical across sources in `spec.md`, and
-neither declares the full response field set this pass needed to re-verify.)
+21-value status-code list, both already confirmed identical across sources in `spec.md`.)
+
+**Re-fetched again during `sdd:review` (2026-09-22):** that last assumption about
+`sirkostya009/go-novapost` was wrong — its `tracking_document.go` (re-fetched via `gh api
+repos/sirkostya009/go-novapost/contents/tracking_document.go`) declares a full `StatusDocument`
+struct (107 fields), not just the status-code doc-comment. Used as a genuine third independent
+source to corroborate the single-sourced fields below — see "Third-source corroboration"
+underneath the field-origins table. The same review pass also checked the user-supplied
+`api-portal.novapost.com` documentation portal: it is a real, reachable, unauthenticated official
+Nova Poshta source, but documents a different, newer REST/JWT-auth tracking API
+(`/shipments/tracking`, `numbers[]`) — no mention anywhere in its doc index of `modelName`,
+`calledMethod`, `TrackingDocument`, or `getStatusDocuments`, the legacy surface this module
+targets. Not usable as an official source for this contract; `developers.novaposhta.ua` (the
+actual home of the legacy docs) remains 403.
 
 ## Field-origins table
 
@@ -48,13 +60,40 @@ by the other (the other source simply doesn't declare that field).
 | `TrackingDocumentFilter` (`DocumentNumber`, `Phone`) | `platx/go-nova-poshta`'s `DocumentFilter` (`request.go`, re-fetched) — exact match against `maddsua/NovaPoshtaREST`'s inline parameter shape | high | 2 |
 | `TrackingStatus` fields present in **both** re-fetched sources | `platx/go-nova-poshta`'s `DocumentStatus` struct (`response.go`) ∩ `maddsua/NovaPoshtaREST`'s `i_getStatusDocuments_result` (`TrackingDocument.ts`), both re-fetched | high | 103 |
 | `TrackingStatus` fields present **only** in the Go source (`AdjustedDate`, `CounterpartySenderDescription`, `InternetDocumentDescription`, `LightReturnNumber`, `LoyaltyCardSender`, `PossibilityLightReturn`, `PossibilityTrusteeRecipient`, `RedeliveryPaymentCardDescription`, `RedeliveryPaymentCardRef`, `RedeliveryServiceCost`, `TrusteeRecipientPhone`) | `platx/go-nova-poshta`'s `DocumentStatus` struct (re-fetched) — not contradicted by the TS source, simply absent from it | medium (single-sourced) | 11 |
-| `TrackingStatus` fields present **only** in the TypeScript source (`BackwardDeliverySubTypesActions`, `BackwardDeliverySubTypesServices`, `DateReturnCargo`, `PossibilityTermExtensio`) | `maddsua/NovaPoshtaREST`'s `i_getStatusDocuments_result` (re-fetched) — not contradicted by the Go source, simply absent from it | medium (single-sourced) | 4 |
-| 21-value `StatusCode` set (documentation reference, `TRACKING_STATUS_CODES`) | `platx/go-nova-poshta`'s `enum.go` `String()` switch (re-fetched) — independently corroborated by `sirkostya009/go-novapost`'s doc-comment, both already quoted in `spec.md` §1 | high (two-source agreement) | 21 values |
+| `TrackingStatus` fields present in the TypeScript source **and** independently corroborated by `sirkostya009/go-novapost` (`BackwardDeliverySubTypesActions`, `BackwardDeliverySubTypesServices`, `DateReturnCargo`, `PossibilityTermExtensio`) | `maddsua/NovaPoshtaREST`'s `i_getStatusDocuments_result` ∩ `sirkostya009/go-novapost`'s `StatusDocument` struct (`tracking_document.go`) — two independent sources, re-fetched 2026-09-22 during `sdd:review` | high (two-source agreement, raised from medium during review) | 4 |
+| `TrackingStatus` fields present **only** in the Go source `platx/go-nova-poshta`, still unconfirmed by either other source after re-fetching a third (`AdjustedDate`, `CounterpartySenderDescription`, `InternetDocumentDescription`, `LightReturnNumber`, `LoyaltyCardSender`, `PossibilityLightReturn`, `PossibilityTrusteeRecipient`, `RedeliveryPaymentCardDescription`, `RedeliveryPaymentCardRef`, `RedeliveryServiceCost`, `TrusteeRecipientPhone`) | `platx/go-nova-poshta`'s `DocumentStatus` struct (re-fetched) — not contradicted by either the TypeScript or the `sirkostya009/go-novapost` source, simply absent from both | medium (single-sourced) | 11 |
+| 21-value `StatusCode` set (documentation reference, `TRACKING_STATUS_CODES`) | `platx/go-nova-poshta`'s `enum.go` `String()` switch (re-fetched) — independently corroborated by `sirkostya009/go-novapost`'s doc-comment, both already quoted in `spec.md` §1, and again by `sirkostya009`'s full struct re-fetch (2026-09-22) | high (two-source agreement) | 21 values |
 | Error contract (`NovaPoshtaApiError`, conditions table) | `sad.md` §6 Flow 1–2 `alt` branches, `spec.md` AC-04, AC-08, AC-09, AC-10 | high | — |
 
-No field in the contract lacks a traceable origin above; the 15 single-sourced fields (11 Go-only +
-4 TS-only) are modeled at `medium` confidence, not invented — each one is a field a re-fetched SDK
-author actually declared, just not corroborated by the second source.
+No field in the contract lacks a traceable origin above. Of the original 15 single-sourced fields,
+4 (the former TS-only group) were raised to `high` confidence on 2026-09-22 when a third
+independent source corroborated them (see "Third-source corroboration" below); the remaining 11
+(the Go-only group) stay at `medium` confidence — each is a field a re-fetched SDK author actually
+declared, just still not corroborated by either other source.
+
+## Third-source corroboration (`sdd:review`, 2026-09-22)
+
+Re-fetched `sirkostya009/go-novapost`'s `tracking_document.go` in full (previously only its
+status-code doc-comment had been read, per `spec.md` §1) — it declares a complete `StatusDocument`
+struct with 107 fields, an independent third source for the response shape:
+
+- **The 4 TS-only fields are all present** in `sirkostya009`'s struct too
+  (`BackwardDeliverySubTypesActions`, `BackwardDeliverySubTypesServices`, `DateReturnCargo`,
+  `PossibilityTermExtensio`) — raised from `medium` to `high` confidence above.
+- **None of the 11 Go-only fields appear** in `sirkostya009`'s struct either — stays `medium`
+  confidence; a third source omitting a field isn't a contradiction (SDKs commonly cover partial
+  surfaces), but it also isn't the second confirmation the sourcing policy prefers.
+- **No field in `sirkostya009`'s struct is absent from the current 118-field union** — no new field
+  to add. (`AfterPaymentOnGoodsCost`, the Go struct's field name, carries a `json:"AfterpaymentOnGoodsCost"`
+  tag matching the union's existing `AfterpaymentOnGoodsCost` field exactly — not a new field, a
+  naming-convention match.)
+- **The 5 `boolean | string`-disputed fields got a third data point, still genuinely split**:
+  `sirkostya009` types `CargoReturnRefusal`/`Redelivery`/`SecurePayment` as bool-like (agreeing with
+  `platx`'s Go source) and `AviaDelivery`/`PostomatV3CellReservationNumber` as plain `string`
+  (agreeing with `maddsua`'s TypeScript source) — three sources, still a real split by field, not a
+  near-unanimous case that should be narrowed. The existing `boolean | string` widening stands.
+- **Status-code list:** `sirkostya009`'s doc-comment (already quoted in `spec.md` §1) matches the
+  same 21 numbers and Ukrainian text as `platx`'s `enum.go` — no change.
 
 ## Drift found — and how it was resolved
 
@@ -123,23 +162,30 @@ gap, no AC left uncovered, no method left uncovered.
 
 ## Open items carried forward (not resolved by this contract, by design)
 
-- `spec.md` §8 OQ (API key requirement) — does `getStatusDocuments` actually require a valid API
-  key? One source states no; unconfirmed by the others. Unaffected by this contract — the library
-  sends the key like every other module either way (§6's error table, AC-09).
+- `spec.md` §8 OQ (API key requirement) — **resolved during `sdd:review`, 2026-09-22:** Tech Lead's
+  call was to keep the current default and close the question. Unaffected by this contract either
+  way — the library sends the key like every other module (§6's error table, AC-09).
 - `spec.md` §8 OQ (phone-match field masking) — does a non-matching phone number change which
-  response fields Nova Poshta returns? Every `TrackingStatus` field is already required-typed per
-  this pass's field-origins table, not optional — worth a live-API check before documenting the
-  `phone` parameter's effect for consuming developers, per `spec.md`'s own note.
+  response fields Nova Poshta returns? Still open. Every `TrackingStatus` field is required-typed
+  per this pass's field-origins table, not optional — `spec.md`/`sad.md` previously claimed
+  optional here and were corrected in place during `sdd:review` (2026-09-22). Still worth a
+  live-API check before documenting the `phone` parameter's effect for consuming developers.
 - `spec.md` §8 OQ (three independent status vocabularies) — out of scope for this contract; a
-  cross-module reconciliation question, not a `tracking-document`-only one.
-- `spec.md` §8 OQ (live/official docs re-verification) — this pass strengthens the SDK cross-check
-  (2 sources re-fetched, field-for-field) but the underlying caveat (still third-party sources, not
-  Nova Poshta's own official documentation) is unchanged; carried forward.
-- `spec.md` §6.1 security review — still Required before `sdd:implement tracking-document`, owner
-  Tech Lead; unaffected by this contract pass.
-- The 15 single-sourced fields (`medium` confidence, field-origins table above) — worth
-  re-confirming against a third source or Nova Poshta's own docs once reachable, same as every
-  other open sourcing caveat this repo carries.
+  cross-module reconciliation question, not a `tracking-document`-only one. Still open.
+- `spec.md` §8 OQ (live/official docs re-verification) — **resolved during `sdd:review`,
+  2026-09-22:** the legacy docs site is still 403; a newer official portal
+  (`api-portal.novapost.com`, reachable, real, user-supplied) turned out to document a different,
+  newer REST/JWT tracking API, not this module's legacy surface. The SDK cross-check was
+  strengthened instead — a third independent source (`sirkostya009/go-novapost`) was re-fetched in
+  full and corroborates the method surface, the status-code list, and 4 of the 15 previously
+  single-sourced fields (see "Third-source corroboration" above).
+- `spec.md` §6.1 security review — **resolved during `sdd:review`, 2026-09-22:** performed by the
+  Tech Lead after implementation rather than gated before it; no findings requiring a code change.
+  See `docs/features/tracking-document/_review/review-2026-09-22.md`.
+- The 11 still-single-sourced fields (`medium` confidence, field-origins table above; down from 15
+  after the third-source re-fetch corroborated 4 of them) — worth re-confirming against a fourth
+  source or Nova Poshta's own docs once reachable, same as every other open sourcing caveat this
+  repo carries.
 
 ## Lint
 

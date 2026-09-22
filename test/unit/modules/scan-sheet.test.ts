@@ -150,6 +150,37 @@ describe("scan-sheet module — insertDocuments (T2, AC-01/AC-02)", () => {
       scanSheet.insertDocuments({ DocumentRefs: ["waybill-ref-1", "waybill-ref-2"], Date: "2026-09-22" }),
     ).resolves.toEqual([]);
   });
+
+  // review-2026-09-22.md finding 7 — mirrors the equivalent removeDocuments/deleteScanSheet tests
+  // below; README.md explicitly tells callers to inspect insertDocuments's per-item Errors field.
+  it("does not throw when one item among several carries its own per-item Errors value (AC-01, ADR-0001)", async () => {
+    mockFetchOnce(() =>
+      successEnvelope([
+        insertItem(),
+        insertItem({ Ref: "sheet-ref-2", Errors: ["Waybill already on a scan sheet"] }),
+      ]),
+    );
+    const scanSheet = createScanSheetModule(createClient("test-api-key"));
+
+    const result = await scanSheet.insertDocuments({
+      DocumentRefs: ["waybill-ref-1", "waybill-ref-2"],
+      Date: "2026-09-22",
+    });
+
+    expect(result[1]!.Errors).toEqual(["Waybill already on a scan sheet"]);
+  });
+
+  // review-2026-09-22.md finding 8 — the empty-array tests above cover an empty *response*
+  // (ADR-0001); this covers an empty *request* array reaching the wire unmodified.
+  it("passes an empty DocumentRefs request array through to the wire unmodified (AC-01, pass-through non-goal)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([]));
+    const scanSheet = createScanSheetModule(createClient("test-api-key"));
+
+    await scanSheet.insertDocuments({ DocumentRefs: [], Date: "2026-09-22" });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.methodProperties.DocumentRefs).toEqual([]);
+  });
 });
 
 describe("scan-sheet module — getScanSheet (T2, AC-04/AC-05)", () => {
@@ -316,6 +347,22 @@ describe("scan-sheet module — deleteScanSheet (T2, AC-09/AC-10)", () => {
     await expect(
       scanSheet.deleteScanSheet({ ScanSheetRefs: ["sheet-ref-1", "sheet-ref-2"] }),
     ).resolves.toEqual([]);
+  });
+
+  // review-2026-09-22.md finding 8 — AC-09's "a subsequent getScanSheetList call no longer includes
+  // a successfully deleted sheet" postcondition, observed end-to-end across two calls.
+  it("a deleted sheet's Ref is absent from a subsequent getScanSheetList call (AC-09 postcondition)", async () => {
+    const fetchMock = mockFetchSequence([
+      () => successEnvelope([deleteItem({ Ref: "sheet-ref-1" })]),
+      () => successEnvelope([listItem({ Ref: "sheet-ref-2" })]),
+    ]);
+    const scanSheet = createScanSheetModule(createClient("test-api-key"));
+
+    await scanSheet.deleteScanSheet({ ScanSheetRefs: ["sheet-ref-1"] });
+    const remaining = await scanSheet.getScanSheetList();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(remaining.some((sheet) => sheet.Ref === "sheet-ref-1")).toBe(false);
   });
 });
 

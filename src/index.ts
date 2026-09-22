@@ -120,3 +120,17 @@ export type {
   TrackingDocumentFilter,
   TrackingStatus,
 } from "./types/tracking-document.js";
+
+export { createScanSheetModule } from "./modules/scan-sheet/index.js";
+export type { ScanSheetModule } from "./modules/scan-sheet/index.js";
+export type {
+  DeleteScanSheetItem,
+  DeleteScanSheetPayload,
+  GetScanSheetPayload,
+  InsertDocumentsItem,
+  InsertDocumentsPayload,
+  RemoveDocumentsItem,
+  RemoveDocumentsPayload,
+  ScanSheetDetail,
+  ScanSheetListItem,
+} from "./types/scan-sheet.js";

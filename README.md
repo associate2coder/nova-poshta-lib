@@ -94,8 +94,10 @@ if (status) {
 }
 
 // addToTodaysScanSheet finds (or creates) today's still-unprinted scan sheet and adds these
-// waybills to it in one call — a convenience wrapper over insertDocuments.
-const inserted = await scanSheet.addToTodaysScanSheet([waybill!.Ref, "20400048799001"]);
+// waybills to it in one call — a convenience wrapper over insertDocuments. It takes a waybill's
+// own Ref, never its printed tracking/IntDocNumber (compare the trackingDocument call above,
+// which takes a tracking number instead).
+const inserted = await scanSheet.addToTodaysScanSheet([waybill!.Ref, "<another waybill ref>"]);
 
 // ADR-0001: an empty-but-successful batch-result array is returned as-is, never thrown — check
 // its length yourself if that distinction matters, rather than wrapping this call in try/catch to

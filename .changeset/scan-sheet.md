@@ -21,7 +21,8 @@ import { createClient, createScanSheetModule } from "nova-poshta-lib";
 const client = createClient(process.env.NOVA_POSHTA_API_KEY!);
 const scanSheet = createScanSheetModule(client);
 
-const inserted = await scanSheet.addToTodaysScanSheet(["20400048799000", "20400048799001"]);
+// addToTodaysScanSheet takes each waybill's own Ref, never its printed tracking/IntDocNumber.
+const inserted = await scanSheet.addToTodaysScanSheet(["<waybill ref 1>", "<waybill ref 2>"]);
 
 // ADR-0001: an empty-but-successful batch-result array is returned as-is, never thrown — check
 // its length yourself rather than wrapping this call in try/catch to detect it.

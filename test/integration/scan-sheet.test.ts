@@ -42,13 +42,18 @@ function todayAsSlashDate(): string {
   return `${day}.${month}.${now.getFullYear()}`;
 }
 
-/** YYYY-MM-DD — matches scan-sheet's own insertDocuments Date convention
- *  (src/modules/scan-sheet/index.ts's kyivTodayDateString, and its unit-test fixtures). */
+/** YYYY-MM-DD, Europe/Kyiv calendar date — matches scan-sheet's own insertDocuments Date
+ *  convention (src/modules/scan-sheet/index.ts's kyivTodayDateString, and its unit-test
+ *  fixtures); computed via Intl.DateTimeFormat, not the host machine's local clock, so this test
+ *  agrees with the module under test regardless of which timezone CI runs in
+ *  (review-2026-09-22.md finding 6). */
 function todayAsIsoDate(): string {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-${day}`;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Kyiv",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 // Opt-in only, per CLAUDE.md: hits the real Nova Poshta API, skipped automatically when

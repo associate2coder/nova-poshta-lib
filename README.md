@@ -17,6 +17,7 @@ import {
   createCounterpartyModule,
   createInternetDocumentModule,
   createTrackingDocumentModule,
+  createScanSheetModule,
 } from "nova-poshta-lib";
 
 const client = createClient(process.env.NOVA_POSHTA_API_KEY!);
@@ -24,6 +25,7 @@ const address = createAddressModule(client);
 const counterparty = createCounterpartyModule(client);
 const internetDocument = createInternetDocumentModule(client);
 const trackingDocument = createTrackingDocumentModule(client);
+const scanSheet = createScanSheetModule(client);
 
 const cities = await address.getCities({ FindByString: "Київ" });
 
@@ -90,10 +92,30 @@ const status = await trackingDocument.getDocumentStatus("20400048799000");
 if (status) {
   console.log(status.Status, status.StatusCode);
 }
+
+// addToTodaysScanSheet finds (or creates) today's still-unprinted scan sheet and adds these
+// waybills to it in one call — a convenience wrapper over insertDocuments.
+const inserted = await scanSheet.addToTodaysScanSheet([waybill!.Ref, "20400048799001"]);
+
+// ADR-0001: an empty-but-successful batch-result array is returned as-is, never thrown — check
+// its length yourself if that distinction matters, rather than wrapping this call in try/catch to
+// detect it.
+if (inserted.length === 0) {
+  console.log("Nova Poshta reported success but returned no items");
+}
+
+// A per-item Error/Errors value inside an otherwise-successful response never throws either —
+// the top-level call only throws on a transport failure or a top-level success: false. Inspect
+// each item's Error/Errors field yourself to see which ones actually failed.
+for (const item of inserted) {
+  if (item.Errors.length > 0) {
+    console.warn(item.Ref, item.Errors);
+  }
+}
 ```
 
-> `common`, `address`, `counterparty`, `internet-document`, and `tracking-document` are the domain
-> modules shipped so far — more are added incrementally under `src/modules/`.
+> `common`, `address`, `counterparty`, `internet-document`, `tracking-document`, and `scan-sheet` are
+> the domain modules shipped so far — more are added incrementally under `src/modules/`.
 
 ## Development
 

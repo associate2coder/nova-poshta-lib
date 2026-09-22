@@ -1,7 +1,7 @@
 ---
 status: Draft
 owner: "Architect"
-reviewers: ["Tech Lead", "Security Lead"]
+reviewers: ["Tech Lead"]
 updated_at: "2026-09-22"
 feature_size: "S"
 target_surfaces: ["library-sdk"]
@@ -42,8 +42,7 @@ from Nova Poshta's own portal, or one a third party shipped, all the same way (`
 | Role | Interest | Sign-off owner? |
 |---|---|---|
 | Consuming developer | Calls the 2 typed methods to check a shipment's live status by waybill number | No |
-| Tech Lead | SAD approval; owns the `spec.md` §8 open questions this design pass inherits | Yes |
-| Security Lead | Reviews the module before release — the first module in the library returning recipient/sender PII from a call with **no** per-counterparty ownership scoping at all (`spec.md` §6.1) | Yes |
+| Tech Lead | SAD approval; owns the `spec.md` §8 open questions this design pass inherits, and performs the §6.1 security review this module requires before `sdd:implement` (`spec.md` §8, resolved during clarify) | Yes |
 
 <!-- Decision overrides (¶4) — none raised during this design pass; the spec's own §1 Decision
      overrides (self-contained module, match-by-identity) are inherited unchanged, not re-litigated
@@ -82,8 +81,9 @@ from Nova Poshta's own portal, or one a third party shipped, all the same way (`
   saved-address data than to `common`'s public reference catalog. Sharper than any earlier module:
   `tracking-document` has **no** per-counterparty ownership scoping at all — any caller with a valid
   key can track any waybill number by design (AC-09), matching Nova Poshta's own public tracking
-  page. Security review required before release — tracked in §11, not performed in this design
-  session.
+  page. Security review required before release, performed by the Tech Lead and gated before
+  `sdd:implement tracking-document` — `spec.md` §8's own resolution, not performed in this design
+  session (tracked in §11).
 - AuthZ/AuthN: the library sends the caller's API key the same way every module does; one
   cross-checked source states this specific method doesn't require a key at all, unconfirmed by the
   other three (`spec.md` §8 OQ, carried into §11) — the library performs no key-validity check of its
@@ -223,7 +223,7 @@ src/
 │                                    #   TrackingStatus (ADR-0001) — the full 91-field response
 │                                    #   record, typed exhaustively per spec.md's "Resolved during
 │                                    #   clarify" note (matching common/address's exhaustive-typing
-│                                    #   precedent, not just the ~9-field PII subset spec.md quotes)
+│                                    #   precedent, not just the ~12-field PII subset spec.md quotes)
 └── index.ts                       # public re-exports (client + common + address + counterparty +
                                     #   internet-document + tracking-document + types)
 ```
@@ -414,12 +414,13 @@ cross-checked once manually against the 4-SDK sourcing before release).
 
 | Risk / debt | Severity | Mitigation | Owner |
 |---|---|---|---|
-| Security review required before release — the first module in the library returning recipient/sender PII from a call with no per-counterparty ownership scoping at all (`spec.md` §6.1) | High | Schedule and complete a security review before `sdd:ship tracking-document`; not performed in this design session | Security Lead |
+| Security review required before release — the first module in the library returning recipient/sender PII from a call with no per-counterparty ownership scoping at all (`spec.md` §6.1) | High | Complete a security review before `sdd:implement tracking-document`; not performed in this design session | Tech Lead |
+| Who performs the §6.1 security review this module requires, and what does it block? (`spec.md` §8 OQ) | Open question | Resolve before `sdd:implement tracking-document`; default now: the Tech Lead performs it, gating before implementation begins — same due-date pattern as the Tech-Lead-owned open questions below | Tech Lead |
 | Does `getStatusDocuments` actually require a valid API key, or does Nova Poshta accept the call regardless? One cross-checked source states no key is required, unconfirmed by the other three (`spec.md` §8 OQ) | Open question | Resolve before `sdd:implement tracking-document`; the library sends the key like every other call and never independently validates it either way, so this doesn't change the design, only the authorization-boundary claim in §2/§6.1 | Tech Lead |
 | Does the phone number affect which response fields Nova Poshta returns (masking recipient detail on a non-matching phone), and if so how does that show up (empty string / null / absent field)? (`spec.md` §8 OQ) | Open question | Resolve before `sdd:tasks tracking-document`; every response field is typed optional regardless of the answer, so behavior doesn't depend on resolving this | Tech Lead |
 | Should the library's now-three independent status vocabularies (`common.DocumentStatus`, `internet-document`'s `StateId`/`StateName`, and this module's `TrackingStatus`) eventually be reconciled into one shared type? (`spec.md` §8 OQ, §4 decision 5) | Open question | Re-evaluate once a fourth module needs its own status representation — a cross-module change bigger than any one domain module's spec | Tech Lead |
 | Re-verify the 1-method TrackingDocument surface against Nova Poshta's live/official documentation once the portal is reachable by automated tooling — the 4-SDK cross-check agrees field-for-field but is still a third-party source, the same caveat every shipped spec in this repo carries (`spec.md` §8 OQ) | Open question | Resolve before `sdd:implement tracking-document`; proceed on the SDK-verified single-method list until then | Tech Lead |
-| Sizing risk: the response type's exhaustive 91-field typing (`spec.md`'s "Resolved during clarify" note) is materially larger than the ~9-field PII subset quoted in the spec, against this feature's current S estimate | Medium | Re-run `classify-size` once `sdd:tasks` breaks the work down, as `spec.md` itself flags | Tech Lead |
+| Sizing risk: the response type's exhaustive 91-field typing (`spec.md`'s "Resolved during clarify" note) is materially larger than the ~12-field PII subset quoted in the spec, against this feature's current S estimate | Medium | Re-run `classify-size` once `sdd:tasks` breaks the work down, as `spec.md` itself flags | Tech Lead |
 
 **Accepted debt (acceptable in v1, plan to fix later):**
 - No client-side caching, rate-limiting, or polling backoff — matches the library's existing

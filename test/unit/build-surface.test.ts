@@ -64,6 +64,15 @@ const INTERNET_DOCUMENT_METHOD_NAMES = [
 
 const TRACKING_DOCUMENT_METHOD_NAMES = ["getStatusDocuments", "getDocumentStatus"];
 
+const SCAN_SHEET_METHOD_NAMES = [
+  "insertDocuments",
+  "getScanSheet",
+  "getScanSheetList",
+  "removeDocuments",
+  "deleteScanSheet",
+  "addToTodaysScanSheet",
+];
+
 function declarationPath(relativePath: string): string {
   return fileURLToPath(new URL(`../../${relativePath.replace(/^\.\//, "")}`, import.meta.url));
 }
@@ -225,6 +234,25 @@ describe("published build surface (AC-07)", () => {
 
     for (const method of TRACKING_DOCUMENT_METHOD_NAMES) {
       expect(interfaceBody, `expected ${relativePath}'s TrackingDocumentModule to declare ${method}`).toMatch(
+        new RegExp(`\\b${method}\\b`),
+      );
+    }
+  });
+
+  it.each([
+    [ESM_TYPES_PATH, "ESM"],
+    [CJS_TYPES_PATH, "CJS"],
+  ])("%s (%s) declares createScanSheetModule and all 6 scan-sheet identifiers (T6)", (relativePath) => {
+    const contents = readFreshDeclaration(relativePath);
+
+    expect(contents).toMatch(/\bcreateScanSheetModule\b/);
+
+    const interfaceMatch = contents.match(/interface ScanSheetModule \{([\s\S]*?)\n\}/);
+    expect(interfaceMatch, `expected ${relativePath} to declare a ScanSheetModule interface`).not.toBeNull();
+    const interfaceBody = interfaceMatch![1];
+
+    for (const method of SCAN_SHEET_METHOD_NAMES) {
+      expect(interfaceBody, `expected ${relativePath}'s ScanSheetModule to declare ${method}`).toMatch(
         new RegExp(`\\b${method}\\b`),
       );
     }

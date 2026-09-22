@@ -324,13 +324,127 @@ sequenceDiagram
     end
 ```
 
-*Flow 1 covers `insertDocuments` (AC-01, AC-02, AC-11, AC-12, AC-13) and, by the same request/response
-shape, stands in for `removeDocuments`/`deleteScanSheet`/`getScanSheet`/`getScanSheetList`'s identical
-error branches (AC-04 through AC-10) — every raw method shares one mechanism: delegate to
-`client.request()`, propagate its errors unchanged, never special-case a per-item `Error`/`Errors`
-value. Flow 2 covers `addToTodaysScanSheet` (AC-03) — the one flow in this module with genuine
-sequencing: a failed first call never triggers the fallback "create new" behavior, and the "no source
-confirms a full/paginated list" risk (§11) is exactly the assumption this flow depends on.*
+**Critical flow 3: `getScanSheet` — retrieve by scan-sheet `Ref` or by `CounterpartyRef`**
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant Scan as scan-sheet module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>Scan: getScanSheet({ Ref } or { CounterpartyRef })
+    Scan->>Client: request("ScanSheet", "getScanSheet", { Ref, CounterpartyRef })
+    Client->>NP: HTTPS POST (apiKey, modelName, calledMethod, methodProperties)
+
+    alt declined, malformed, or network-failed (AC-11 / AC-12 / AC-13)
+        NP--xClient: as Flow 1's error branches
+        Client-->>Scan: throws NovaPoshtaApiError
+        Scan-->>Dev: propagates NovaPoshtaApiError
+    else success — no scan sheet matches the given Ref, or the CounterpartyRef has none (AC-04)
+        NP-->>Client: success:true, data: []
+        Client-->>Scan: typed ScanSheetDetail[] (array-shape check passes)
+        Scan-->>Dev: [] — returned as-is, not an error
+    else success — one or more matches (AC-04 by Ref, AC-05 by CounterpartyRef)
+        NP-->>Client: success:true, data: [ScanSheetDetail, ...] (sender identity/address, waybill count — scoped entirely by Nova Poshta, no ownership check performed by this library)
+        Client-->>Scan: typed ScanSheetDetail[]
+        Scan-->>Dev: the array exactly as received
+    end
+```
+
+**Critical flow 4: `getScanSheetList` — list every scan sheet visible to the key**
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant Scan as scan-sheet module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>Scan: getScanSheetList()
+    Scan->>Client: request("ScanSheet", "getScanSheetList", {})
+    Client->>NP: HTTPS POST (apiKey, modelName, calledMethod, methodProperties)
+
+    alt declined, malformed, or network-failed (AC-11 / AC-12 / AC-13)
+        NP--xClient: as Flow 1's error branches
+        Client-->>Scan: throws NovaPoshtaApiError
+        Scan-->>Dev: propagates NovaPoshtaApiError
+    else success (AC-06)
+        NP-->>Client: success:true, data: [ScanSheetListItem, ...] (Ref, Number, creation DateTime, Printed)
+        Client-->>Scan: typed ScanSheetListItem[]
+        Scan-->>Dev: the array exactly as received, every visible sheet included
+    end
+```
+
+**Critical flow 5: `removeDocuments` — remove waybills from an existing scan sheet**
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant Scan as scan-sheet module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>Scan: removeDocuments({ Ref, DocumentRefs })
+    Scan->>Client: request("ScanSheet", "removeDocuments", { Ref, DocumentRefs })
+    Client->>NP: HTTPS POST (apiKey, modelName, calledMethod, methodProperties)
+
+    alt declined, malformed, or network-failed (AC-11 / AC-12 / AC-13)
+        NP--xClient: as Flow 1's error branches
+        Client-->>Scan: throws NovaPoshtaApiError
+        Scan-->>Dev: propagates NovaPoshtaApiError
+    else success — data array is empty despite submitted DocumentRefs (§4 decision 5, ADR-0001)
+        NP-->>Client: success:true, data: []
+        Client-->>Scan: typed RemoveDocumentsItem[] (array-shape check passes)
+        Scan-->>Dev: [] — returned as-is, not an error (ADR-0001)
+    else success — one item per submitted DocumentRef, some carrying a per-item Error (AC-07)
+        NP-->>Client: success:true, data: [RemoveDocumentsItem, ...] (Ref/Number of the sheet; Error populated only on failed items)
+        Client-->>Scan: typed RemoveDocumentsItem[]
+        Scan-->>Dev: the array exactly as received — never thrown for a per-item Error value
+    end
+    Note over Scan,Dev: Postcondition: removed waybills are not deleted, cancelled, or otherwise invalidated — only their membership in this scan sheet is undone; they remain valid via tracking-document/internet-document (AC-08)
+```
+
+**Critical flow 6: `deleteScanSheet` — delete one or more scan sheets outright**
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant Scan as scan-sheet module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>Scan: deleteScanSheet({ ScanSheetRefs })
+    Scan->>Client: request("ScanSheet", "deleteScanSheet", { ScanSheetRefs })
+    Client->>NP: HTTPS POST (apiKey, modelName, calledMethod, methodProperties)
+
+    alt declined, malformed, or network-failed (AC-11 / AC-12 / AC-13)
+        NP--xClient: as Flow 1's error branches
+        Client-->>Scan: throws NovaPoshtaApiError
+        Scan-->>Dev: propagates NovaPoshtaApiError
+    else success — data array is empty despite submitted ScanSheetRefs (§4 decision 5, ADR-0001)
+        NP-->>Client: success:true, data: []
+        Client-->>Scan: typed DeleteScanSheetItem[] (array-shape check passes)
+        Scan-->>Dev: [] — returned as-is, not an error (ADR-0001)
+    else success — one item per submitted ScanSheetRef, some carrying a per-item Error (AC-09)
+        NP-->>Client: success:true, data: [DeleteScanSheetItem, ...] (Ref/Number of the sheet; Error populated only on failed items)
+        Client-->>Scan: typed DeleteScanSheetItem[]
+        Scan-->>Dev: the array exactly as received — never thrown for a per-item Error value
+    end
+    Note over Scan,Dev: Postcondition: a successfully deleted sheet no longer appears in a subsequent getScanSheetList call; waybills that had been batched inside it are not deleted, cancelled, or otherwise invalidated — only the batching relationship is undone (AC-10)
+```
+
+*Flow 1 covers `insertDocuments` (AC-01, AC-02, AC-11, AC-12, AC-13). Flow 2 covers
+`addToTodaysScanSheet` (AC-03) — the one flow in this module with genuine sequencing: a failed first
+call never triggers the fallback "create new" behavior, and the "no source confirms a
+full/paginated list" risk (§11) is exactly the assumption this flow depends on. Flow 3 covers
+`getScanSheet` by both lookup shapes (AC-04, AC-05). Flow 4 covers `getScanSheetList` (AC-06). Flow 5
+covers `removeDocuments`, its per-item error branch, and the non-runtime invariant that removal never
+touches the underlying waybill (AC-07, AC-08). Flow 6 covers `deleteScanSheet` the same way for
+sheet deletion (AC-09, AC-10). Every raw method shares one mechanism: delegate to `client.request()`,
+propagate its declined/malformed/network-failure errors unchanged (AC-11, AC-12, AC-13), never
+special-case a per-item `Error`/`Errors` value, and return an empty-but-successful batch array as-is
+rather than throwing (ADR-0001).*
 
 ## 7. Deployment view
 

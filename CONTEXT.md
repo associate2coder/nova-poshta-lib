@@ -1,6 +1,6 @@
 ---
 status: Living
-updated_at: "2026-09-21"
+updated_at: "2026-09-22"
 
 ---
 
@@ -22,3 +22,4 @@ updated_at: "2026-09-21"
 - backward delivery — Nova Poshta's mechanism for collecting a cash amount from the recipient at delivery (cash-on-delivery) or returning a specified amount to the sender, configured as a payer/amount instruction attached to a waybill at creation or update time. NOT a return shipment — a return shipment is a separate later action against an already-delivered parcel (this library's future `additional-service` module); backward delivery is a payment instruction on the outbound waybill itself, not a new shipment.
 - ServiceType — Nova Poshta's classification of a shipment's pickup/drop-off combination (warehouse-to-warehouse, warehouse-to-door, door-to-warehouse, door-to-door). NOT `common`'s `getServiceTypes` runtime lookup — that's a live list fetched from Nova Poshta for display/validation; `internet-document` additionally hardcodes the same values as its own fixed TypeScript types so it can check a `save`/`update` payload at compile time, and the two are kept in sync by hand, not automatically.
 - CargoType — Nova Poshta's classification of what's being shipped (parcel, cargo, documents, pallet). NOT `common`'s `getCargoTypes` runtime lookup — that's a live list fetched from Nova Poshta for display/validation; `internet-document` additionally hardcodes the same values as its own fixed TypeScript types so it can check a `save`/`update` payload at compile time, and the two are kept in sync by hand, not automatically.
+- tracking status — the live, per-shipment status Nova Poshta returns from `TrackingDocument.getStatusDocuments` for one waybill (a numeric status code plus a human-readable description, e.g. "arrived at warehouse"; "not found" and "removed" are themselves valid status values, not request failures). NOT `common`'s `DocumentStatus` reference list — that's a separate, unrelated lookup (`Common.getDocumentStatuses`) of possible status values for building UI dropdowns, fetched via a different call; nothing confirms the two numeric code sets line up one-to-one, so `tracking-document` types its own status code independently rather than reusing `common`'s type or calling into the `common` module.

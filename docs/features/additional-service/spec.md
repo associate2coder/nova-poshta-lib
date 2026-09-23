@@ -24,6 +24,8 @@ Traceability: module boundaries follow the same convention every prior module se
 **Decision override — official docs confirmed, superseding SDK cross-check:** Nova Poshta's own documentation for the `AdditionalServiceGeneral` model was captured in full this session and used as the primary source for this spec's entire method surface. Per `CLAUDE.md`'s API-contract sourcing policy, this supersedes the community-SDK cross-check performed earlier in the same session, which independently corroborated nearly every field shape the official docs also show, and additionally helped resolve one genuine cross-source disagreement (see the `getChangeEWOrdersList` override below). Official docs use `AdditionalServiceGeneral` as the primary `modelName` enum value (`AdditionalService` also accepted as an alternate); this module uses `AdditionalServiceGeneral` as its canonical wire `modelName`.
 >
 > **2026-09-23 update (review round 1 fix):** the original drafting of this paragraph asserted official-docs sourcing narratively but did not quote the actual upstream request/response schema, which `/sdd:review` flagged as insufficient under `CLAUDE.md`'s policy ("quote or list the exact upstream struct/schema..., not just cite an SDK by name"). The user retrieved the docs page directly in their own browser this round and pasted its full content back; the verbatim quotes are now in the new "Official documentation quotes" subsection below the method table, and they resolved every `low`-confidence field/mapping this spec previously carried except `CreateRedirectPayload.ServiceType`'s full enum (§8, unchanged).
+>
+> **2026-09-23 update (review round 3 fix):** round 3's exhaustive field-by-field audit found the round-1 capture above, while genuine, only covered 9 of the module's ~30 distinct request/response shapes — most of `createRedirect`, `checkRedirectPossible`, `updateRedirect`, the three list methods, `getReturnReasons(Subtypes)`, `delete`, all three `save` results, and 8 of 19 wire method-name literals still had no genuine quote behind them, several graded `high` confidence in `api-sync-report.md` in violation of that report's own rubric. The user re-captured the same docs page in full this round; the "Round 3 review — second official documentation capture" subsection below resolves every one of those gaps. Only `ServiceType`'s full enum and `PaymentMethod`'s `"NonCash"` member remain open (§8) — both value-set gaps on already-confirmed fields, not sourcing violations.
 
 **Decision override — one wire `save` call, three `OrderType` values, five-plus typed create functions:** `createReturn`/`createRedirect`/`createWaybillEdit` all route through `calledMethod: "save"`, differentiated only by `OrderType: "orderCargoReturn" | "orderRedirecting" | "orderChangeEW"`; the three return variants (plain, new-address, new-warehouse) further share `orderCargoReturn`, differing only in which optional address fields are populated. This module exposes each as its own narrowly-typed function — `createReturn` takes a discriminated-union input covering all three return variants, `createRedirect` and `createWaybillEdit` are separate functions — with `OrderType` set internally, never caller-supplied. Mirrors `internet-document`'s `ServiceType`/`CargoType`-discriminant precedent (AC-02), and closes a failure-mode finding where a flat, optional-everything return payload could silently populate more than one destination variant at once, with Nova Poshta resolving one and no error surfacing either way.
 
@@ -196,12 +198,164 @@ documentation-gap argument.
 correctly): "заявку на зміну даних (можна видалити заявку лише зі статусом «Прийнято»)" — matches this
 capture exactly, no correction needed.
 
-**Remaining genuinely open item:** `CreateRedirectPayload.ServiceType`'s full enum. The official docs
-confirm the field's presence and one real example value (`"WarehouseWarehouse"`, matching
-`internet-document`'s own `ServiceType` enum member) but no page in this capture enumerates all of
-`checkPossibilityForRedirecting`/`save`'s accepted `ServiceType` values for this specific model —
-`CreateRedirectPayload.ServiceType` stays typed as plain `string` rather than asserting
-`internet-document`'s 4-value enum applies identically here (public-api.md §10 item 5, unchanged).
+**Remaining genuinely open items (unchanged by the round-3 capture below):** `CreateRedirectPayload.ServiceType`'s
+full enum (the official docs confirm the field's presence and one real example value,
+`"WarehouseWarehouse"`, matching `internet-document`'s own `ServiceType` enum member, but no page in
+either capture enumerates the complete set — public-api.md §10 item 5); and `PaymentMethod`'s
+`"NonCash"` member (every request example across both captures only ever shows `"Cash"` — carried
+over from `internet-document`'s own confirmed 2-value enum for the same field, not yet independently
+re-quoted for this model).
+
+### Round 3 review — second official documentation capture (2026-09-23), resolving the remaining sourcing findings
+
+`/sdd:review`'s round-3 pass (exhaustive whole-feature field-by-field audit) found that the round-1
+capture above, while genuine, covered only 9 of the module's ~30 distinct request/response shapes —
+`createRedirect`'s whole request, `checkRedirectPossible`'s whole contract, `updateRedirect`'s field
+list (cited circularly), the three list methods, `getReturnReasons(Subtypes)`, `delete`'s schema, all
+three `save` results, and 8 of 19 wire `calledMethod` literals all shipped with no genuine quote. The
+user retrieved the same `AdditionalServiceGeneral` docs page again, this time capturing its complete
+content (every method section), and pasted it back in full. The excerpts below resolve every field the
+round-3 audit flagged.
+
+**`checkPossibilityForRedirecting` (plain check) — request+response, resolving `checkRedirectPossible`'s
+whole previously-unsourced contract:**
+```json
+// request: { "methodProperties": { "Number": "20600000065609" } }
+// response
+{ "success": true, "data": [
+  { "Ref": "...", "Number": "20600000065609", "PayerType": "Sender", "PaymentMethod": "Cash",
+    "WarehouseRef": "...", "WarehouseDescription": "...", "AddressDescription": "...",
+    "StreetDescription": "...", "BuildingNumber": "24/1", "CityRecipient": "...",
+    "CityRecipientDescription": "Київ", "SettlementRecipient": "...", "SettlementRecipientDescription": "Київ",
+    "SettlementType": "...", "CounterpartyRecipientRef": "...", "CounterpartyRecipientDescription": "...",
+    "RecipientName": "...", "PhoneSender": "...", "PhoneRecipient": "...", "DocumentWeight": "1" } ] }
+```
+All 20 `RedirectPossibility` fields confirmed verbatim, exactly matching this module's existing type.
+
+**`save`/`orderRedirecting` (createRedirect/calculateRedirect) — request example, resolving the entire
+previously-unsourced 14-field request:**
+```json
+{ "calledMethod": "save", "methodProperties": {
+  "IntDocNumber": "...", "PaymentMethod": "Cash", "Note": "...", "OrderType": "orderRedirecting",
+  "Recipient": "...", "RecipientContactName": "...", "RecipientPhone": "...", "PayerType": "Recipient",
+  "Customer": "Sender", "ServiceType": "WarehouseWarehouse", "RecipientSettlement": "...",
+  "RecipientSettlementStreet": "...", "BuildingNumber": "15", "NoteAddressRecipient": "...",
+  "RecipientWarehouse": "..." } }
+```
+All 14 fields confirmed exactly as this module already typed them (`OrderType` excluded — set
+internally). Response confirmed `{Number, Ref}`.
+
+**`update` (redirect) — full request+response example, resolving the previously circular citation:**
+```json
+{ "calledMethod": "update", "methodProperties": {
+  "PaymentMethod": "Cash", "NoteAddressRecipient": "...", "Recipient": "...", "CityRecipient": "...",
+  "Note": "...", "Customer": "Sender", "Ref": "...", "RecipientContactName": "...",
+  "IntDocNumber": "...", "RecipientWarehouse": "...", "RecipientPhone": "...",
+  "SettlementRecipient": "...", "BuildingNumber": "15", "RecipientSettlementStreet": "...",
+  "ServiceType": "WarehouseWarehouse", "PayerType": "Sender", "OrderType": "orderRedirecting" } }
+```
+All 15 optional fields (plus `Ref`) confirmed exactly as this module already typed them. This also
+confirms the `RecipientSettlement` (create) vs. `SettlementRecipient`+`CityRecipient` (update) naming
+asymmetry is a real, docs-confirmed wire difference — not a bug in this module's types.
+
+**`getRedirectionOrdersList` — full response example (the round-1 capture had truncated 10 of 15
+fields as `"...": "..."`):**
+```json
+{ "success": true, "data": [ { "OrderRef": "...", "OrderNumber": "102-00010160",
+  "DateTime": "...", "DocumentNumber": "20600000065470", "Note": "...", "CityRecipient": "Київ",
+  "RecipientAddress": "...", "CounterpartyRecipient": "...", "RecipientName": "...",
+  "PhoneRecipient": "...", "PayerType": "Recipient", "DeliveryCost": "25",
+  "EstimatedDeliveryDate": "...", "ExpressWaybillNumber": "...", "ExpressWaybillStatus": "..." } ] }
+```
+All 15 fields now confirmed exactly as this module already typed them. `DeliveryCost` is a JSON
+**string** here (`"25"`), matching `getReturnOrdersList`'s equivalent field.
+
+**`CheckPossibilityChangeEW` — full response example, and `save`/`orderChangeEW` — full request
+example, resolving the ChangeEW cluster's remaining gaps (finding 1's residual):**
+```json
+// CheckPossibilityChangeEW response
+{ "data": [ { "CanChangeSender": true, "CanChangeRecipient": true,
+  "CanChangePayerTypeOrPaymentMethod": true, "CanChangeBackwardDeliveryDocuments": true,
+  "CanChangeBackwardDeliveryMoney": true, "CanChangeCash2Card": true,
+  "CanChangeBackwardDeliveryOther": true, "CanChangeAfterpaymentType": true,
+  "CanChangeLiftingOnFloor": true, "CanChangeLiftingOnFloorWithElevator": true,
+  "CanChangeFillingWarranty": true, "SenderCounterparty": "...", "ContactPersonSender": "...",
+  "SenderPhone": "...", "RecipientCounterparty": "...", "ContactPersonRecipient": "...",
+  "RecipientPhone": "...", "PayerType": "Recipient", "PaymentMethod": "Cash" } ] }
+// save/orderChangeEW request
+{ "methodProperties": { "IntDocNumber": "...", "PaymentMethod": "Cash", "OrderType": "orderChangeEW",
+  "SenderContactName": "...", "SenderPhone": "...", "Recipient": "...", "RecipientContactName": "...",
+  "RecipientPhone": "...", "PayerType": "Recipient" } }
+```
+All 19 `WaybillEditPossibility` fields and all 8 `CreateWaybillEditPayload` fields confirmed verbatim —
+this is now a genuine official-docs quote, resolving the SDK-name-only sourcing this module previously
+relied on for the whole ChangeEW group. Response confirmed `{Number, Ref}`.
+
+**`getChangeEWOrdersList` — full response example, resolving spec.md's prior "confirmed verbatim"
+claim that had no actual quote behind it:**
+```json
+{ "success": true, "data": [ { "OrderRef": "...", "OrderNumber": "102-00010160",
+  "OrderStatus": "Дані в ЕН змінено", "DocumentNumber": "...", "DateTime": "...",
+  "BeforeChangeSenderCounterparty": "...", "AfterChangeChangeSenderCounterparty": "...",
+  "Cost": "40", "BeforeChangeSenderPhone": "...", "AfterChangeSenderPhone": "..." } ] }
+```
+All 10 fields confirmed exactly as this module already typed them.
+
+**`getReturnOrdersList` — request+response example, resolving the whole previously-unsourced method:**
+```json
+{ "methodProperties": { "Number": "...", "Ref": "...", "BeginDate": "12/10/15 10:33",
+  "EndDate": "12/10/15 10:33", "Page": "1", "Limit": "50" } }
+// response: { "OrderRef": "...", "OrderNumber": "102-00003168", "OrderStatus": "Прийняте",
+//   "DocumentNumber": "...", "CounterpartyRecipient": "...", "ContactPersonRecipient": "...",
+//   "AddressRecipient": "...", "DeliveryCost": "20", "EstimatedDeliveryDate": "...",
+//   "ExpressWaybillNumber": "...", "ExpressWaybillStatus": "..." }
+```
+All 11 response fields confirmed. **`Page`/`Limit` are sent as quoted JSON strings** (`"1"`, `"50"`)
+in every list-method example across the capture (`getReturnOrdersList`, `getRedirectionOrdersList`,
+`getChangeEWOrdersList` alike) — `OrderListFilters.Page`/`Limit` corrected from `number` to `string`
+(review round-3 finding).
+
+**`getReturnReasons`/`getReturnReasonsSubtypes` — response examples, resolving both previously-unsourced
+methods:**
+```json
+// getReturnReasons: { "data": [ { "Ref": "...", "Description": "Відмова Одержувача" } ] }
+// getReturnReasonsSubtypes: { "data": [ { "Ref": "...",
+//   "Description": "Відправник відмінив доставку відправлення", "ReasonRef": "..." } ] }
+```
+Both confirmed exactly as this module already typed them.
+
+**`delete` — request+response example, resolving the previously-unsourced schema (only the status-gate
+sentence was quoted before):**
+```json
+{ "methodProperties": { "Ref": "..." } }
+// response: { "data": [ { "Number": "102-00003168" } ] }
+```
+Confirms `{Number}`-only response — this module's `DeletedAdditionalServiceOrder` was typed correctly,
+not the "lie" the round-3 audit worried the missing quote might reveal.
+
+**`OnlyGetPricing` — resolved; not the discrepancy round-3 suspected:** the capture shows `"1"` (a JSON
+string) on `save` (both the redirect-calculate and return-calculate examples) and `true` (a JSON
+boolean) on `update` (both the return and redirect update examples) — two different wire methods, both
+now directly quoted, genuinely disagreeing only in the sense that `save` and `update` each define their
+own representation for the same-named flag. This module's `calculateReturn`/`calculateRedirect` already
+sent the correct `"1"` string for `save`; `updateReturn`/`updateRedirect` do not expose an
+`OnlyGetPricing` field at all (§1's decision override — never a caller-settable field on any method,
+consistent across create/calculate/update), so the confirmed `true`-on-`update` shape does not change
+this module's public surface.
+
+**`Pricing.Total` — a genuine cross-example discrepancy, documented rather than silently resolved:**
+the `save`-calculate examples show `"Total": 0` (unquoted JSON number); the `update`-with-recalculation
+example shows `"Total": "5.52"` (quoted JSON string) — same field, two different wire shapes across two
+official-docs examples captured the same session. `OrderPricingEstimate.Pricing.Total` is now typed
+`number | string` rather than asserting either shape is the only one (types.ts), per CLAUDE.md's
+"any discrepancy between sources blocks ship" read as "document it honestly," since both are
+directly-quoted official sources and neither can be dismissed as an SDK error.
+
+**AC-04 type-safety gap (not a sourcing item, found independently by review round-3's stage-1 trace):**
+`CreateReturnPayload`'s three variants now each declare the other variants' own fields `?: never`, so
+an un-annotated variable assembled with fields from more than one variant no longer structurally
+satisfies any union member — closing the gap where `tsc --noEmit --strict` previously accepted a
+mixed-variant variable at `createReturn`/`calculateReturn`'s own call boundary with zero errors.
 
 ## 2. Goals
 
@@ -475,7 +629,7 @@ confirm the field's presence and one real example value (`"WarehouseWarehouse"`,
 - **Type-safety completeness** — baseline: 0% (module doesn't exist yet), target: 100% of in-scope methods carry no `any` in their public signature, verified in the first release containing this feature.
 - **Zero silent failures** — baseline: N/A (feature doesn't exist), target: 100% of unit tests confirming a declined or network-failed call throws `NovaPoshtaApiError`, passing before merge.
 - **Method-surface completeness** — baseline: 0 of 19 (18 raw + 1 convenience) exposed, target: all 19 shipped with a corresponding typed method before this feature is marked done.
-- **API-contract sourcing completeness** — baseline: 0% (nothing confirmed yet), target: 100% of the 19 methods' request/response shapes confirmed against official Nova Poshta documentation (not SDK cross-check alone) before ship, per `CLAUDE.md`'s sourcing policy.
+- **API-contract sourcing completeness** — baseline: 0% (nothing confirmed yet), target: 100% of the 19 methods' request/response shapes confirmed against official Nova Poshta documentation (not SDK cross-check alone) before ship, per `CLAUDE.md`'s sourcing policy. **Status (2026-09-23, post round-3 fix): met** — every method's request/response fields trace to a direct quote (§1); the two remaining §8 open items (`ServiceType`'s full enum, `PaymentMethod`'s `"NonCash"` member) are honestly-flagged value-set gaps on already-confirmed fields, not unconfirmed field names or methods.
 - **Convenience-method correctness** — baseline: N/A (feature doesn't exist), target: 0 GitHub issues within 90 days of release reporting `createReturnIfPossible` creating a duplicate return, or leaving the caller unable to determine whether a return was created.
 
 ## 8. Open questions
@@ -484,4 +638,6 @@ confirm the field's presence and one real example value (`"WarehouseWarehouse"`,
 - [x] ~~Does a waybill-edit (ChangeEW) request genuinely have no `update`/edit capability?~~ **Resolved 2026-09-23** — the official docs' complete "Змінити дані" section lists only `getChangeEWOrdersList`/`save`/`CheckPossibilityChangeEW`, no `update`, at the same page depth return/redirect's `update` sections receive (§1). Confirmed: no `updateWaybillEdit` method; amending one still means delete-then-recreate, a documented TOCTOU risk (§3, §6.1).
 - [ ] Does the `orderTermExtension` order type (storage-term extension) genuinely exist as a real, callable Nova Poshta capability? Default now: excluded from this module's scope entirely — single, self-admittedly reverse-engineered source only, absent from official docs (§1 Decision override); this session's official-docs capture confirms no mention of it either. — owner: Tech Lead, due: once official docs add it, or a 2nd agreeing source is found
 - [x] ~~Do Nova Poshta's dispatch rules for `CheckPossibilityCreateReturn`/`checkPossibilityForRedirecting` key off which properties are present, and what are `checkReturnEditPossible`/`checkRedirectEditPossible`'s exact field lists?~~ **Resolved 2026-09-23** — official docs' own request/response examples confirm `checkReturnEditPossible`'s `Address` is a plain string (not a structured object) and `checkRedirectEditPossible`'s full field list (14 named optional fields) (§1). The malformed-mixed-request edge case itself remains untested against a live key — tracked below.
-- [x] ~~Re-verify the full 19-method surface, plus `updateReturn`/`updateRedirect`'s literal `Ref` field name~~ — **substantially resolved 2026-09-23** via the official docs capture (§1's new subsection quotes the request/response shape for every method this file previously flagged `low`/`medium` confidence, including `updateReturn`/`updateRedirect`'s `Ref` and the previously-missed `OrderType` requirement on both). One narrow item remains open: `CreateRedirectPayload.ServiceType`'s full enum (only one example value confirmed) — owner: Tech Lead, due: next live-API verification pass or a 2nd agreeing SDK for the remaining `ServiceType` values.
+- [x] ~~Re-verify the full 19-method surface, plus `updateReturn`/`updateRedirect`'s literal `Ref` field name~~ — **resolved 2026-09-23** via two official-docs captures (§1's "Official documentation quotes" subsection, plus the "Round 3" subsection covering the methods the first capture missed: `createRedirect`, `checkRedirectPossible`, `updateRedirect`, the three list methods, `getReturnReasons(Subtypes)`, `delete`, all three `save` results, and the ChangeEW group's request/response). All 19 methods' request/response shapes are now traced to a direct quote. Two narrow items remain open, both value-set gaps on already-confirmed fields, not sourcing violations: `CreateRedirectPayload.ServiceType`'s full enum (one example value confirmed) and `PaymentMethod`'s `"NonCash"` member (carried over from `internet-document`'s confirmed enum, not yet independently re-quoted for this model) — owner: Tech Lead, due: next live-API verification pass or a 2nd agreeing source for either.
+- [x] ~~Are `OrderListFilters.Page`/`Limit` numbers or strings on the wire?~~ **Resolved 2026-09-23** — every list-method example in the round-3 capture sends them as quoted JSON strings (`"1"`, `"50"`); corrected from `number` to `string` (review round-3 finding).
+- [ ] `OrderPricingEstimate.Pricing.Total`'s JSON shape genuinely disagrees across two official-docs examples captured the same session (`0` unquoted on `save`-calculate, `"5.52"` quoted on `update`-with-recalculation) — typed `number | string` rather than picking one. — owner: Tech Lead, due: a live-API call against both `save` and `update`'s recalculation path to observe the actual wire shape directly, since both examples are equally authoritative sources that disagree.

@@ -32,28 +32,33 @@ library's full target surface.
 2. Discriminant safety — `OrderType`/`OnlyGetPricing` are never caller-settable, and mixing two
    `createReturn` destination variants is a compile-time error even when the payload is assembled
    field-by-field in a variable, not only as a fresh object literal (AC-04, §4 decision 4).
-3. Honest wire-contract completeness under genuine sourcing uncertainty — all 19 methods ship typed
-   and callable, with the 2 still-unconfirmed edit-check field lists and `createReturnIfPossible`'s
-   address-mapping assumption explicitly risk-tracked (§11) rather than silently guessed or used to
-   block the whole feature (spec.md §8).
+3. Honest wire-contract completeness — all 19 methods ship typed and callable; every field/mapping
+   this quality goal originally risk-tracked as open (the 2 edit-check field lists,
+   `createReturnIfPossible`'s address-mapping assumption) is now confirmed by a direct official-docs
+   quote (§11, closed 2026-09-23). Only two narrow value-set gaps remain open, honestly (spec.md §8):
+   `ServiceType`'s full enum and `PaymentMethod`'s `"NonCash"` member.
 
 **Stakeholders.**
 
 | Role | Interest | Sign-off owner? |
 |---|---|---|
 | Consuming developer | Calls the 19 typed methods to manage returns, redirects, and waybill edits | No |
-| Tech Lead | SAD approval; owns `spec.md` §8's 5 open questions (1 blocking, see ¶4 override below); performs the §6.1 security review this module requires before `sdd:ship` | Yes |
+| Tech Lead | SAD approval; owned `spec.md` §8's open questions (see ¶4 override below, historical); performs the §6.1 security review this module requires before `sdd:ship` | Yes |
 
-**Decision override — proceeding past `spec.md` §8's blocking open question.** `spec.md` §8 flags
-whether `checkReturnPossible`'s `Ref` maps onto `createReturn`'s `ReturnAddressRef` as blocking
-*before* `design`/`api`, and blocking `createReturnIfPossible`'s implementation specifically. This
-design pass proceeds without resolving it: no §4–§9 decision below actually depends on knowing the
-answer — the client-extension, discriminant, and error-handling decisions are all shape-level, not
-value-level. Flow 1 (§6) is built so a wrong assumption fails safely (a thrown `NovaPoshtaApiError`,
-never a corrupted or silently-wrong order). The spec's "blocks" language is re-scoped here to mean
-specifically before `/sdd:api` — where the literal field mapping must be pinned in the OpenAPI
-contract — and before `/sdd:review` can PASS (`CLAUDE.md` sourcing policy), not before `design`. See
-§11 row 1.
+**Decision override — proceeding past `spec.md` §8's blocking open question (historical: written during
+this design pass, before the mapping was confirmed).** `spec.md` §8 flagged whether `checkReturnPossible`'s
+`Ref` maps onto `createReturn`'s `ReturnAddressRef` as blocking *before* `design`/`api`, and blocking
+`createReturnIfPossible`'s implementation specifically. This design pass proceeded without resolving it:
+no §4–§9 decision below actually depended on knowing the answer — the client-extension, discriminant,
+and error-handling decisions are all shape-level, not value-level. Flow 1 (§6) was built so a wrong
+assumption fails safely (a thrown `NovaPoshtaApiError`, never a corrupted or silently-wrong order). The
+spec's "blocks" language was re-scoped here to mean specifically before `/sdd:api` — where the literal
+field mapping must be pinned in the OpenAPI contract — and before `/sdd:review` can PASS (`CLAUDE.md`
+sourcing policy), not before `design`.
+>
+> **2026-09-23 update:** the mapping is now confirmed by a direct official-docs quote (spec.md §1,
+> `/sdd:review` round 1) — this override is moot, kept only as the historical record of why `design`
+> proceeded before the answer was known. See §11 row 1 (closed).
 
 <!-- Further decision overrides (¶4) — none additional raised by the critic pass; the spec's own 9
      §1 Decision overrides and the clarify-stage AC-04/AC-12/AC-13/AC-14/AC-17/AC-21 tightenings are
@@ -194,17 +199,15 @@ ADR-0001) — still the same one transport path, not a second one.*
    (the list-shaped, `request<T>()`-backed method — §5), checks the returned array's length itself,
    and throws a clear "no return address available" `NovaPoshtaApiError` when it's empty, rather than
    relying on `requestFirst()`'s generic empty-array message — see §6 Flow 1.
-6. **Ship all 19 methods now; type the 2 unconfirmed edit-check field lists defensively rather than
-   holding the feature back.** `checkReturnEditPossible`'s/`checkRedirectEditPossible`'s exact request
-   fields (`spec.md` §8) and whether `checkReturnPossible`'s `Ref` really maps onto `createReturn`'s
-   `ReturnAddressRef` (§8, elevated to blocking before `api`/`review` — see §1's decision override)
-   remain genuinely open. Both risks degrade safely rather than silently: an uncertain edit-check field
-   is typed loosely (`Record<string, unknown>` merged with the known fields) rather than a
-   falsely-precise interface that would break silently if wrong, and `createReturnIfPossible`'s worst
-   case if the `Ref`/`ReturnAddressRef` assumption is wrong is Nova Poshta's own decline surfacing as
-   the standard error (AC-21) — never a corrupted or silently-wrong order. Matches `scan-sheet`'s own
-   precedent of shipping with 2 unconfirmed wire details tracked as risk rather than blocking the whole
-   feature (`scan-sheet` §11). Carried into §11 with owner + due, not silently accepted.
+6. **Ship all 19 methods now; degrade safely wherever a wire detail was still uncertain at design
+   time.** At the time this decision was written, `checkReturnEditPossible`'s/`checkRedirectEditPossible`'s
+   exact request fields and whether `checkReturnPossible`'s `Ref` really maps onto `createReturn`'s
+   `ReturnAddressRef` were genuinely open (`spec.md` §8) — both are now confirmed by direct official-docs
+   quotes (spec.md §1, `/sdd:review` rounds 1 and 3; §11 rows 1–2 closed). The safety property this
+   decision established stands regardless: `createReturnIfPossible`'s worst case if an assumption were
+   ever wrong is Nova Poshta's own decline surfacing as the standard error (AC-21) — never a corrupted
+   or silently-wrong order. Matches `scan-sheet`'s own precedent of shipping with unconfirmed wire
+   details tracked as risk rather than blocking the whole feature (`scan-sheet` §11).
 
 Each tactical decision in later sections traces to one of these six. Decisions 2–3 are this pass's two
 ADRs; decisions 4–5 are building-block decisions the spec/clarify pass already fixed, with no
@@ -230,11 +233,11 @@ top of the shared core client, using `client.request<T>()` for every list-shaped
 returns a genuine list of address options to choose from, while `checkRedirectPossible` returns one
 info record describing the redirect's current possibility — not a list of choices. This asymmetry is
 Nova Poshta's own (confirmed by the spec's method table, not a choice this design makes) and is why
-the two "new" checks land in different rows of the table above. Whether `checkRedirectEditPossible`
-genuinely never carries an `info` block the way `checkReturnEditPossible` does, and whether a
-malformed mixed request to either dual-purpose wire method could produce an ambiguous or wrong-shaped
-response neither this table nor this module's tests anticipate, are both open — widened into §11 row 2
-alongside the existing request-field-list uncertainty, not fully resolved here.*
+the two "new" checks land in different rows of the table above. **Resolved 2026-09-23:** official docs'
+own `checkRedirectEditPossible` response example carries no `info` key — confirmed absent, not merely
+untested (spec.md §1). Whether a malformed mixed request to either dual-purpose wire method could
+produce an ambiguous or wrong-shaped response remains untested against a live key (§11), a narrower
+residual risk than the original open question.*
 
 **Internal decomposition:**
 
@@ -345,7 +348,7 @@ sequenceDiagram
     else success — one or more address options
         NP-->>Client: success:true, data: [ReturnAddressOption, ...]
         Client-->>Addl: typed ReturnAddressOption[]
-        Addl->>Addl: takes the first option, builds createReturn's plain-return payload using its Ref as ReturnAddressRef (spec.md §8 OQ: this mapping is unconfirmed — see §11)
+        Addl->>Addl: takes the first option, builds createReturn's plain-return payload using its Ref as ReturnAddressRef (confirmed by official docs, spec.md §1 — was spec.md §8 OQ, now closed, §11 row 1)
         Addl->>Client: requestFirst("AdditionalServiceGeneral", "save", { OrderType: "orderCargoReturn", ReturnAddressRef, IntDocNumber, ... })
         Client->>NP: HTTPS POST (apiKey, modelName, "save", methodProperties)
         alt the ReturnAddressRef assumption was wrong, or the create is otherwise declined
@@ -378,16 +381,17 @@ sequenceDiagram
         Client-->>Addl: throws NovaPoshtaApiError
         Addl-->>Dev: propagates NovaPoshtaApiError
     else success
-        NP-->>Client: success:true, data: [{..., Type}, ...], info: {PayerTypeDefault, Number}
+        NP-->>Client: success:true, data: [{..., Type}, ...], info: [{PayerTypeDefault, Number}]
         Client-->>Addl: { data: ReturnEditOption[], errors, warnings, info } (ADR-0001)
-        Addl->>Addl: composes { options: data, info: info as ReturnEditInfo } — info narrowed here, not by the client
+        Addl->>Addl: composes { options: data, info: Array.isArray(info) ? info[0] : undefined } — official docs wrap info in a single-element array; the module unwraps defensively rather than force-casting
         Addl-->>Dev: CheckReturnEditPossibleResult { options, info }
     end
 ```
 
 *Flow 1 covers `createReturnIfPossible` (AC-20) and demonstrates §4 decision 6's core property: every
-point where the still-open §8 questions could bite (an empty option list, a wrong `ReturnAddressRef`
-mapping) resolves to a thrown `NovaPoshtaApiError`, never a silent wrong action. Flow 2 covers
+point where a still-uncertain wire detail could have bitten at design time (an empty option list, a
+`ReturnAddressRef` mapping later confirmed by official docs) resolves to a thrown `NovaPoshtaApiError`,
+never a silent wrong action. Flow 2 covers
 `checkReturnEditPossible` (part of AC-06/US-04) and demonstrates ADR-0001's mechanism end-to-end. The
 remaining 17 methods follow one of two simpler shapes already shown in full by `scan-sheet`'s and
 `internet-document`'s sad.md flows — a single `request()`/`requestFirst()` call with the standard
@@ -808,19 +812,18 @@ Each top-3 goal from §1 expanded into a full scenario:
   test asserting a mixed-variant object (built via a variable, not a literal) fails to compile —
   `spec.md` test plan AC-04 row.
 
-**QG-3. Honest wire-contract completeness under sourcing uncertainty**
-- **When:** any of the 19 methods is exported and called, including the 3 riding on the still-open
-  §8 questions (`checkReturnEditPossible`, `checkRedirectEditPossible`, `createReturnIfPossible`).
+**QG-3. Honest wire-contract completeness**
+- **When:** any of the 19 methods is exported and called, including `checkReturnEditPossible`,
+  `checkRedirectEditPossible`, and `createReturnIfPossible` — the three methods whose exact field
+  lists/mappings were genuinely open at design time.
 - **Then:** all 19 methods are exported, typed, and callable (`spec.md` §6 NFR "Method-surface
-  completeness", §7 KPI); the 2 unconfirmed edit-check field lists are typed defensively rather than
-  falsely precisely, and a wrong `ReturnAddressRef` assumption in `createReturnIfPossible` always
-  surfaces as `NovaPoshtaApiError`, never a corrupted or silently-wrong order (§4 decision 6, spec.md
-  §7 KPI "Convenience-method correctness": 0 GitHub issues within 90 days reporting a duplicate return
-  or an undeterminable outcome); the still-open `spec.md` §7 KPI "API-contract sourcing completeness"
-  (target: 100% of the 19 methods' request/response shapes confirmed against official documentation
-  before ship) names exactly the gap this quality goal accepts as risk for now — the 2 unconfirmed
-  edit-check field lists and the `ReturnAddressRef` mapping are precisely what that KPI is not yet at
-  100% on.
+  completeness", §7 KPI); the edit-check field lists are now confirmed and tightened (no longer typed
+  defensively), and a `ReturnAddressRef` assumption that would have surfaced any wrongness as
+  `NovaPoshtaApiError` (§4 decision 6) is likewise now confirmed rather than merely safe-if-wrong.
+  `spec.md` §7 KPI "API-contract sourcing completeness" (target: 100% of the 19 methods' request/response
+  shapes confirmed against official documentation before ship) is **met** as of 2026-09-23 (round-3
+  fix) — only two narrow value-set gaps remain open, honestly (`ServiceType`'s full enum,
+  `PaymentMethod`'s `"NonCash"` member), neither a method or field-name gap.
 - **How verify:** unit test suite asserting all 19 methods are exported/callable (spec.md §6 row 3);
   a dedicated `createReturnIfPossible` fixture covering the empty-option-list and the
   create-declined branches, both asserting `NovaPoshtaApiError` and zero side effects (spec.md test
@@ -845,7 +848,8 @@ outgoing request carries `OnlyGetPricing: "1"`.
 | Security review required before release — new money-bearing fields, PII at write time, no field-permission gating on `createWaybillEdit` (AC-16), no atomicity on `createReturnIfPossible` (spec.md §6.1) | Medium | Performed by the Tech Lead during `sdd:review`/before `sdd:ship`, matching every prior module's precedent | Tech Lead |
 | A waybill-edit (ChangeEW) request has no typed `update` method — amending one means delete-then-recreate (spec.md §3, §8), a TOCTOU race no code change removes. **Confirmed 2026-09-23**: official docs' complete "Змінити дані" section lists no `update` method at all. | Low | Accepted by design — documented in `spec.md` AC-19/§6.1; no mitigation beyond documentation, matching `scan-sheet`'s tolerated `addToTodaysScanSheet` TOCTOU precedent | Tech Lead |
 | `orderTermExtension` (storage-term extension) excluded from scope — single, self-admittedly reverse-engineered source only (spec.md §1, §8); this session's official-docs capture confirms no mention of it either | Low | Tracked as an open question, not shipped as an AC; revisit once a 2nd agreeing source or official docs confirm it | Tech Lead |
-| ~~Re-verify the full 19-method surface...against Nova Poshta's live/official documentation once reachable~~ **Substantially resolved 2026-09-23** — official docs captured and quoted verbatim (spec.md §1); surfaced and fixed 4 real defects the original SDK-only sourcing missed: `NonCash` is a boolean not a string, `Pricing.FirstDayStorage` is a string not a number, `RedirectOrderListItem` was missing `DocumentNumber`, and `update` requires `OrderType` (now set internally). Only `CreateRedirectPayload.ServiceType`'s full enum remains open (spec.md §8). | Low | `CreateRedirectPayload.ServiceType`'s remaining enum values — next live-API verification pass or a 2nd agreeing SDK | Tech Lead |
+| ~~Re-verify the full 19-method surface...against Nova Poshta's live/official documentation once reachable~~ **Resolved 2026-09-23** across two capture rounds — round 1 quoted 9 shapes and fixed 4 real defects (`NonCash` boolean not string, `Pricing.FirstDayStorage` string not number, missing `RedirectOrderListItem.DocumentNumber`, missing `update` `OrderType`); round 3's exhaustive field-by-field audit found the rest of the module (`createRedirect`, `checkRedirectPossible`, `updateRedirect`, the 3 list methods, `getReturnReasons(Subtypes)`, `delete`, all 3 `save` results, 8 of 19 wire method names) still had no genuine quote and a second complete capture closed all of it, plus fixed `OrderListFilters.Page`/`Limit` (was `number`, wire sends quoted strings). Only `CreateRedirectPayload.ServiceType`'s full enum and `PaymentMethod`'s `"NonCash"` member remain open (spec.md §8) — both value-set gaps on already-confirmed fields. | Low | `ServiceType`'s remaining enum values, `NonCash`'s independent confirmation for this model — next live-API verification pass or a 2nd agreeing SDK | Tech Lead |
+| `OrderPricingEstimate.Pricing.Total`'s JSON shape genuinely disagrees across two official-docs examples captured the same session (`0` unquoted on `save`-calculate, `"5.52"` quoted on `update`-recalculation) | Low | Typed `number \| string` rather than guessing; a live-API call against both paths would settle it (spec.md §8) | Tech Lead |
 | `createReturnIfPossible`'s two-call gap is not atomic (spec.md §3 non-goal, §6.1) — a lost response between the check and the create leaves the caller unable to tell whether a return now exists | Low | Accepted by design — this library holds no state to reconcile against, matching `internet-document`'s identical stance on chained calls; documented in AC-20/§6.1 | Tech Lead |
 | ADR-0002's `internet-document` refactor (extracting `firstOrThrow` to the shared client) must not change that module's existing public behavior or test results | Low | Pure extraction, same call sites, same error message shape; `internet-document`'s existing unit suite is the regression check — must stay green unmodified in behavior (only its import source changes) | Tech Lead |
 
@@ -869,5 +873,5 @@ outgoing request carries `OnlyGetPricing: "1"`.
 | `requestFirst<T>()` | The core client's single-record entry point (ADR-0002) — resolves `client.request<T>()`'s array, returns its first element, throws `NovaPoshtaApiError` if the array is empty. Shared by `internet-document` (2 call sites) and `additional-service` (12 call sites). |
 | `info` exposure | `requestEnvelope<T>()`'s new optional `info` field (ADR-0001) — the envelope's own `info` block, narrowed by the calling module (not the client) into a method-specific type. Used only by `checkReturnEditPossible` in this feature. |
 | Wire-stripped discriminant | A TypeScript-only tag on `createReturn`'s destination-variant union (§4 decision 4, AC-04) that has no counterpart on Nova Poshta's wire payload — removed by the module before the request is sent. Distinct from `internet-document`'s `ServiceType`, which is both a TS discriminant and a real wire field. |
-| `CheckReturnEditPossibleResult` | This module's composite response type for `checkReturnEditPossible` — `{ options: ReturnEditOption[], info: ReturnEditInfo }` — assembled from `requestEnvelope()`'s `data` and `info` fields (ADR-0001). |
+| `CheckReturnEditPossibleResult` | This module's composite response type for `checkReturnEditPossible` — `{ options: ReturnEditOption[], info?: ReturnEditInfo }` (`info` optional: official docs wrap it in a single-element array, and the module resolves `undefined` when the envelope omits it entirely) — assembled from `requestEnvelope()`'s `data` and `info` fields (ADR-0001). |
 | `NovaPoshtaApiError` | The library's single standard error class (extends `Error`), carrying `errors[]`/`errorCodes[]`/`warnings[]` — thrown on any declined call, envelope-level malformation, or transport failure across all 19 methods. |

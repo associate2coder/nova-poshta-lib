@@ -9,10 +9,18 @@ SDKs) plus `sad.md` §4/§5/§6.
 
 ## Field-origins table
 
-`origin` cites the `spec.md` §1 table row (`spec §1 row N`) unless noted otherwise. `confidence`
-follows `spec.md`'s own sourcing bar: `high` = official docs + ≥1 corroborating SDK; `medium` = official
-docs alone or ≥2 agreeing SDKs without official docs; `low` = single source / genuinely unconfirmed,
-tracked as an open question.
+`origin` cites the actual quoted docs excerpt or SDK struct behind each field's decision, per
+`CLAUDE.md`'s sourcing policy ("quote or list the exact upstream struct/schema..., not just cite an
+SDK by name"). `confidence` follows `spec.md`'s own sourcing bar: `high` = official docs + ≥1
+corroborating SDK; `medium` = official docs alone or ≥2 agreeing SDKs without official docs; `low` =
+single source / genuinely unconfirmed, tracked as an open question.
+>
+> **2026-09-23 update (review round 3 fix):** every row below previously citing only `spec §1 row N`
+> — a generated artifact citing a generated artifact, not the quote itself — has been corrected to
+> cite the actual official-docs excerpt behind it, following the second, complete docs capture (spec.md
+> §1's "Round 3" subsection). Several of those rows were graded `high` before this fix despite this
+> report's own rubric requiring a docs quote for that grade — the round-3 review flagged the mis-grading
+> as the reason two prior review rounds only caught a fraction of the module's unsourced fields.
 
 | Field (`operation.field`) | Origin | Confidence |
 |---|---|---|
@@ -36,36 +44,38 @@ tracked as an open question.
 | `updateReturn.OrderType` (internal, "orderCargoReturn") | official docs' update request example — field this spec's original table omitted; now set internally by the module | high |
 | `updateReturn.{RecipientSettlement,RecipientWarehouse,IntDocNumber,RecipientSettlementStreet,PaymentMethod,BuildingNumber,NoteAddressRecipient,Reason,SubtypeReason}` | spec §1 row 5, cross-checked against official docs' own example (2026-09-23) | high |
 | `updateReturn` response shape | spec §1 row 5 ("updated order fields, or Pricing+ScheduledDeliveryDate when recalculating") — official docs' own example confirms the shape is genuinely large/variable | medium — typed as `Record<string, unknown>` by design, not from low confidence |
-| `getReturnOrdersList.{Number,Ref,BeginDate,EndDate,Page,Limit}` | spec §1 row 6 | high |
-| `getReturnOrdersList→ReturnOrderListItem.*` | spec §1 row 6 | high |
-| `getReturnReasons→ReturnReason.{Ref,Description}` | spec §1 row 7 | high |
-| `getReturnReasonsSubtypes.ReasonRef` | spec §1 row 8 | high |
-| `getReturnReasonsSubtypes→ReturnReasonSubtype.{Ref,Description,ReasonRef}` | spec §1 row 8 | high |
-| `checkRedirectPossible.Number` | spec §1 row 9 | high |
-| `checkRedirectPossible→RedirectPossibility.*` (20 fields) | spec §1 row 9 | high |
-| `checkRedirectEditPossible.OrderRef` | spec §1 row 10 | high |
+| `getReturnOrdersList.{Number,Ref,BeginDate,EndDate,Page,Limit}` | official docs' own request example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) — `Page`/`Limit` confirmed as JSON strings, not numbers (corrects a defect) | high |
+| `getReturnOrdersList→ReturnOrderListItem.*` (11 fields) | official docs' own response example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) | high |
+| `getReturnReasons→ReturnReason.{Ref,Description}` | official docs' own response example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) | high |
+| `getReturnReasonsSubtypes.ReasonRef` | official docs' own request example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) | high |
+| `getReturnReasonsSubtypes→ReturnReasonSubtype.{Ref,Description,ReasonRef}` | official docs' own response example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) | high |
+| `checkRedirectPossible.Number` | official docs' own checkPossibilityForRedirecting (plain) request example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) | high |
+| `checkRedirectPossible→RedirectPossibility.*` (20 fields) | official docs' own response example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) — resolves review round-3's finding that this whole contract shipped unsourced | high |
+| `checkRedirectEditPossible.OrderRef` | official docs' edit-check request example, quoted verbatim spec §1 "Official documentation quotes" (2026-09-23) | high |
 | `checkRedirectEditPossible` remaining address/recipient fields | official docs' edit-check request example, quoted verbatim spec §1 "Official documentation quotes" (2026-09-23) — 14 named optional fields | high — spec §8 OQ-4 resolved |
 | `checkRedirectEditPossible` response | spec §1 row 10 ("updated subset of the same field set") | medium — typed as `Partial<RedirectPossibility>` |
-| `createRedirect.{IntDocNumber,PaymentMethod,Note,Recipient,RecipientContactName,RecipientPhone,PayerType,Customer,RecipientSettlement,RecipientSettlementStreet,BuildingNumber,NoteAddressRecipient,RecipientWarehouse}` | spec §1 row 11 | high |
-| `createRedirect.ServiceType` (field presence) | spec §1 row 11 | high (field) / low (enum values — not independently re-sourced this session) |
-| `createRedirect→SavedRedirectOrder.{Number,Ref}` | spec §1 row 11 | high |
-| `calculateRedirect` payload | same as `createRedirect` (spec §1 row 12) | high |
-| `updateRedirect.Ref` + subset fields | official docs' update request example, quoted verbatim spec §1 "Official documentation quotes" (2026-09-23) | high — spec §8 OQ-5 resolved |
+| `createRedirect.{IntDocNumber,PaymentMethod,Note,Recipient,RecipientContactName,RecipientPhone,PayerType,Customer,RecipientSettlement,RecipientSettlementStreet,BuildingNumber,NoteAddressRecipient,RecipientWarehouse}` | official docs' own save/orderRedirecting request example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) — resolves review round-3's finding that this whole money-bearing request shipped unsourced | high |
+| `createRedirect.ServiceType` (field presence) | same Round 3 request example | high (field) / low (enum values — only one example value, `"WarehouseWarehouse"`, confirmed in either capture; spec §8) |
+| `createRedirect→SavedRedirectOrder.{Number,Ref}` | official docs' own save response example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) | high |
+| `calculateRedirect` payload | same as `createRedirect`, plus `OnlyGetPricing: "1"` confirmed by official docs' own calculate-redirect example, quoted verbatim spec §1 "Official documentation quotes" (2026-09-23) | high |
+| `updateRedirect.Ref` + all 15 subset fields | official docs' own full update/redirect request+response example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) — resolves review round-3's finding that the prior citation was circular (a "docs example" note asserting the field list "matches this module's already-documented field list" without ever quoting it) | high — spec §8 OQ-5 resolved |
 | `updateRedirect.OrderType` (internal, "orderRedirecting") | official docs' update request example — field this spec's original table omitted; now set internally by the module | high |
 | `updateRedirect` response shape | spec §1 row 13 ("updated order fields") — official docs' own example confirms a large, variable field set | medium — typed as `Record<string, unknown>` by design, not from low confidence |
-| `getRedirectionOrdersList.{Number,Ref,BeginDate,EndDate,Page,Limit}` | spec §1 row 14 | high |
-| `getRedirectionOrdersList→RedirectOrderListItem.*` | spec §1 row 14 | high |
+| `getRedirectionOrdersList.{Number,Ref,BeginDate,EndDate,Page,Limit}` | official docs' own request example, quoted verbatim spec §1 "Official documentation quotes" (2026-09-23) — `Page`/`Limit` confirmed as JSON strings | high |
+| `getRedirectionOrdersList→RedirectOrderListItem.*` (15 fields) | official docs' own FULL response example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) — the round-1 capture had truncated 10 of the 15 fields as `"...": "..."` | high |
 | `getRedirectionOrdersList→RedirectOrderListItem.DocumentNumber` | official docs' own response example, quoted verbatim spec §1 "Official documentation quotes" (2026-09-23) — corrects a defect (field was missing from the type entirely) | high |
-| `checkWaybillEditPossible.IntDocNumber` | spec §1 row 15 | high |
-| `checkWaybillEditPossible→WaybillEditPossibility.*` (11 flags + 8 fields) | spec §1 row 15 | high |
-| `createWaybillEdit.{IntDocNumber,PaymentMethod,SenderContactName,SenderPhone,Recipient,RecipientContactName,RecipientPhone,PayerType}` | spec §1 row 16 | high (2-SDK-confirmed subset, spec §3 non-goal) |
-| `createWaybillEdit→SavedWaybillEditOrder.{Number,Ref}` | spec §1 row 16 | high |
-| `getChangeEWOrdersList.{Number,Ref,BeginDate,EndDate,Page,Limit}` | spec §1 row 17 | high |
-| `getChangeEWOrdersList→ChangeEWOrderListItem.*` | spec §1 row 17 | high |
-| `deleteAdditionalServiceOrder.Ref` | spec §1 row 18 | high |
-| `deleteAdditionalServiceOrder→DeletedAdditionalServiceOrder.Number` | spec §1 row 18 | high |
-| `createReturnIfPossible.{IntDocNumber,PaymentMethod,Reason,SubtypeReason,Note}` | spec §1 row 19, composed from row 3 | high |
-| `createReturnIfPossible` response | spec §1 row 19 ("same as createReturn") | high |
+| `checkWaybillEditPossible.IntDocNumber` | official docs' own CheckPossibilityChangeEW request example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) | high |
+| `checkWaybillEditPossible→WaybillEditPossibility.*` (11 flags + 8 fields) | official docs' own CheckPossibilityChangeEW response example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) — resolves review round-3's finding that this whole response shipped SDK-name-only | high |
+| `createWaybillEdit.{IntDocNumber,PaymentMethod,SenderContactName,SenderPhone,Recipient,RecipientContactName,RecipientPhone,PayerType}` | official docs' own save/orderChangeEW request example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) — resolves review round-3's finding that this request was sourced by naming two SDKs (platx's SaveChangeEWReq, sirkostya009's ChangeEWRequest) without quoting either | high |
+| `createWaybillEdit→SavedWaybillEditOrder.{Number,Ref}` | official docs' own save response example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) | high |
+| `getChangeEWOrdersList.{Number,Ref,BeginDate,EndDate,Page,Limit}` | official docs' own request pattern (shared with the other 2 list methods), quoted verbatim spec §1 "Official documentation quotes"/"Round 3" subsections (2026-09-23) | high |
+| `getChangeEWOrdersList→ChangeEWOrderListItem.*` (10 fields) | official docs' own response example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) — resolves review round-3's finding that spec.md's prior "confirmed verbatim" claim had no actual quote behind it | high |
+| `deleteAdditionalServiceOrder.Ref` | official docs' own delete request example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) | high |
+| `deleteAdditionalServiceOrder→DeletedAdditionalServiceOrder.Number` | official docs' own delete response example, quoted verbatim spec §1 "Round 3" subsection (2026-09-23) — confirms `{Number}`-only, no `Ref` (resolves review round-3's finding that only the status-gate sentence, not the schema, was previously quoted) | high |
+| `createReturnIfPossible.{IntDocNumber,PaymentMethod,Reason,SubtypeReason,Note}` | composed from `createReturn`'s own now-quoted fields (row above) | high |
+| `createReturnIfPossible` response | same as `createReturn` (row above) | high |
+| `PaymentMethod` = `"Cash"` \| `"NonCash"` | `"Cash"` confirmed in every request example across both captures; `"NonCash"` carried over from `internet-document`'s own confirmed 2-value enum, not independently re-quoted for this model (spec §8) | high (`"Cash"`) / low (`"NonCash"` member — open) |
+| `OrderPricingEstimate.Pricing.Total` (type: number \| string) | two official-docs examples captured the same session genuinely disagree: `0` unquoted (save-calculate) vs. `"5.52"` quoted (update-recalculation) — both quoted verbatim, spec §1 "Round 3" subsection (2026-09-23) | medium — documented discrepancy, typed permissively rather than resolved by guessing (spec §8) |
 
 ## Drift checklist
 
@@ -100,8 +110,20 @@ surfaced and fixed 4 real defects the original SDK-only sourcing missed (`NonCas
 and a missing `OrderType` requirement on `update`) — see the field-origins rows above. `spec.md` §8
 row 1 and `sad.md` §11 row 1 are closed.
 
+**Core finding check (2026-09-23 update, `/sdd:review` round 3):** an exhaustive field-by-field audit
+found the round-1 capture only covered 9 of the module's ~30 distinct request/response shapes —
+`createRedirect`'s whole request, `checkRedirectPossible`'s whole contract, `updateRedirect`'s field
+list (cited circularly), the three list methods, `getReturnReasons(Subtypes)`, `delete`'s schema, all
+three `save` results, and 8 of 19 wire method-name literals had no genuine quote behind them, several
+rows above nonetheless graded `high` in violation of this report's own rubric. The user re-captured the
+same docs page in full; every row above now cites the actual excerpt (spec.md §1's "Round 3"
+subsection). This pass also surfaced `OrderListFilters.Page`/`Limit` as `number` when the wire sends
+quoted strings (corrected) and a genuine cross-example discrepancy in `Pricing.Total`'s JSON shape
+(documented, typed `number | string`, tracked at spec §8 rather than guessed at).
+
 No other core finding remains open besides `CreateRedirectPayload.ServiceType`'s full enum (item 5,
-public-api.md §10) — fewer than 3 flags total, run proceeds without a pause.
+public-api.md §10) and `PaymentMethod`'s `"NonCash"` member (both value-set gaps on already-confirmed
+fields) — fewer than 3 flags total, run proceeds without a pause.
 
 ## Reconcile semantics
 

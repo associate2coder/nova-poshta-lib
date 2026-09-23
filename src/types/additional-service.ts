@@ -1,7 +1,10 @@
-/** Independent of internet-document's PaymentMethod (same 2 values, confirmed identically by
- *  spec.md §1's method table) — this module defines its own copy rather than importing across
- *  modules, matching sad.md §5's "additional-service does not call internet-document at runtime"
- *  boundary and CLAUDE.md's one-folder-per-model convention. */
+/** Independent of internet-document's PaymentMethod — this module defines its own copy rather than
+ *  importing across modules, matching sad.md §5's "additional-service does not call internet-document
+ *  at runtime" boundary and CLAUDE.md's one-folder-per-model convention. `"Cash"` is confirmed by every
+ *  official-docs request example this module's spec captured (spec.md §1, 2026-09-23); `"NonCash"`
+ *  itself is not yet directly quoted in an AdditionalServiceGeneral example — carried over from
+ *  internet-document's own confirmed enum for the same 2-value field, tracked as a small remaining
+ *  open item (spec.md §8). */
 export type PaymentMethod = "Cash" | "NonCash";
 
 /** sad.md §4 decision 4, AC-04: TS-only discriminant on createReturn's destination-variant union —
@@ -74,10 +77,22 @@ interface CreateReturnCommonFields {
   Note?: string;
 }
 
+/** The `?: never` fields below each variant's own aren't wire fields — they're the AC-04 cross-guard
+ *  (review round-3 finding): without them, an un-annotated variable assembled with fields from more
+ *  than one variant still structurally satisfies whichever variant its required fields happen to
+ *  match (TS only excess-property-checks fresh object literals, not variables), so a mixed payload
+ *  passed straight into createReturn/calculateReturn compiled clean. Declaring every other variant's
+ *  own field `never` here means a real value for it makes the object satisfy NO variant, closing that
+ *  gap for a field-by-field-assembled variable too, not just a fresh literal. */
 export interface CreateReturnToSenderAddressPayload extends CreateReturnCommonFields {
   Destination: "SenderAddress";
   ReturnAddressRef: string; // field name confirmed by official docs' own save/orderCargoReturn
                             // example (spec.md §1, 2026-09-23); see contract header for the naming note
+  RecipientSettlement?: never;
+  RecipientSettlementStreet?: never;
+  BuildingNumber?: never;
+  NoteAddressRecipient?: never;
+  RecipientWarehouse?: never;
 }
 
 export interface CreateReturnToNewAddressPayload extends CreateReturnCommonFields {
@@ -86,11 +101,18 @@ export interface CreateReturnToNewAddressPayload extends CreateReturnCommonField
   RecipientSettlementStreet: string;
   BuildingNumber: string;
   NoteAddressRecipient?: string;
+  ReturnAddressRef?: never;
+  RecipientWarehouse?: never;
 }
 
 export interface CreateReturnToNewWarehousePayload extends CreateReturnCommonFields {
   Destination: "NewWarehouse";
   RecipientWarehouse: string;
+  ReturnAddressRef?: never;
+  RecipientSettlement?: never;
+  RecipientSettlementStreet?: never;
+  BuildingNumber?: never;
+  NoteAddressRecipient?: never;
 }
 
 export type CreateReturnPayload =
@@ -98,6 +120,9 @@ export type CreateReturnPayload =
   | CreateReturnToNewAddressPayload
   | CreateReturnToNewWarehousePayload;
 
+/** {Number, Ref} confirmed verbatim by official docs' own save/orderCargoReturn response example
+ *  (spec.md §1, 2026-09-23) — resolves review round-3's finding that all three `save` result shapes
+ *  (return/redirect/waybill-edit) shipped unsourced. */
 export interface SavedReturnOrder {
   Number: string;
   Ref: string;
@@ -108,20 +133,26 @@ export interface OrderPricingEstimate {
     // per-service cost breakdown — confirmed by official docs' own calculateReturn/calculateRedirect
     // examples (spec.md §1, 2026-09-23)
     Services: { Service: string; Cost: number }[];
-    Total: number;
+    // official docs' own examples disagree on this field's JSON shape across two genuine calls: a
+    // free calculate example shows an unquoted 0 (number), an update-with-recalculation example shows
+    // a quoted "5.52" (string) — both captured 2026-09-23. Typed permissively rather than picking one,
+    // since CLAUDE.md's sourcing policy treats a cross-source discrepancy as something to document
+    // honestly, not silently resolve by guessing (spec.md §8).
+    Total: number | string;
     FirstDayStorage: string; // official docs' own examples always show a datetime string here
                               // (e.g. "0000-00-00 00:00:00"), never a number
   };
   ScheduledDeliveryDate: string;
 }
 
-/** AC-06/AC-07: full-replace is NOT confirmed either way for update (unlike internet-document's
- *  confirmed full-replace semantics) — spec.md §1's field list is a documented subset, and the
- *  response is genuinely ambiguous ("updated order fields, or Pricing+ScheduledDeliveryDate when
- *  recalculating"). Both request and response are typed defensively rather than with false
- *  precision (§4 decision 6). Ref is confirmed by official docs' own update example (spec.md §1,
- *  2026-09-23); OrderType is required by the same example and is set internally by this module
- *  (never a field on this public payload — matches createReturn's discriminant-stripping pattern). */
+/** AC-06/AC-07: `update` IS confirmed a full-replace call on the wire (spec.md §3 non-goal, official
+ *  docs' own examples) — matching internet-document's already-shipped `update` semantics; an omitted
+ *  optional field here is not carried forward from the order's previous value. What's genuinely
+ *  ambiguous is only the *response* shape ("updated order fields, or Pricing+ScheduledDeliveryDate
+ *  when recalculating") — typed defensively rather than with false precision (§4 decision 6). Ref is
+ *  confirmed by official docs' own update example (spec.md §1, 2026-09-23); OrderType is required by
+ *  the same example and is set internally by this module (never a field on this public payload —
+ *  matches createReturn's discriminant-stripping pattern). */
 export interface UpdateReturnPayload {
   Ref: string;
   RecipientSettlement?: string;
@@ -140,10 +171,15 @@ export interface OrderListFilters {
   Ref?: string;
   BeginDate?: string; // raw pass-through string, no client-side date parsing (sad.md §8 note)
   EndDate?: string;
-  Page?: number;
-  Limit?: number;
+  Page?: string; // official docs' own list examples send "1"/"50" quoted (spec.md §1, 2026-09-23) —
+                 // was typed number, corrected; a numeric caller value would have wired through as
+                 // JSON.stringify's unquoted number, not matching Nova Poshta's own documented shape
+  Limit?: string;
 }
 
+/** All 11 fields, and getReturnOrdersList's own request filters, confirmed verbatim by official docs'
+ *  own request+response example (spec.md §1, 2026-09-23) — resolves review round-3's finding that
+ *  this whole method shipped unsourced. */
 export interface ReturnOrderListItem {
   OrderRef: string;
   OrderNumber: string;
@@ -158,6 +194,8 @@ export interface ReturnOrderListItem {
   ExpressWaybillStatus: string;
 }
 
+/** Confirmed verbatim by official docs' own getReturnReasons response example (spec.md §1,
+ *  2026-09-23) — resolves review round-3's finding that this method shipped unsourced. */
 export interface ReturnReason {
   Ref: string;
   Description: string;
@@ -167,6 +205,8 @@ export interface ReturnReasonSubtypeFilters {
   ReasonRef?: string;
 }
 
+/** Confirmed verbatim by official docs' own getReturnReasonsSubtypes request+response example
+ *  (spec.md §1, 2026-09-23) — resolves review round-3's finding that this method shipped unsourced. */
 export interface ReturnReasonSubtype {
   Ref: string;
   Description: string;
@@ -181,7 +221,9 @@ export interface CheckRedirectPossiblePayload {
 
 /** sad.md §5's asymmetry note: unlike checkReturnPossible, this is one info record describing the
  *  redirect's current possibility, not a list of destination choices — requestFirst(), not
- *  request(). */
+ *  request(). All 20 fields confirmed verbatim by official docs' own checkPossibilityForRedirecting
+ *  request+response example (spec.md §1, 2026-09-23) — resolves review round-3's finding that this
+ *  contract shipped with no genuine quote. */
 export interface RedirectPossibility {
   Ref: string;
   Number: string;
@@ -231,6 +273,9 @@ export interface CheckRedirectEditPossiblePayload {
  *  interface; Nova Poshta's own response is the sole judge of a malformed combination. AC-10:
  *  Recipient is a counterparty Ref from the counterparty module, passed through unmodified — no
  *  ownership/existence check of this module's own. */
+/** All 14 fields confirmed verbatim by official docs' own save/orderRedirecting request example
+ *  (spec.md §1, 2026-09-23) — resolves review round-3's finding that this entire money-bearing
+ *  request shipped with no genuine quote. */
 export interface CreateRedirectPayload {
   IntDocNumber: string;
   PaymentMethod: PaymentMethod;
@@ -251,6 +296,8 @@ export interface CreateRedirectPayload {
   RecipientWarehouse?: string;
 }
 
+/** {Number, Ref} confirmed verbatim by official docs' own save/orderRedirecting response example
+ *  (spec.md §1, 2026-09-23). */
 export interface SavedRedirectOrder {
   Number: string;
   Ref: string;
@@ -262,7 +309,12 @@ export interface SavedRedirectOrder {
  *  (AC-13, 2-SDK-confirmed) and may silently narrow which fields this update actually applies; the
  *  response is typed defensively for the same reason updateReturn's is (§4 decision 6). OrderType is
  *  required by official docs' own example and is set internally by this module (never a field on
- *  this public payload). */
+ *  this public payload). All 15 optional fields below confirmed verbatim by official docs' own
+ *  update/redirect request+response example (spec.md §1, 2026-09-23) — resolves review round-3's
+ *  finding that this field list was cited circularly (a prior "docs example" quote only asserted it
+ *  "matches this module's already-documented field list", never quoting the fields themselves). This
+ *  also confirms the naming asymmetry against CreateRedirectPayload is real, not a bug: the wire
+ *  genuinely uses `RecipientSettlement` on create and `SettlementRecipient`+`CityRecipient` on update. */
 export interface UpdateRedirectPayload {
   Ref: string;
   PaymentMethod?: PaymentMethod;
@@ -303,9 +355,12 @@ export interface RedirectOrderListItem {
 // --- 3.3 Waybill-edit group ---
 
 /** AC-16: the 11 Can... flags are informational only — the module performs no client-side gating
- *  against them when createWaybillEdit is called next. 8 of the 11 have no corresponding field on
- *  createWaybillEdit at all (spec.md §3 non-goal, 2-SDK-confirmed) — kept on this type anyway since
- *  Nova Poshta returns them, just unconsumed by createWaybillEdit's own payload. */
+ *  against them when createWaybillEdit is called next. All 19 fields (11 flags + 8 context fields)
+ *  confirmed verbatim by official docs' own CheckPossibilityChangeEW response example (spec.md §1,
+ *  2026-09-23) — resolves review round-3's finding that this whole response shipped unsourced. 8 of
+ *  the 11 flags have no corresponding field on createWaybillEdit at all (spec.md §3 non-goal, now also
+ *  confirmed by the same official docs' save/orderChangeEW request example) — kept on this type
+ *  anyway since Nova Poshta returns them, just unconsumed by createWaybillEdit's own payload. */
 export interface WaybillEditPossibility {
   CanChangeSender: boolean;
   CanChangeRecipient: boolean;
@@ -332,8 +387,9 @@ export interface CheckWaybillEditPossiblePayload {
   IntDocNumber: string;
 }
 
-/** Only the 3 flag-gated fields Nova Poshta's own create call actually accepts (spec.md §3
- *  non-goal, 2-SDK-confirmed: platx's SaveChangeEWReq, sirkostya009's ChangeEWRequest) — the other
+/** All 8 fields confirmed verbatim by official docs' own save/orderChangeEW request example (spec.md
+ *  §1, 2026-09-23) — resolves review round-3's finding that this request was sourced by naming two
+ *  SDKs (platx's SaveChangeEWReq, sirkostya009's ChangeEWRequest) without quoting either. The other
  *  8 Can... flags have no corresponding field here regardless of what checkWaybillEditPossible just
  *  reported (AC-16). OrderType: "orderChangeEW" is set internally. */
 export interface CreateWaybillEditPayload {
@@ -347,11 +403,16 @@ export interface CreateWaybillEditPayload {
   PayerType: string;
 }
 
+/** {Number, Ref} confirmed verbatim by official docs' own save/orderChangeEW response example
+ *  (spec.md §1, 2026-09-23). */
 export interface SavedWaybillEditOrder {
   Number: string;
   Ref: string;
 }
 
+/** All 10 fields confirmed verbatim by official docs' own getChangeEWOrdersList response example
+ *  (spec.md §1, 2026-09-23) — resolves review round-3's finding that spec.md asserted this shape
+ *  "confirmed verbatim" without an actual quote behind that claim. */
 export interface ChangeEWOrderListItem {
   OrderRef: string;
   OrderNumber: string;
@@ -375,6 +436,10 @@ export interface DeleteAdditionalServiceOrderPayload {
   Ref: string;
 }
 
+/** Confirmed verbatim by official docs' own `delete` request+response example (spec.md §1,
+ *  2026-09-23) — resolves review round-3's finding that only the status-gate sentence, not the
+ *  schema itself, was previously quoted. The response is `{Number}` only, no `Ref` — matches this
+ *  type as originally shipped. */
 export interface DeletedAdditionalServiceOrder {
   Number: string;
 }

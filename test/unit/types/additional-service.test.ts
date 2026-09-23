@@ -152,15 +152,16 @@ describe("additional-service domain types (T1)", () => {
     it("the union type itself (CreateReturnPayload) rejects a wrong-variant field inside a Destination-narrowed branch, mirroring internet-document's F2 call-site guard (AC-04)", () => {
       function buildReturn(destination: ReturnDestination): CreateReturnPayload {
         if (destination === "NewAddress") {
+          // @ts-expect-error — RecipientWarehouse belongs to the NewWarehouse variant; mixing it into
+          // a NewAddress-tagged object literal fails to compile even when the declared type is the
+          // union (CreateReturnPayload), not the named variant alone — the whole literal satisfies no
+          // variant once RecipientWarehouse is `never` on NewAddress (review round-3 finding).
           const payload: CreateReturnPayload = {
             ...returnCommon,
             Destination: "NewAddress",
             RecipientSettlement: "settlement-6",
             RecipientSettlementStreet: "street-7",
             BuildingNumber: "12",
-            // @ts-expect-error — RecipientWarehouse belongs to the NewWarehouse variant; mixing it
-            // into a NewAddress-tagged object literal fails to compile even when the declared type
-            // is the union (CreateReturnPayload), not the named variant alone.
             RecipientWarehouse: "warehouse-ref-5",
           };
           return payload;
@@ -387,7 +388,9 @@ describe("additional-service domain types (T1)", () => {
         Pricing: { Services: [{ Service: "Return", Cost: 0 }], Total: 100, FirstDayStorage: "0000-00-00 00:00:00" },
         ScheduledDeliveryDate: "25.09.2026",
       };
-      const filters: OrderListFilters = { Number: "waybill-12", Page: 1, Limit: 20 };
+      // Page/Limit are string on the wire — official docs' own list examples send "1"/"50" quoted
+      // (spec.md §1, 2026-09-23), corrected from the original `number` typing (review round-3 finding).
+      const filters: OrderListFilters = { Number: "waybill-12", Page: "1", Limit: "20" };
       const returnItem: ReturnOrderListItem = {
         OrderRef: "return-order-ref-4",
         OrderNumber: "1234570",
@@ -420,7 +423,7 @@ describe("additional-service domain types (T1)", () => {
       };
 
       expect(pricing.Pricing.Total).toBe(100);
-      expect(filters.Limit).toBe(20);
+      expect(filters.Limit).toBe("20");
       expect(returnItem.OrderStatus).toBe("Прийнято");
       expect(redirectItem.PayerType).toBe("Sender");
     });

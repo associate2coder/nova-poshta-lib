@@ -34,7 +34,8 @@ import type {
 
 export interface AdditionalServiceModule {
   /** public-api.md §3.1, AC-01/AC-02: delegates straight to client.request() — one destination
-   *  choice per array element, NonCash included as a raw wire string (see types' own note). */
+   *  choice per array element, NonCash returned as the JSON boolean official docs show (see types'
+   *  own note). */
   checkReturnPossible(payload: CheckReturnPossiblePayload): Promise<ReturnAddressOption[]>;
   /** public-api.md §3.1, AC-06, ADR-0001: uses client.requestEnvelope() and assembles both the
    *  envelope's `data` and its `info` field into one result — `info` is narrowed to
@@ -52,7 +53,11 @@ export interface AdditionalServiceModule {
    *  docs' own update example, spec.md §1, 2026-09-23; never caller-settable) — no client-side status
    *  check; Nova Poshta's own decline (a non-Accepted return) is the sole enforcer (AC-07). Response
    *  shape is genuinely ambiguous (types' own note), so it's returned loosely typed rather than
-   *  falsely precisely. */
+   *  falsely precisely.
+   *  **Full-replace (spec.md §3 non-goal):** `update` is confirmed a full-replace call on the wire —
+   *  an omitted optional field is not carried forward from the order's previous value, matching
+   *  internet-document's own `update` semantics and its identical documented risk (an incomplete edit
+   *  payload can clear a previously-set value, including a money-bearing one). */
   updateReturn(payload: UpdateReturnPayload): Promise<Record<string, unknown>>;
   /** public-api.md §3.1/§5, AC-08: thin pass-through to client.request() — filters (Number, Ref,
    *  BeginDate, EndDate, Page, Limit) travel to the wire unmodified; no client-side re-filtering,
@@ -85,7 +90,9 @@ export interface AdditionalServiceModule {
    *  docs' own update example, spec.md §1, 2026-09-23; never caller-settable) — no role field is
    *  added and no client-side role check is performed; Nova Poshta infers sender-vs-recipient solely
    *  from the calling API key, and a field-permission decline (AC-13) surfaces as Nova Poshta's own
-   *  NovaPoshtaApiError, unmodified. */
+   *  NovaPoshtaApiError, unmodified.
+   *  **Full-replace (spec.md §3 non-goal):** same full-replace semantics and risk as updateReturn
+   *  above — an omitted optional field is not carried forward. */
   updateRedirect(payload: UpdateRedirectPayload): Promise<Record<string, unknown>>;
   /** public-api.md §3.2/§5, AC-14: thin pass-through to client.request() — filters travel to the
    *  wire unmodified, same OrderListFilters shape as getReturnOrdersList. */

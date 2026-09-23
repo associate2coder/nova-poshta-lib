@@ -8,7 +8,6 @@ import type {
   ChangeEWOrderListItem,
   CreateRedirectPayload,
   CreateReturnIfPossiblePayload,
-  CreateReturnPayload,
   CreateReturnToNewAddressPayload,
   CreateReturnToNewWarehousePayload,
   CreateReturnToSenderAddressPayload,
@@ -142,6 +141,24 @@ describe("additional-service module — checkReturnEditPossible (T4, AC-06)", ()
 
   it("resolves info: undefined, not a raw TypeError, when the envelope omits info entirely (AC-21 edge case, review 2026-09-23 finding 4)", async () => {
     const fetchMock = mockFetchOnce(() => successEnvelope([returnEditOption()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const result = await additionalService.checkReturnEditPossible({
+      Ref: "return-request-ref-1",
+      Address: "м. Київ, площа Харківська, 10",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ options: [returnEditOption()], info: undefined });
+  });
+
+  it("resolves info: undefined, not the bare object itself, when the envelope sends info unwrapped rather than in the documented single-element array (review round-3 finding, low)", async () => {
+    // official docs' own example always wraps info in an array (spec.md §1); this pins the module's
+    // deliberate, contract-correct behavior if Nova Poshta ever sent it unwrapped instead — a silent
+    // drop, not a crash, so a future change to this is intentional rather than accidental.
+    const fetchMock = mockFetchOnce(() =>
+      successEnvelope([returnEditOption()], { PayerTypeDefault: "Sender", Number: "20450000000001" }),
+    );
     const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
 
     const result = await additionalService.checkReturnEditPossible({
@@ -325,33 +342,56 @@ describe("additional-service module — createReturn/calculateReturn discriminan
   // T1's test/unit/types/additional-service.test.ts already proves CreateReturnPayload itself
   // rejects a mixed-variant object. This proves the SAME guard holds at createReturn/calculateReturn's
   // own call boundary — passing a field-by-field-assembled variable with a foreign field, or invoking
-  // the module methods directly with a mixed literal, is still a compile-time error. Per T1's own
-  // lesson: `@ts-expect-error` must sit directly above the offending property line, not above the
-  // enclosing const/call statement (TS attributes a suppressed diagnostic to the line it's placed on).
+  // the module methods directly with a mixed literal, is still a compile-time error.
+  //
+  // review round-3 finding: each variant's cross fields are now typed `?: never` (types.ts), so a
+  // value that carries a real value for another variant's field no longer structurally matches ANY
+  // union member — the compiler now attributes the error to the whole argument/object, not to the
+  // individual mismatched property line, so `@ts-expect-error` sits above the call/literal itself.
   it("rejects passing a variable that mixes a wrong variant's field under a given Destination tag to createReturn (AC-04)", () => {
     const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
 
     const mixedSenderAddress: CreateReturnToSenderAddressPayload = senderAddressPayload();
     // @ts-expect-error — RecipientWarehouse belongs to the NewWarehouse variant, not SenderAddress,
-    // even assigned field-by-field post-construction, and even though it's about to be passed
-    // straight into createReturn's own CreateReturnPayload-typed parameter.
+    // even assigned field-by-field post-construction.
     mixedSenderAddress.RecipientWarehouse = "warehouse-ref-9";
 
-    void additionalService.createReturn(mixedSenderAddress as CreateReturnPayload);
+    void additionalService.createReturn(mixedSenderAddress);
 
     expect(mixedSenderAddress.Destination).toBe("SenderAddress");
+  });
+
+  it("rejects an un-annotated variable assembled field-by-field with two variants' fields, passed straight into createReturn with no cast (AC-04, review round-3 finding)", () => {
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    // No type annotation here — this is exactly the shape the round-3 review demonstrated compiling
+    // clean before the `?: never` cross-guards existed: a plain object carrying both
+    // ReturnAddressRef (SenderAddress) and RecipientWarehouse (NewWarehouse) at once.
+    const mixedPayload = {
+      ...returnCommon,
+      Destination: "SenderAddress" as const,
+      ReturnAddressRef: "return-address-ref-1",
+      RecipientWarehouse: "warehouse-ref-9",
+    };
+
+    // @ts-expect-error — mixedPayload satisfies no CreateReturnPayload variant (RecipientWarehouse is
+    // `never` on SenderAddress; ReturnAddressRef is `never` on NewWarehouse) — must fail to compile
+    // even though the variable itself was never explicitly annotated with a single variant's type.
+    void additionalService.createReturn(mixedPayload);
+
+    expect(mixedPayload.Destination).toBe("SenderAddress");
   });
 
   it("rejects calling calculateReturn with a fresh object literal mixing two variants under one Destination tag (AC-04)", () => {
     const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
 
+    // @ts-expect-error — RecipientSettlementStreet belongs to the NewAddress variant, not
+    // NewWarehouse; the literal satisfies no variant once RecipientSettlementStreet is `never` on
+    // NewWarehouse, so the whole argument fails to compile.
     void additionalService.calculateReturn({
       ...returnCommon,
       Destination: "NewWarehouse",
       RecipientWarehouse: "warehouse-ref-10",
-      // @ts-expect-error — RecipientSettlementStreet belongs to the NewAddress variant, not
-      // NewWarehouse; mixing it into a NewWarehouse-tagged literal passed straight to calculateReturn
-      // must fail to compile.
       RecipientSettlementStreet: "street-9",
     });
 
@@ -475,8 +515,8 @@ describe("additional-service module — getReturnOrdersList (T7, AC-08)", () => 
       Number: "20450000000001",
       BeginDate: "01.09.2026",
       EndDate: "23.09.2026",
-      Page: 2,
-      Limit: 50,
+      Page: "2",
+      Limit: "50",
     };
 
     await additionalService.getReturnOrdersList(filters);
@@ -484,6 +524,15 @@ describe("additional-service module — getReturnOrdersList (T7, AC-08)", () => 
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(sentBody.calledMethod).toBe("getReturnOrdersList");
     expect(sentBody.methodProperties).toEqual(filters);
+  });
+
+  it("resolves [] rather than throwing when Nova Poshta's own data array is empty — no client-side re-interpretation of an empty result as an error (AC-08, review round-3 finding)", async () => {
+    mockFetchOnce(() => successEnvelope([]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const result = await additionalService.getReturnOrdersList();
+
+    expect(result).toEqual([]);
   });
 });
 
@@ -871,8 +920,8 @@ describe("additional-service module — getRedirectionOrdersList (T10, AC-14)", 
       Number: "20450000000001",
       BeginDate: "01.09.2026",
       EndDate: "23.09.2026",
-      Page: 3,
-      Limit: 25,
+      Page: "3",
+      Limit: "25",
     };
 
     await additionalService.getRedirectionOrdersList(filters);
@@ -1093,8 +1142,8 @@ describe("additional-service module — getChangeEWOrdersList (T11, AC-17)", () 
       Number: "20450000000001",
       BeginDate: "01.09.2026",
       EndDate: "23.09.2026",
-      Page: 1,
-      Limit: 20,
+      Page: "1",
+      Limit: "20",
     };
 
     await additionalService.getChangeEWOrdersList(filters);
@@ -1294,6 +1343,28 @@ describe("additional-service module — createReturnIfPossible (T13, AC-20)", ()
     expect((err as NovaPoshtaApiError).message).not.toBe("no return address available for this waybill");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("propagates Nova Poshta's own decline when the check succeeds but the create call itself then declines (AC-20, review round-3 finding)", async () => {
+    const firstOption = returnAddressOption({ Ref: "return-address-ref-first" });
+    const fetchMock = mockFetchSequence([
+      () => successEnvelope([firstOption]),
+      () => declinedEnvelope(["Return already exists for this waybill"], ["409"]),
+    ]);
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const err = await additionalService
+      .createReturnIfPossible(createReturnIfPossiblePayload())
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Return already exists for this waybill"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["409"]);
+    // both calls genuinely happened — this module's own non-goal (§3): no rollback/reconciliation
+    // for this gap, the caller sees the create call's own decline, unmodified.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondBody = JSON.parse(fetchMock.mock.calls[1]![1]!.body as string);
+    expect(secondBody.calledMethod).toBe("save");
+  });
 });
 
 // --- T15 (tests, AC-01..AC-23 coverage audit + gap-fill, spec.md §6 NFR table) ---
@@ -1408,6 +1479,38 @@ describe("additional-service module — shared error-contract fixture across all
           expect(err).toBeInstanceOf(NovaPoshtaApiError);
         });
       }
+    });
+  }
+});
+
+// review round-3 finding: the 5 read methods above had no dedicated decline test of their own (only
+// the generic instanceof check ran for them), so AC-21/AC-23's "containing Nova Poshta's own
+// explanation" was never actually asserted for this subset — every other method has its own
+// dedicated decline test elsewhere in this file checking `.errors`/`.errorCodes`.
+describe("additional-service module — read methods propagate Nova Poshta's own error message on decline (AC-21/AC-23, review round-3 finding)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const readMethodInvocations = [
+    "getReturnOrdersList",
+    "getReturnReasons",
+    "getReturnReasonsSubtypes",
+    "getRedirectionOrdersList",
+    "getChangeEWOrdersList",
+  ] as const;
+
+  for (const name of readMethodInvocations) {
+    it(`${name} propagates Nova Poshta's own error message and code, not just the error class`, async () => {
+      mockFetchOnce(() => declinedEnvelope(["Api key is wrong or fraud"], ["401"]));
+      const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+      const invocation = allMethodInvocations.find((m) => m.name === name)!;
+
+      const err = await invocation.invoke(additionalService).catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(NovaPoshtaApiError);
+      expect((err as NovaPoshtaApiError).errors).toEqual(["Api key is wrong or fraud"]);
+      expect((err as NovaPoshtaApiError).errorCodes).toEqual(["401"]);
     });
   }
 });

@@ -61,8 +61,11 @@ export interface NovaPoshtaClient {
   // ...existing request()/requestEnvelope()/apiKey unchanged...
   /** NEW (ADR-0002) — promoted from internet-document's private firstOrThrow(). Resolves
    *  request()'s array, returns its first element, throws NovaPoshtaApiError if the array is
-   *  empty. internet-document's save/update/getDocumentPrice/getDocumentDeliveryDate are refactored
-   *  to call this instead of their own private copy — behavior-preserving (sad.md §11 last row). */
+   *  empty. internet-document's getDocumentPrice/getDocumentDeliveryDate are refactored to call this
+   *  instead of their own private copy — behavior-preserving (sad.md §11 last row). save/update keep
+   *  their own module-local firstOrUndefined() (deliberately different semantics: resolves undefined
+   *  rather than throwing) — review round-3 finding: this doc previously overstated the refactor's
+   *  scope to include save/update too. */
   requestFirst<T>(modelName: string, calledMethod: string, methodProperties?: Record<string, unknown>): Promise<T>;
 }
 ```
@@ -226,7 +229,9 @@ createReturn(payload: CreateReturnPayload): Promise<SavedReturnOrder>;
 export interface OrderPricingEstimate {
   Pricing: {
     Services: { Service: string; Cost: number }[]; // confirmed by official docs (spec.md §1, 2026-09-23)
-    Total: number;
+    Total: number | string; // official docs' own examples genuinely disagree on this field's JSON
+                             // shape across two captured calls (spec.md §8, review round-3 finding) —
+                             // typed permissively rather than picking one
     FirstDayStorage: string; // official docs' own examples always show a datetime string here
   };
   ScheduledDeliveryDate: string;
@@ -238,10 +243,10 @@ calculateReturn(payload: CreateReturnPayload): Promise<OrderPricingEstimate>;
 ```
 
 ```ts
-/** AC-06/AC-07: full-replace is NOT confirmed either way for update (unlike internet-document's
- *  confirmed full-replace semantics) — spec.md §1's field list is a documented subset, and the
- *  response is genuinely ambiguous ("updated order fields, or Pricing+ScheduledDeliveryDate when
- *  recalculating"). Both request and response are typed defensively rather than with false
+/** AC-06/AC-07: `update` IS confirmed a full-replace call on the wire (spec.md §3 non-goal) —
+ *  matching internet-document's own already-shipped `update` semantics; an omitted optional field is
+ *  not carried forward. Only the *response* shape is genuinely ambiguous ("updated order fields, or
+ *  Pricing+ScheduledDeliveryDate when recalculating") and typed defensively rather than with false
  *  precision (§4 decision 6). Ref is confirmed by official docs' own update example (spec.md §1,
  *  2026-09-23); OrderType is required by the same example and is set internally by this module
  *  ("orderCargoReturn" — never a field on this public payload). */
@@ -267,8 +272,9 @@ export interface OrderListFilters {
   Ref?: string;
   BeginDate?: string; // raw pass-through string, no client-side date parsing (sad.md §8 note)
   EndDate?: string;
-  Page?: number;
-  Limit?: number;
+  Page?: string; // official docs' own list examples send "1"/"50" quoted (review round-3 finding —
+                 // was typed number)
+  Limit?: string;
 }
 
 export interface ReturnOrderListItem {
@@ -694,12 +700,10 @@ plain-return case only (US-13). No equivalent exists for redirect or waybill-edi
 
 ## 10. Field-origins summary
 
-See `api-sync-report.md` for the full per-field table. In short: every field in §3 traces to
-`spec.md` §1's method table (row cited in each field's origin), itself sourced from Nova Poshta's own
-official documentation captured 2026-09-23 and cross-checked against 5 independent SDKs. Of the six
-points originally carried forward as genuinely open, five are now resolved by a direct official-docs
-capture (`/sdd:review` round 1, 2026-09-23 — see `spec.md` §1's "Official documentation quotes"
-subsection, which quotes the actual upstream request/response JSON, not just an SDK citation):
+See `api-sync-report.md` for the full per-field table. In short: every field in §3 now traces to a
+directly quoted official-docs excerpt (`spec.md` §1's "Official documentation quotes" and "Round 3"
+subsections), captured across two sessions on 2026-09-23, cross-checked against 5 independent SDKs.
+Points originally carried forward as genuinely open:
 
 1. ~~`ReturnAddressOption.Ref` ↔ `CreateReturnToSenderAddressPayload.ReturnAddressRef` — same value?~~
    **Resolved** — confirmed by the official docs' own `save`/`orderCargoReturn` example.
@@ -708,9 +712,24 @@ subsection, which quotes the actual upstream request/response JSON, not just an 
 4. ~~`UpdateReturnPayload`/`UpdateRedirectPayload`'s literal `Ref` field name~~ **Resolved** — confirmed
    `Ref`; both methods' official examples also revealed a previously-missed required `OrderType` field,
    now set internally by this module. Response shape stays loosely typed (genuinely variable per docs'
-   own examples).
+   own examples). **`update` IS a full-replace call** (spec.md §3 non-goal) — this doc previously
+   contradicted that in this same section (review round-2 finding, fixed).
 5. `CreateRedirectPayload.ServiceType`'s enum values — **still open** (not independently re-sourced
    beyond one confirmed example value); typed as plain `string`.
+6. ~~`createRedirect`'s whole request, `checkRedirectPossible`'s whole contract, `updateRedirect`'s
+   field list, the three list methods, `getReturnReasons(Subtypes)`, `delete`'s schema, all three
+   `save` results, and 8 of 19 wire `calledMethod` literals~~ **Resolved** (`/sdd:review` round 3,
+   2026-09-23) — an exhaustive field-by-field audit found these shipped with no genuine quote despite
+   several being graded `high` in `api-sync-report.md`; the second, complete docs capture (spec.md §1
+   "Round 3" subsection) resolves all of them.
+7. `PaymentMethod`'s `"NonCash"` member — **still open** — every request example across both captures
+   only shows `"Cash"`; carried over from `internet-document`'s own confirmed 2-value enum for the
+   same field.
+8. `OrderPricingEstimate.Pricing.Total`'s JSON shape — **documented discrepancy, not fully resolved** —
+   two official-docs examples captured the same session disagree (`0` unquoted vs. `"5.52"` quoted);
+   typed `number | string` rather than guessing.
+9. ~~`OrderListFilters.Page`/`Limit` — number or string on the wire?~~ **Resolved** (round 3) — every
+   list-method example sends them as quoted JSON strings; corrected from `number` to `string`.
 6. ~~Whether a waybill-edit order genuinely has no `update` capability~~ **Resolved** — official docs'
    complete waybill-edit section lists no `update` method.
 

@@ -15,7 +15,7 @@
 | T8 | Run the validation spike, then flip to hard-fail | tests | associate2coder | M | T3, T4, T5, T6, T7 | done |
 | T9 | Add docs-deploy job to `release.yml` | wiring | associate2coder | M | T1 | done* |
 | T10 | Fix `Area`/`WarehouseType` unbrowsable aliases | docs | associate2coder | XS | — | done |
-| T11 | Export `ReferenceRecordBase`, fix 8 unbrowsable common aliases, re-enable `notExported` | docs | associate2coder | S | — | todo |
+| T11 | Export `ReferenceRecordBase`, fix 9 unbrowsable common aliases (found a 9th beyond the review's 8: `PayerTypeForRedelivery`), re-enable `notExported` | docs | associate2coder | S | — | done |
 | T12 | Export `DeleteBatchInternetDocumentPayload` from `src/index.ts` | docs | associate2coder | XS | — | todo |
 | T13 | Add `contents: read` to `docs-deploy` job | wiring | associate2coder | XS | — | todo |
 | T14 | Add `enablement: true` to `configure-pages` step | wiring | associate2coder | XS | — | todo |

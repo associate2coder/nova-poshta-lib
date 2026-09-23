@@ -6,7 +6,7 @@
   "excludePrivate": true,
   "excludeProtected": true,
   "validation": {
-    "notExported": false,
+    "notExported": true,
     "invalidLink": true,
     "notDocumented": true
   },

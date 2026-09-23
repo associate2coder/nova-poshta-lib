@@ -16,8 +16,11 @@ describe("documentation hard-fail rule is enabled (T8, AC-02, AC-04, AC-06)", ()
     expect(config.treatWarningsAsErrors).toBe(true);
   });
 
-  it("scopes the hard-fail to missing comments only — notExported stays off (spec §6 NFR: only the coverage row fails CI)", () => {
-    expect(config.validation?.notExported).toBe(false);
+  it("enables notDocumented (spec §6 NFR: the coverage row fails CI, per AC-02)", () => {
     expect(config.validation?.notDocumented).toBe(true);
+  });
+
+  it("enables notExported now that every reference type it flags is fixed (T11) — a public export referencing an unexported type is a real bug, not noise", () => {
+    expect(config.validation?.notExported).toBe(true);
   });
 });

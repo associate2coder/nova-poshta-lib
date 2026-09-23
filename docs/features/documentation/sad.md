@@ -238,7 +238,36 @@ deploys it to GitHub Pages only after npm registers a stable publish.
 
 ## 6. Runtime view
 
-**Critical flow 1: contributor PR blocked by missing documentation (AC-02, AC-03, AC-06)**
+**Critical flow 1: consuming developer browses the reference site (AC-01)**
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant GHPages as GitHub Pages
+
+    Dev->>GHPages: opens the published reference site
+    GHPages-->>Dev: returns the page for a documented method
+    Dev->>GHPages: reads its description, parameters, and return type
+```
+
+**Critical flow 2: one-time report-only validation pass before hard-fail is enabled (AC-04, AC-06)**
+
+```mermaid
+sequenceDiagram
+    actor Contributor
+    participant DocsGen as Docs pipeline
+    participant Lib as nova-poshta-lib
+
+    Contributor->>DocsGen: enables the documentation check in report-only mode
+    DocsGen->>Lib: reads the whole existing non-internal exported surface
+    alt zero non-internal exported symbols are missing a comment
+        DocsGen-->>Contributor: report confirms full coverage — hard-fail rule can now be enabled
+    else one or more non-internal exported symbols are missing a comment
+        DocsGen-->>Contributor: report lists exactly which symbols are missing — hard-fail rule stays off until fixed
+    end
+```
+
+**Critical flow 3: contributor PR blocked by missing documentation (AC-02, AC-03, AC-06)**
 
 ```mermaid
 sequenceDiagram
@@ -256,7 +285,7 @@ sequenceDiagram
     end
 ```
 
-**Critical flow 2: release-triggered, publish-isolated site rebuild (AC-05, ADR-0001)**
+**Critical flow 4: release-triggered, publish-isolated site rebuild (AC-05, ADR-0001)**
 
 ```mermaid
 sequenceDiagram

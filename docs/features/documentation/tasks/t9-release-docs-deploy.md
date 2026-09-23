@@ -32,12 +32,17 @@ Add a `docs-deploy` job to `.github/workflows/release.yml`:
 
 ## Definition of Done
 
-- [ ] The job is gated on `needs.release.outputs.published == 'true'` and skips cleanly when
+- [x] The job is gated on `needs.release.outputs.published == 'true'` and skips cleanly when
       nothing was published.
-- [ ] The job never runs with `NPM_TOKEN` — only the Pages OIDC token.
+- [x] The job never runs with `NPM_TOKEN` — only the Pages OIDC token.
 - [ ] A test release confirms the site rebuilds and reflects the published version within ≤ 5
       minutes (spec §6 NFR), and a forced docs-deploy failure does not affect the already-completed
-      `release` job's own status.
+      `release` job's own status. **Not verifiable in this implementation session** — requires an
+      actual npm publish and a live GitHub Pages deployment (and, per spec §3 non-goal, GitHub
+      Pages must first be enabled in repo settings — an out-of-codebase step). Structural
+      correctness (gating, permissions, pinned actions, YAML validity) is verified by
+      `test/unit/release-docs-deploy-job.test.ts`; confirm this item against the first 3 real
+      releases after launch (spec §7 KPI).
 
 ## Notes
 

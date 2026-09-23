@@ -13,6 +13,9 @@
 | T6 | TSDoc `tracking-document` + `scan-sheet` + `additional-service` modules | docs | associate2coder | M | T2 | done |
 | T7 | Add documentation-coverage step to `ci.yml`, report-only | wiring | associate2coder | S | T1 | done |
 | T8 | Run the validation spike, then flip to hard-fail | tests | associate2coder | M | T3, T4, T5, T6, T7 | done |
-| T9 | Add docs-deploy job to `release.yml` | wiring | associate2coder | M | T1 | todo |
+| T9 | Add docs-deploy job to `release.yml` | wiring | associate2coder | M | T1 | done* |
 
 **Total:** 9 tasks, ~7 person-days.
+
+\* T9: structural DoD verified; the live end-to-end check (actual npm publish → site update ≤5min)
+is not verifiable in an implementation session — confirm against the first 3 real releases (spec §7 KPI).

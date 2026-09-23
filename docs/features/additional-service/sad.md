@@ -394,6 +394,355 @@ remaining 17 methods follow one of two simpler shapes already shown in full by `
 AC-21/AC-22/AC-23 error branches and no additional sequencing — and are covered exhaustively, one
 flow per AC, by the `sequences` stage next, not repeated here.*
 
+### Flow 3: `checkReturnPossible` → `createReturn` — the return check-then-create pair
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant Addl as additional-service module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>Addl: checkReturnPossible({ Number })
+    Addl->>Client: request("AdditionalServiceGeneral", "CheckPossibilityCreateReturn", { Number })
+    Client->>NP: HTTPS POST (apiKey, modelName, calledMethod, methodProperties)
+
+    alt declined (e.g. caller's key is the recipient, not the sender — AC-02), malformed, or network-failed (AC-21/AC-22/AC-23)
+        NP--xClient: success:false, timeout, or non-JSON body
+        Client-->>Addl: throws NovaPoshtaApiError
+        Addl-->>Dev: propagates NovaPoshtaApiError
+    else success
+        NP-->>Client: success:true, data: [ReturnAddressOption, ...]
+        Client-->>Addl: typed ReturnAddressOption[] (AC-01)
+        Addl-->>Dev: return-address options, including NonCash per option
+    end
+
+    Dev->>Addl: createReturn({ IntDocNumber, PaymentMethod, Reason, SubtypeReason, ...one variant's destination fields, tagged })
+    Note over Addl: discriminant tag admits only one destination variant's fields at compile time (AC-04) — a type-level check, not drawn as a runtime step
+    Addl->>Addl: builds the save payload, strips the TS-only discriminant tag, sets OrderType: "orderCargoReturn" internally
+    Addl->>Client: requestFirst("AdditionalServiceGeneral", "save", { OrderType: "orderCargoReturn", ...destination fields })
+    Client->>NP: HTTPS POST (apiKey, modelName, "save", methodProperties)
+
+    alt declined (e.g. sender-only restriction — AC-02), malformed, or network-failed (AC-21/AC-22/AC-23)
+        NP--xClient: success:false, timeout, or non-JSON body
+        Client-->>Addl: throws NovaPoshtaApiError
+        Addl-->>Dev: propagates NovaPoshtaApiError
+    else success
+        NP-->>Client: success:true, data: [{ Number, Ref }]
+        Client-->>Addl: typed { Number, Ref } (via requestFirst)
+        Addl-->>Dev: { Number, Ref } (AC-03)
+    end
+```
+
+### Flow 4: `calculateReturn` — cost preview, no order created
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant Addl as additional-service module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>Addl: calculateReturn({ IntDocNumber, PaymentMethod, Reason, SubtypeReason, destination fields })
+    Addl->>Addl: builds the same save payload createReturn would, injects OnlyGetPricing: "1" internally (§4 decision 6)
+    Addl->>Client: requestFirst("AdditionalServiceGeneral", "save", { OrderType: "orderCargoReturn", OnlyGetPricing: "1", destination fields })
+    Client->>NP: HTTPS POST (apiKey, modelName, "save", methodProperties)
+
+    alt declined, malformed, or network-failed (AC-21/AC-22/AC-23)
+        NP--xClient: success:false, timeout, or non-JSON body
+        Client-->>Addl: throws NovaPoshtaApiError
+        Addl-->>Dev: propagates NovaPoshtaApiError
+    else success
+        NP-->>Client: success:true, data: [{ Pricing: { Services, Total, FirstDayStorage }, ScheduledDeliveryDate }]
+        Client-->>Addl: typed { Pricing, ScheduledDeliveryDate } (via requestFirst)
+        Addl-->>Dev: Pricing + ScheduledDeliveryDate — no order created (AC-05)
+    end
+```
+
+### Flow 5: `updateReturn` — applying an edit after Flow 2's `checkReturnEditPossible`
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant Addl as additional-service module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Note over Dev,Addl: Dev already called checkReturnEditPossible (Flow 2) and holds the return's Ref
+
+    Dev->>Addl: updateReturn({ Ref, corrected field(s) })
+    Addl->>Client: requestFirst("AdditionalServiceGeneral", "update", { Ref, corrected field(s) })
+    Client->>NP: HTTPS POST (apiKey, modelName, "update", methodProperties)
+
+    alt declined because the order's status is no longer Accepted (AC-07), or otherwise malformed/network-failed (AC-21/AC-22/AC-23)
+        NP--xClient: success:false, timeout, or non-JSON body
+        Client-->>Addl: throws NovaPoshtaApiError
+        Addl-->>Dev: propagates NovaPoshtaApiError — Nova Poshta's own status gate is the sole enforcer, no client-side check
+    else success
+        NP-->>Client: success:true, data: [updated order fields, or Pricing+ScheduledDeliveryDate when recalculating]
+        Client-->>Addl: typed updated-order data (via requestFirst)
+        Addl-->>Dev: the updated order (AC-06)
+    end
+```
+
+### Flow 6: generic list-read — one shape, 5 methods
+
+*Covers `getReturnOrdersList`, `getReturnReasons`, `getReturnReasonsSubtypes`, `getRedirectionOrdersList`, and
+`getChangeEWOrdersList` — all five are structurally identical single-call list reads (§5 table's `request<T>()`
+row), so one diagram stands for all five rather than five near-copies. `<method>`/`<calledMethod>`/`<filters>`
+substitute per call: `checkReturnPossible`/`checkRedirectPossible` are excluded here since they're already drawn
+individually in Flows 2, 3, and 7 with their own check semantics.*
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant Addl as additional-service module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>Addl: <method>({ filters, e.g. Number?/Ref?/BeginDate?/EndDate?/Page?/Limit? })
+    Addl->>Client: request("AdditionalServiceGeneral", "<calledMethod>", { filters })
+    Client->>NP: HTTPS POST (apiKey, modelName, calledMethod, methodProperties)
+
+    alt declined, malformed, or network-failed (AC-21/AC-22/AC-23)
+        NP--xClient: success:false, timeout, or non-JSON body
+        Client-->>Addl: throws NovaPoshtaApiError
+        Addl-->>Dev: propagates NovaPoshtaApiError
+    else success
+        NP-->>Client: success:true, data: [item, ...]
+        Client-->>Addl: typed item[], unmodified
+        Addl-->>Dev: the list exactly as Nova Poshta returned it — no client-side re-filtering, sorting, or pagination (AC-08/AC-14/AC-17)
+    end
+```
+
+### Flow 7: `checkRedirectPossible` → `createRedirect` — the redirect check-then-create pair
+
+*Unlike `checkReturnPossible` (Flow 3, list-shaped), `checkRedirectPossible` returns one info record
+describing the redirect's current possibility, not a list of choices (§5's asymmetry note) — so it
+uses `requestFirst()`, not `request()`.*
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant Addl as additional-service module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>Addl: checkRedirectPossible({ Number })
+    Addl->>Client: requestFirst("AdditionalServiceGeneral", "checkPossibilityForRedirecting", { Number })
+    Client->>NP: HTTPS POST (apiKey, modelName, calledMethod, methodProperties)
+
+    alt declined, malformed, or network-failed (AC-21/AC-22/AC-23)
+        NP--xClient: success:false, timeout, or non-JSON body
+        Client-->>Addl: throws NovaPoshtaApiError
+        Addl-->>Dev: propagates NovaPoshtaApiError
+    else success
+        NP-->>Client: success:true, data: [{ Ref, PayerType, WarehouseRef, CounterpartyRecipientRef, ... }]
+        Client-->>Addl: typed redirect-possibility record (via requestFirst)
+        Addl-->>Dev: the redirect-possibility details (AC-09)
+    end
+
+    Dev->>Addl: createRedirect({ IntDocNumber, Recipient (counterparty Ref from the counterparty module), RecipientContactName, RecipientPhone, ...destination fields })
+    Note over Addl,NP: Recipient's Ref is passed through unmodified - no ownership or existence check of its own (AC-10, cross-context trust boundary)
+    Addl->>Addl: sets OrderType: "orderRedirecting" internally
+    Addl->>Client: requestFirst("AdditionalServiceGeneral", "save", { OrderType: "orderRedirecting", ...fields })
+    Client->>NP: HTTPS POST (apiKey, modelName, "save", methodProperties)
+
+    alt declined, malformed, or network-failed (AC-21/AC-22/AC-23)
+        NP--xClient: success:false, timeout, or non-JSON body
+        Client-->>Addl: throws NovaPoshtaApiError
+        Addl-->>Dev: propagates NovaPoshtaApiError
+    else success
+        NP-->>Client: success:true, data: [{ Number, Ref }]
+        Client-->>Addl: typed { Number, Ref } (via requestFirst)
+        Addl-->>Dev: { Number, Ref } (AC-09)
+    end
+```
+
+### Flow 8: `calculateRedirect` — cost preview, no order created
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant Addl as additional-service module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>Addl: calculateRedirect({ IntDocNumber, Recipient, RecipientContactName, RecipientPhone, ...destination fields })
+    Addl->>Addl: builds the same save payload createRedirect would, injects OnlyGetPricing: "1" internally
+    Addl->>Client: requestFirst("AdditionalServiceGeneral", "save", { OrderType: "orderRedirecting", OnlyGetPricing: "1", ...fields })
+    Client->>NP: HTTPS POST (apiKey, modelName, "save", methodProperties)
+
+    alt declined, malformed, or network-failed (AC-21/AC-22/AC-23)
+        NP--xClient: success:false, timeout, or non-JSON body
+        Client-->>Addl: throws NovaPoshtaApiError
+        Addl-->>Dev: propagates NovaPoshtaApiError
+    else success
+        NP-->>Client: success:true, data: [{ Pricing: { Services, Total, FirstDayStorage }, ScheduledDeliveryDate }]
+        Client-->>Addl: typed { Pricing, ScheduledDeliveryDate } (via requestFirst)
+        Addl-->>Dev: Pricing + ScheduledDeliveryDate — no order created (AC-11)
+    end
+```
+
+### Flow 9: `checkRedirectEditPossible` → `updateRedirect` — sender or recipient, same call shape
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant Addl as additional-service module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>Addl: checkRedirectEditPossible({ OrderRef, address/recipient fields })
+    Addl->>Client: requestFirst("AdditionalServiceGeneral", "checkPossibilityForRedirecting", { OrderRef, address/recipient fields })
+    Client->>NP: HTTPS POST (apiKey, modelName, calledMethod, methodProperties)
+
+    alt declined, malformed, or network-failed (AC-21/AC-22/AC-23)
+        NP--xClient: success:false, timeout, or non-JSON body
+        Client-->>Addl: throws NovaPoshtaApiError
+        Addl-->>Dev: propagates NovaPoshtaApiError
+    else success
+        NP-->>Client: success:true, data: [updated-subset possibility fields]
+        Client-->>Addl: typed possibility record (via requestFirst)
+        Addl-->>Dev: the edit-possibility details
+    end
+
+    Dev->>Addl: updateRedirect({ Ref, corrected field(s) })
+    Note over Addl,NP: caller's own API key determines sender-vs-recipient — no role field on the wire, no client-side role check (AC-13)
+    Addl->>Client: requestFirst("AdditionalServiceGeneral", "update", { Ref, corrected field(s) })
+    Client->>NP: HTTPS POST (apiKey, modelName, "update", methodProperties)
+
+    alt Nova Poshta accepts the call but rejects a field this caller's role (sender vs recipient) may not change, or otherwise declines/is malformed/network-failed (AC-13, AC-21/AC-22/AC-23)
+        NP--xClient: success:false (partial or full field rejection), timeout, or non-JSON body
+        Client-->>Addl: throws NovaPoshtaApiError
+        Addl-->>Dev: propagates NovaPoshtaApiError — the accepted-subset boundary is Nova Poshta's own, not checked client-side
+    else success
+        NP-->>Client: success:true, data: [updated order fields]
+        Client-->>Addl: typed updated-order data (via requestFirst)
+        Addl-->>Dev: the updated order (AC-12)
+    end
+```
+
+### Flow 10: `checkWaybillEditPossible` → `createWaybillEdit` — flags are informational only
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant Addl as additional-service module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>Addl: checkWaybillEditPossible({ IntDocNumber })
+    Addl->>Client: requestFirst("AdditionalServiceGeneral", "CheckPossibilityChangeEW", { IntDocNumber })
+    Client->>NP: HTTPS POST (apiKey, modelName, calledMethod, methodProperties)
+
+    alt declined, malformed, or network-failed (AC-21/AC-22/AC-23)
+        NP--xClient: success:false, timeout, or non-JSON body
+        Client-->>Addl: throws NovaPoshtaApiError
+        Addl-->>Dev: propagates NovaPoshtaApiError
+    else success
+        NP-->>Client: success:true, data: [{ 11 Can... flags, sender/recipient/payer fields }]
+        Client-->>Addl: typed flags record (via requestFirst)
+        Addl-->>Dev: the 11 Can... flags — the system performs no client-side gating against them (AC-16)
+    end
+
+    Dev->>Addl: createWaybillEdit({ IntDocNumber, PaymentMethod, SenderContactName, SenderPhone, Recipient, RecipientContactName, RecipientPhone, PayerType })
+    Note over Addl,NP: a field the flags just marked not-currently-changeable may still be sent - Nova Poshta's own response (decline, partial, or full acceptance) is the sole outcome (AC-16)
+    Addl->>Addl: sets OrderType: "orderChangeEW" internally
+    Addl->>Client: requestFirst("AdditionalServiceGeneral", "save", { OrderType: "orderChangeEW", ...fields })
+    Client->>NP: HTTPS POST (apiKey, modelName, "save", methodProperties)
+
+    alt declined, malformed, or network-failed (AC-21/AC-22/AC-23)
+        NP--xClient: success:false, timeout, or non-JSON body
+        Client-->>Addl: throws NovaPoshtaApiError
+        Addl-->>Dev: propagates NovaPoshtaApiError
+    else success — full or partial acceptance
+        NP-->>Client: success:true, data: [{ Number, Ref }]
+        Client-->>Addl: typed { Number, Ref } (via requestFirst)
+        Addl-->>Dev: { Number, Ref } — whatever Nova Poshta actually applied (AC-15)
+    end
+```
+
+### Flow 11: `deleteAdditionalServiceOrder` — one method, all three order types
+
+```mermaid
+sequenceDiagram
+    actor Dev as Consuming developer
+    participant Addl as additional-service module
+    participant Client as Core client
+    participant NP as Nova Poshta API
+
+    Dev->>Addl: deleteAdditionalServiceOrder({ Ref })
+    Note over Dev,Addl: Ref may belong to a return, redirect, or waybill-edit order - the same call works across all three (AC-18)
+    Addl->>Client: requestFirst("AdditionalServiceGeneral", "delete", { Ref })
+    Client->>NP: HTTPS POST (apiKey, modelName, "delete", methodProperties)
+
+    alt declined because a waybill-edit order's status is not Accepted (AC-19), or otherwise malformed/network-failed (AC-21/AC-22/AC-23)
+        NP--xClient: success:false, timeout, or non-JSON body
+        Client-->>Addl: throws NovaPoshtaApiError
+        Addl-->>Dev: propagates NovaPoshtaApiError — Nova Poshta's own status gate is the sole enforcer, no client-side status check
+    else success
+        NP-->>Client: success:true, data: [{ Number }]
+        Client-->>Addl: typed { Number } (via requestFirst)
+        Addl-->>Dev: { Number } — the deleted order's confirmation (AC-18)
+    end
+```
+
+### §6 coverage check
+
+**User-story → flow.** Every §4 user story maps to ≥1 flow:
+
+| US | Flow(s) |
+|---|---|
+| US-01 Check whether a return is possible | Flow 3 |
+| US-02 Create a return | Flow 3 |
+| US-03 Estimate a return's cost | Flow 4 |
+| US-04 Edit an existing return request | Flow 2, Flow 5 |
+| US-05 Browse return requests / reasons | Flow 6 |
+| US-06 Check + create a redirect | Flow 7 |
+| US-07 Estimate a redirect's cost | Flow 8 |
+| US-08 Edit an existing redirect request | Flow 9 |
+| US-09 Browse redirect requests | Flow 6 |
+| US-10 Check + submit a waybill edit | Flow 10 |
+| US-11 Browse waybill-edit requests | Flow 6 |
+| US-12 Delete a pending request | Flow 11 |
+| US-13 `createReturnIfPossible` | Flow 1 |
+| US-14 Standard error on failure | the `alt` error branch present in every flow above (not a dedicated flow) |
+
+**AC → flow / branch / N/A.** Every §5 acceptance criterion is shown:
+
+| AC | Shown by |
+|---|---|
+| AC-01 | Flow 3, happy branch |
+| AC-02 | Flow 3, both decline branches |
+| AC-03 | Flow 3, `createReturn` happy branch |
+| AC-04 | Flow 3, `Note` — explicit non-runtime N/A: compile-time discriminant check, not a wire step |
+| AC-05 | Flow 4 |
+| AC-06 | Flow 2 (check) + Flow 5 (apply) |
+| AC-07 | Flow 5, decline branch |
+| AC-08 | Flow 6 |
+| AC-09 | Flow 7 |
+| AC-10 | Flow 7, `Note` on the `createRedirect` step |
+| AC-11 | Flow 8 |
+| AC-12 | Flow 9, `updateRedirect` happy branch |
+| AC-13 | Flow 9, `Note` + decline branch |
+| AC-14 | Flow 6 |
+| AC-15 | Flow 10, `createWaybillEdit` happy branch |
+| AC-16 | Flow 10, `Note` on the `createWaybillEdit` step |
+| AC-17 | Flow 6 |
+| AC-18 | Flow 11, happy branch |
+| AC-19 | Flow 11, decline branch |
+| AC-20 | Flow 1 (pre-existing) |
+| AC-21 | the malformed-response arm of the `alt` error branch present in every flow |
+| AC-22 | the network-failure arm of the `alt` error branch present in every flow |
+| AC-23 | the decline arm of the `alt` error branch present in every flow |
+
+No §4 user story and no §5 acceptance criterion is left uncovered.
+
+**Flagged for `data-model`:** every flow's writes are `save`/`update`/`delete` calls to Nova Poshta's own API — this module persists nothing of its own (no local datastore, per `CLAUDE.md`'s "No persistence"), so no new index or schema change is implied by any persist note above; `data-model`'s hard-refuse condition ("no schema change") applies and that stage should be skipped for this feature.
+
+**Flagged for `design`:** no new participant beyond the generic vocabulary already declared in §5 (`<client>`≈`Dev`, `<service>`≈`Addl`+`Client`, `<external-system>`≈`NP`) was needed by any flow — nothing to reconcile back into §5.
+
 ## 7. Deployment view
 
 <!-- N/A: this feature ships inside the existing npm package publish process (project-level release

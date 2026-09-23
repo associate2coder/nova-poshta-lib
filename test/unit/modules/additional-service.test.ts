@@ -4,6 +4,7 @@ import { createAdditionalServiceModule } from "../../../src/modules/additional-s
 import type {
   ChangeEWOrderListItem,
   CreateRedirectPayload,
+  CreateReturnIfPossiblePayload,
   CreateReturnPayload,
   CreateReturnToNewAddressPayload,
   CreateReturnToNewWarehousePayload,
@@ -1151,5 +1152,114 @@ describe("additional-service module — deleteAdditionalServiceOrder (T12, AC-18
     expect(err).toBeInstanceOf(NovaPoshtaApiError);
     expect((err as NovaPoshtaApiError).errors).toEqual(["Order is not in status Accepted"]);
     expect((err as NovaPoshtaApiError).errorCodes).toEqual(["409"]);
+  });
+});
+
+// --- T13 (app layer, AC-20): createReturnIfPossible ---
+//
+// public-api.md §3.5, spec.md §1 "Decision override": composes this module's OWN already-implemented
+// checkReturnPossible + createReturn internally (this repo's precedent: scan-sheet's
+// addToTodaysScanSheet calling its own getScanSheetList + insertDocuments, never a second call to
+// client directly). Takes the FIRST returned ReturnAddressOption's Ref as ReturnAddressRef. An empty
+// option list is treated as ineligible: throws THIS module's own NovaPoshtaApiError ("no return
+// address available for this waybill") without ever attempting a create call. A check-declined
+// response propagates Nova Poshta's own NovaPoshtaApiError unchanged, likewise with zero create calls
+// attempted. createReturnIfPossible doesn't exist on the module yet (T4-T12 shipped the 18 raw
+// methods only), so this is expected to fail to compile/run until T13's implementation lands.
+
+/** Distinguishes successive fetch calls by index — needed here (unlike every other describe block
+ *  above) because createReturnIfPossible makes TWO wire calls in sequence (check, then create) and
+ *  the happy-path test must assert both the call count and each call's own calledMethod/payload. */
+function mockFetchSequence(
+  handlers: Array<(body: unknown) => { ok: boolean; status?: number; json: () => Promise<unknown> }>,
+) {
+  let callIndex = 0;
+  const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(init.body as string);
+    const handler = handlers[callIndex] ?? handlers[handlers.length - 1]!;
+    callIndex += 1;
+    return handler(body);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function createReturnIfPossiblePayload(
+  overrides: Partial<CreateReturnIfPossiblePayload> = {},
+): CreateReturnIfPossiblePayload {
+  return {
+    IntDocNumber: "20450000000001",
+    PaymentMethod: "Cash",
+    Reason: "reason-ref-1",
+    ...overrides,
+  };
+}
+
+describe("additional-service module — createReturnIfPossible (T13, AC-20)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("happy path: checks then creates in one call, using the FIRST option's Ref as ReturnAddressRef, resolves the same shape createReturn would (AC-20)", async () => {
+    const firstOption = returnAddressOption({ Ref: "return-address-ref-first" });
+    const secondOption = returnAddressOption({ Ref: "return-address-ref-second" });
+    const created = savedReturnOrder({ Ref: "return-order-ref-if-possible-1" });
+
+    const fetchMock = mockFetchSequence([
+      () => successEnvelope([firstOption, secondOption]),
+      () => successEnvelope([created]),
+    ]);
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const result: SavedReturnOrder = await additionalService.createReturnIfPossible(
+      createReturnIfPossiblePayload(),
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const firstBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(firstBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(firstBody.calledMethod).toBe("CheckPossibilityCreateReturn");
+    expect(firstBody.methodProperties.Number).toBe("20450000000001");
+
+    const secondBody = JSON.parse(fetchMock.mock.calls[1]![1]!.body as string);
+    expect(secondBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(secondBody.calledMethod).toBe("save");
+    expect(secondBody.methodProperties.OrderType).toBe("orderCargoReturn");
+    // uses the FIRST option's Ref, not the second's
+    expect(secondBody.methodProperties.ReturnAddressRef).toBe("return-address-ref-first");
+    expect(secondBody.methodProperties.IntDocNumber).toBe("20450000000001");
+    expect(secondBody.methodProperties.Destination).toBeUndefined();
+
+    expect(result).toEqual(created);
+  });
+
+  it("throws this module's own NovaPoshtaApiError when checkReturnPossible returns zero address options, no create call attempted (AC-20)", async () => {
+    const fetchMock = mockFetchSequence([() => successEnvelope([])]);
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const err = await additionalService
+      .createReturnIfPossible(createReturnIfPossiblePayload())
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).message).toBe("no return address available for this waybill");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("propagates Nova Poshta's own decline when the eligibility check itself declines, no create call attempted (AC-20)", async () => {
+    const fetchMock = mockFetchSequence([() => declinedEnvelope(["Waybill not found"], ["404"])]);
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const err = await additionalService
+      .createReturnIfPossible(createReturnIfPossiblePayload())
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    // Nova Poshta's own message, NOT this module's "no return address available for this waybill"
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Waybill not found"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["404"]);
+    expect((err as NovaPoshtaApiError).message).not.toBe("no return address available for this waybill");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

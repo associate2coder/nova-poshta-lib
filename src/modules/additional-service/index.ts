@@ -1,4 +1,4 @@
-import type { NovaPoshtaClient } from "../../client.js";
+import { NovaPoshtaApiError, type NovaPoshtaClient } from "../../client.js";
 import type {
   ChangeEWOrderListItem,
   CheckRedirectEditPossiblePayload,
@@ -8,6 +8,7 @@ import type {
   CheckReturnPossiblePayload,
   CheckWaybillEditPossiblePayload,
   CreateRedirectPayload,
+  CreateReturnIfPossiblePayload,
   CreateReturnPayload,
   CreateWaybillEditPayload,
   DeleteAdditionalServiceOrderPayload,
@@ -105,6 +106,13 @@ export interface AdditionalServiceModule {
   deleteAdditionalServiceOrder(
     payload: DeleteAdditionalServiceOrderPayload,
   ): Promise<DeletedAdditionalServiceOrder>;
+  /** public-api.md §3.5, AC-20, sad.md §4 decision 5 / Flow 1: composes this module's OWN
+   *  checkReturnPossible + createReturn internally (this repo's addToTodaysScanSheet precedent) —
+   *  never a second, independent client call. Uses the FIRST returned ReturnAddressOption's Ref as
+   *  ReturnAddressRef. An empty option list throws this module's own NovaPoshtaApiError ("no return
+   *  address available for this waybill") without attempting a create call; a check-declined response
+   *  propagates Nova Poshta's own NovaPoshtaApiError unchanged, likewise with zero create calls. */
+  createReturnIfPossible(payload: CreateReturnIfPossiblePayload): Promise<SavedReturnOrder>;
 }
 
 /** AC-03/AC-04/AC-05, sad.md §4 decision 4: shared builder for createReturn/calculateReturn — strips
@@ -118,7 +126,7 @@ function buildCreateReturnMethodProperties(payload: CreateReturnPayload): Record
 }
 
 export function createAdditionalServiceModule(client: NovaPoshtaClient): AdditionalServiceModule {
-  return {
+  const module: AdditionalServiceModule = {
     checkReturnPossible: (payload: CheckReturnPossiblePayload) =>
       client.request<ReturnAddressOption>(
         "AdditionalServiceGeneral",
@@ -222,5 +230,17 @@ export function createAdditionalServiceModule(client: NovaPoshtaClient): Additio
         "delete",
         payload as unknown as Record<string, unknown>,
       ),
+    createReturnIfPossible: async (payload: CreateReturnIfPossiblePayload) => {
+      const options = await module.checkReturnPossible({ Number: payload.IntDocNumber });
+      if (options.length === 0) {
+        throw new NovaPoshtaApiError("no return address available for this waybill");
+      }
+      return module.createReturn({
+        ...payload,
+        Destination: "SenderAddress",
+        ReturnAddressRef: options[0]!.Ref,
+      });
+    },
   };
+  return module;
 }

@@ -1,12 +1,15 @@
 import type { NovaPoshtaClient } from "../../client.js";
 import type {
+  ChangeEWOrderListItem,
   CheckRedirectEditPossiblePayload,
   CheckRedirectPossiblePayload,
   CheckReturnEditPossiblePayload,
   CheckReturnEditPossibleResult,
   CheckReturnPossiblePayload,
+  CheckWaybillEditPossiblePayload,
   CreateRedirectPayload,
   CreateReturnPayload,
+  CreateWaybillEditPayload,
   OrderListFilters,
   OrderPricingEstimate,
   RedirectOrderListItem,
@@ -20,8 +23,10 @@ import type {
   ReturnReasonSubtypeFilters,
   SavedRedirectOrder,
   SavedReturnOrder,
+  SavedWaybillEditOrder,
   UpdateRedirectPayload,
   UpdateReturnPayload,
+  WaybillEditPossibility,
 } from "../../types/additional-service.js";
 
 export interface AdditionalServiceModule {
@@ -78,6 +83,19 @@ export interface AdditionalServiceModule {
   /** public-api.md §3.2/§5, AC-14: thin pass-through to client.request() — filters travel to the
    *  wire unmodified, same OrderListFilters shape as getReturnOrdersList. */
   getRedirectionOrdersList(filters?: OrderListFilters): Promise<RedirectOrderListItem[]>;
+  /** public-api.md §3.3/§5, AC-15/AC-16: resolves ONE typed WaybillEditPossibility record via
+   *  client.requestFirst() — all 11 Can... flags are returned to the caller untouched, purely
+   *  informational (AC-16); this module performs no client-side gating on them. */
+  checkWaybillEditPossible(payload: CheckWaybillEditPossiblePayload): Promise<WaybillEditPossibility>;
+  /** public-api.md §3.3/§5, AC-15/AC-16: forwarded to save/orderChangeEW via client.requestFirst()
+   *  as-is — OrderType: "orderChangeEW" set internally, never caller-settable. No client-side gating
+   *  against checkWaybillEditPossible's Can... flags (AC-16); Nova Poshta's own accept/decline is the
+   *  sole outcome. */
+  createWaybillEdit(payload: CreateWaybillEditPayload): Promise<SavedWaybillEditOrder>;
+  /** public-api.md §3.3/§5, AC-17: thin pass-through to client.request() — same OrderListFilters
+   *  shape as the other list methods; resolves ChangeEWOrderListItem[] including the wire's own
+   *  Before/AfterChange field naming. */
+  getChangeEWOrdersList(filters?: OrderListFilters): Promise<ChangeEWOrderListItem[]>;
 }
 
 /** AC-03/AC-04/AC-05, sad.md §4 decision 4: shared builder for createReturn/calculateReturn — strips
@@ -170,6 +188,23 @@ export function createAdditionalServiceModule(client: NovaPoshtaClient): Additio
       client.request<RedirectOrderListItem>(
         "AdditionalServiceGeneral",
         "getRedirectionOrdersList",
+        (filters ?? {}) as unknown as Record<string, unknown>,
+      ),
+    checkWaybillEditPossible: (payload: CheckWaybillEditPossiblePayload) =>
+      client.requestFirst<WaybillEditPossibility>(
+        "AdditionalServiceGeneral",
+        "CheckPossibilityChangeEW",
+        payload as unknown as Record<string, unknown>,
+      ),
+    createWaybillEdit: (payload: CreateWaybillEditPayload) =>
+      client.requestFirst<SavedWaybillEditOrder>("AdditionalServiceGeneral", "save", {
+        ...payload,
+        OrderType: "orderChangeEW",
+      } as unknown as Record<string, unknown>),
+    getChangeEWOrdersList: (filters?: OrderListFilters) =>
+      client.request<ChangeEWOrderListItem>(
+        "AdditionalServiceGeneral",
+        "getChangeEWOrdersList",
         (filters ?? {}) as unknown as Record<string, unknown>,
       ),
   };

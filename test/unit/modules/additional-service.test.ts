@@ -2,11 +2,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createClient, NovaPoshtaApiError } from "../../../src/index.js";
 import { createAdditionalServiceModule } from "../../../src/modules/additional-service/index.js";
 import type {
+  ChangeEWOrderListItem,
   CreateRedirectPayload,
   CreateReturnPayload,
   CreateReturnToNewAddressPayload,
   CreateReturnToNewWarehousePayload,
   CreateReturnToSenderAddressPayload,
+  CreateWaybillEditPayload,
   OrderListFilters,
   OrderPricingEstimate,
   RedirectOrderListItem,
@@ -19,8 +21,10 @@ import type {
   ReturnReasonSubtypeFilters,
   SavedRedirectOrder,
   SavedReturnOrder,
+  SavedWaybillEditOrder,
   UpdateRedirectPayload,
   UpdateReturnPayload,
+  WaybillEditPossibility,
 } from "../../../src/types/additional-service.js";
 
 function mockFetchOnce(handler: (body: unknown) => { ok: boolean; status?: number; json: () => Promise<unknown> }) {
@@ -840,6 +844,228 @@ describe("additional-service module — getRedirectionOrdersList (T10, AC-14)", 
 
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(sentBody.calledMethod).toBe("getRedirectionOrdersList");
+    expect(sentBody.methodProperties).toEqual(filters);
+  });
+});
+
+// --- T11 (app layer, AC-15/AC-16/AC-17): checkWaybillEditPossible / createWaybillEdit /
+// getChangeEWOrdersList ---
+//
+// public-api.md §3.3/§5: checkWaybillEditPossible routes through client.requestFirst() to
+// CheckPossibilityChangeEW — resolves ONE typed WaybillEditPossibility record whose 11 Can... flags
+// are read-only/informational (AC-16): nothing in this module gates createWaybillEdit against them.
+// createWaybillEdit routes through client.requestFirst() to save/orderChangeEW (OrderType set
+// internally) — the payload is forwarded to the wire as-is, even for a field a prior
+// checkWaybillEditPossible call reported as not currently changeable; Nova Poshta's own
+// accept/decline is the sole outcome (AC-16, §6 error-contract row). getChangeEWOrdersList routes
+// through client.request() with calledMethod getChangeEWOrdersList, same OrderListFilters shape as
+// the other list methods, resolving ChangeEWOrderListItem[] including the wire's own
+// BeforeChangeSenderCounterparty/AfterChangeChangeSenderCounterparty naming (AC-17). None of the
+// three methods exist on the module yet (T4-T10 shipped only through the redirect group), so this
+// is expected to fail to compile/run until T11's implementation lands.
+
+function waybillEditPossibility(overrides: Partial<WaybillEditPossibility> = {}): WaybillEditPossibility {
+  return {
+    CanChangeSender: false,
+    CanChangeRecipient: true,
+    CanChangePayerTypeOrPaymentMethod: false,
+    CanChangeBackwardDeliveryDocuments: true,
+    CanChangeBackwardDeliveryMoney: false,
+    CanChangeCash2Card: true,
+    CanChangeBackwardDeliveryOther: false,
+    CanChangeAfterpaymentType: true,
+    CanChangeLiftingOnFloor: false,
+    CanChangeLiftingOnFloorWithElevator: true,
+    CanChangeFillingWarranty: false,
+    SenderCounterparty: "ACME LLC",
+    ContactPersonSender: "Jane Doe",
+    SenderPhone: "380500000000",
+    RecipientCounterparty: "Beta LLC",
+    ContactPersonRecipient: "John Roe",
+    RecipientPhone: "380500000001",
+    PayerType: "Sender",
+    PaymentMethod: "Cash",
+    ...overrides,
+  };
+}
+
+function createWaybillEditPayload(overrides: Partial<CreateWaybillEditPayload> = {}): CreateWaybillEditPayload {
+  return {
+    IntDocNumber: "20450000000001",
+    PaymentMethod: "Cash",
+    SenderContactName: "Jane Doe",
+    SenderPhone: "380500000000",
+    Recipient: "counterparty-ref-1",
+    RecipientContactName: "John Roe",
+    RecipientPhone: "380500000001",
+    PayerType: "Sender",
+    ...overrides,
+  };
+}
+
+function savedWaybillEditOrder(overrides: Partial<SavedWaybillEditOrder> = {}): SavedWaybillEditOrder {
+  return { Number: "20450000000001", Ref: "waybill-edit-order-ref-1", ...overrides };
+}
+
+function changeEWOrderListItem(overrides: Partial<ChangeEWOrderListItem> = {}): ChangeEWOrderListItem {
+  return {
+    OrderRef: "waybill-edit-order-ref-1",
+    OrderNumber: "1",
+    OrderStatus: "Accepted",
+    DocumentNumber: "20450000000001",
+    DateTime: "2026-09-23",
+    BeforeChangeSenderCounterparty: "ACME LLC",
+    AfterChangeChangeSenderCounterparty: "Beta LLC",
+    Cost: "45.00",
+    BeforeChangeSenderPhone: "380500000000",
+    AfterChangeSenderPhone: "380500000002",
+    ...overrides,
+  };
+}
+
+describe("additional-service module — checkWaybillEditPossible (T11, AC-15/AC-16)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("resolves ONE typed WaybillEditPossibility record via requestFirst() with all 11 Can... flags returned untouched, sending IntDocNumber, calledMethod CheckPossibilityChangeEW (AC-16)", async () => {
+    const record = waybillEditPossibility();
+    const fetchMock = mockFetchOnce(() => successEnvelope([record]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const result: WaybillEditPossibility = await additionalService.checkWaybillEditPossible({
+      IntDocNumber: "20450000000001",
+    });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(sentBody.calledMethod).toBe("CheckPossibilityChangeEW");
+    expect(sentBody.methodProperties).toEqual({ IntDocNumber: "20450000000001" });
+    // requestFirst() semantics: the resolved value IS the record itself, not [record]
+    expect(result).toEqual(record);
+    expect(Array.isArray(result)).toBe(false);
+    // each of the 11 Can... flags must reach the caller untouched, exactly as Nova Poshta reported it
+    expect(result.CanChangeSender).toBe(false);
+    expect(result.CanChangeRecipient).toBe(true);
+    expect(result.CanChangePayerTypeOrPaymentMethod).toBe(false);
+    expect(result.CanChangeBackwardDeliveryDocuments).toBe(true);
+    expect(result.CanChangeBackwardDeliveryMoney).toBe(false);
+    expect(result.CanChangeCash2Card).toBe(true);
+    expect(result.CanChangeBackwardDeliveryOther).toBe(false);
+    expect(result.CanChangeAfterpaymentType).toBe(true);
+    expect(result.CanChangeLiftingOnFloor).toBe(false);
+    expect(result.CanChangeLiftingOnFloorWithElevator).toBe(true);
+    expect(result.CanChangeFillingWarranty).toBe(false);
+  });
+
+  it("propagates NovaPoshtaApiError unchanged when the check declines (AC-15 decline)", async () => {
+    mockFetchOnce(() => declinedEnvelope(["Waybill not found"], ["404"]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const err = await additionalService
+      .checkWaybillEditPossible({ IntDocNumber: "no-such-waybill" })
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Waybill not found"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["404"]);
+  });
+});
+
+describe("additional-service module — createWaybillEdit (T11, AC-15/AC-16)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("creates the waybill edit via save/orderChangeEW (OrderType set internally), resolves typed { Number, Ref } (AC-15)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([savedWaybillEditOrder()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const result: SavedWaybillEditOrder = await additionalService.createWaybillEdit(createWaybillEditPayload());
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(sentBody.calledMethod).toBe("save");
+    expect(sentBody.methodProperties.OrderType).toBe("orderChangeEW");
+    expect(sentBody.methodProperties.IntDocNumber).toBe("20450000000001");
+    expect(sentBody.methodProperties.SenderContactName).toBe("Jane Doe");
+    expect(result).toEqual(savedWaybillEditOrder());
+  });
+
+  it("sends a change to a field checkWaybillEditPossible just reported as not currently changeable through to the wire as-is — no client-side gating against the Can... flags (AC-16)", async () => {
+    // Hypothetically, checkWaybillEditPossible just reported CanChangeSender: false. AC-16 says the
+    // 11 Can... flags are informational only — this module must not branch on them before calling
+    // createWaybillEdit. Nova Poshta's own response is the sole judge; the mock still returns success
+    // here because this test proves absence of client-side gating, not that Nova Poshta itself declines.
+    const fetchMock = mockFetchOnce(() => successEnvelope([savedWaybillEditOrder()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const payload = createWaybillEditPayload({
+      SenderContactName: "Changed Sender Name",
+      SenderPhone: "380500009999",
+    });
+
+    const result: SavedWaybillEditOrder = await additionalService.createWaybillEdit(payload);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    // the flagged-not-changeable fields still reach the wire byte-for-byte, unmodified, unblocked
+    expect(sentBody.methodProperties.SenderContactName).toBe("Changed Sender Name");
+    expect(sentBody.methodProperties.SenderPhone).toBe("380500009999");
+    expect(result).toEqual(savedWaybillEditOrder());
+  });
+
+  it("propagates NovaPoshtaApiError unchanged when Nova Poshta itself declines the create call (AC-16 decline)", async () => {
+    mockFetchOnce(() => declinedEnvelope(["Sender fields are not changeable for this waybill"], ["409"]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const err = await additionalService.createWaybillEdit(createWaybillEditPayload()).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Sender fields are not changeable for this waybill"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["409"]);
+  });
+});
+
+describe("additional-service module — getChangeEWOrdersList (T11, AC-17)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("unfiltered: sends calledMethod getChangeEWOrdersList, resolves typed ChangeEWOrderListItem[] including before/after field values (AC-17)", async () => {
+    const item = changeEWOrderListItem();
+    const fetchMock = mockFetchOnce(() => successEnvelope([item]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const result: ChangeEWOrderListItem[] = await additionalService.getChangeEWOrdersList();
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(sentBody.calledMethod).toBe("getChangeEWOrdersList");
+    expect(result).toEqual([item]);
+    // the wire's own before/after naming (AfterChangeChangeSenderCounterparty is not a typo) — proves
+    // both the before and after values are present and distinct on the resolved record
+    expect(result[0]!.BeforeChangeSenderCounterparty).toBe("ACME LLC");
+    expect(result[0]!.AfterChangeChangeSenderCounterparty).toBe("Beta LLC");
+    expect(result[0]!.BeforeChangeSenderPhone).toBe("380500000000");
+    expect(result[0]!.AfterChangeSenderPhone).toBe("380500000002");
+  });
+
+  it("filter pass-through: Number/BeginDate/EndDate/Page/Limit reach the wire call unmodified, no client-side re-filtering/sorting/pagination (AC-17)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([changeEWOrderListItem()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const filters: OrderListFilters = {
+      Number: "20450000000001",
+      BeginDate: "01.09.2026",
+      EndDate: "23.09.2026",
+      Page: 1,
+      Limit: 20,
+    };
+
+    await additionalService.getChangeEWOrdersList(filters);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.calledMethod).toBe("getChangeEWOrdersList");
     expect(sentBody.methodProperties).toEqual(filters);
   });
 });

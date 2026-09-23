@@ -24,6 +24,9 @@ export interface NovaPoshtaSuccessEnvelope<T> {
   data: T[];
   errors: string[];
   warnings: string[];
+  /** Passed through as-is from the raw envelope's own `info` field (ADR-0001) — present on some
+   *  Nova Poshta responses (e.g. payment-form defaults), absent on most. */
+  info?: unknown;
 }
 
 export interface NovaPoshtaClient {
@@ -39,6 +42,10 @@ export interface NovaPoshtaClient {
     calledMethod: string,
     methodProperties?: Record<string, unknown>,
   ): Promise<NovaPoshtaSuccessEnvelope<T>>;
+  /** Same validation/error contract as `request()`, but resolves only the first element of the
+   *  returned array — and throws `NovaPoshtaApiError` (naming `modelName`/`calledMethod`) if that
+   *  array is empty (ADR-0002). */
+  requestFirst<T>(modelName: string, calledMethod: string, methodProperties?: Record<string, unknown>): Promise<T>;
 }
 
 export function createClient(apiKey: string): NovaPoshtaClient {
@@ -95,6 +102,7 @@ export function createClient(apiKey: string): NovaPoshtaClient {
       data: envelope.data,
       errors: Array.isArray(envelope.errors) ? envelope.errors : [],
       warnings: Array.isArray(envelope.warnings) ? envelope.warnings : [],
+      info: envelope.info,
     };
   }
 
@@ -113,6 +121,20 @@ export function createClient(apiKey: string): NovaPoshtaClient {
       methodProperties: Record<string, unknown> = {},
     ): Promise<NovaPoshtaSuccessEnvelope<T>> {
       return sendRequest<T>(modelName, calledMethod, methodProperties);
+    },
+    async requestFirst<T>(
+      modelName: string,
+      calledMethod: string,
+      methodProperties: Record<string, unknown> = {},
+    ): Promise<T> {
+      const records = await client.request<T>(modelName, calledMethod, methodProperties);
+      const [first] = records;
+      if (first === undefined) {
+        throw new NovaPoshtaApiError(
+          `Nova Poshta API response for ${modelName}.${calledMethod} reported success but returned no record`,
+        );
+      }
+      return first;
     },
   };
 

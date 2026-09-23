@@ -18,6 +18,7 @@ import {
   createInternetDocumentModule,
   createTrackingDocumentModule,
   createScanSheetModule,
+  createAdditionalServiceModule,
 } from "nova-poshta-lib";
 
 const client = createClient(process.env.NOVA_POSHTA_API_KEY!);
@@ -26,6 +27,7 @@ const counterparty = createCounterpartyModule(client);
 const internetDocument = createInternetDocumentModule(client);
 const trackingDocument = createTrackingDocumentModule(client);
 const scanSheet = createScanSheetModule(client);
+const additionalService = createAdditionalServiceModule(client);
 
 const cities = await address.getCities({ FindByString: "Київ" });
 
@@ -114,10 +116,29 @@ for (const item of inserted) {
     console.warn(item.Ref, item.Errors);
   }
 }
+
+// createReturnIfPossible checks eligibility then creates a plain return to the sender's own
+// address in one call — the convenience path for the most common return case (a raw
+// checkReturnPossible + createReturn pair is also available for the other two destination
+// variants, or when you need the eligibility check's own result first).
+//
+// This convenience method uses checkReturnPossible's per-option `Ref` as createReturn's own
+// `ReturnAddressRef` field — confirmed against Nova Poshta's official documentation
+// (docs/features/additional-service/spec.md §1 "Official documentation quotes", 2026-09-23). If
+// Nova Poshta itself declines the eligibility check or the create call, the failure still surfaces
+// as this library's standard NovaPoshtaApiError, same as every other method.
+const createdReturn = await additionalService.createReturnIfPossible({
+  IntDocNumber: waybill!.IntDocNumber,
+  PaymentMethod: "Cash",
+  Reason: "<return reason ref, from additionalService.getReturnReasons()>",
+});
+
+console.log(createdReturn.Number, createdReturn.Ref);
 ```
 
-> `common`, `address`, `counterparty`, `internet-document`, `tracking-document`, and `scan-sheet` are
-> the domain modules shipped so far — more are added incrementally under `src/modules/`.
+> `common`, `address`, `counterparty`, `internet-document`, `tracking-document`, `scan-sheet`, and
+> `additional-service` are the domain modules shipped so far — more are added incrementally under
+> `src/modules/`.
 
 ## Development
 

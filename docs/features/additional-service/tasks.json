@@ -1,0 +1,162 @@
+{
+  "slug": "additional-service",
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Define additional-service domain types",
+      "layer": "domain",
+      "deps": [],
+      "acs": ["AC-04", "AC-16"],
+      "dod": "src/types/additional-service.ts compiles with zero any; CreateReturnPayload is the 3-variant Destination-discriminated union per AC-04 (SenderAddress/NewAddress/NewWarehouse), never one flat optional-everything shape; the 6 items contracts/public-api.md §10 lists as open (ReturnAddressRef mapping, CheckReturnEditPossiblePayload.Address, CheckRedirectEditPossiblePayload's field list, Update*Payload's Ref name + response shape, CreateRedirectPayload.ServiceType's enum) are typed defensively (unknown/Record<string, unknown>/plain string), never falsely precise; tsc --noEmit and lint pass",
+      "files_hint": ["src/types/additional-service.ts"]
+    },
+    {
+      "id": "T2",
+      "title": "Add requestFirst<T>() and info exposure to the core client",
+      "layer": "infra",
+      "deps": [],
+      "acs": [],
+      "dod": "NovaPoshtaClient gains requestFirst<T>() (ADR-0002: resolves request()'s array, returns its first element, throws NovaPoshtaApiError on an empty array with a message naming the modelName/calledMethod) and NovaPoshtaSuccessEnvelope<T> gains an optional info field surfaced by requestEnvelope() (ADR-0001); both are purely additive — request()/requestEnvelope()'s existing behavior is unchanged; unit tests cover requestFirst()'s non-empty and empty-array cases and requestEnvelope()'s info pass-through; tsc --noEmit and lint pass",
+      "files_hint": ["src/client.ts", "test/unit/client.test.ts"]
+    },
+    {
+      "id": "T3",
+      "title": "Refactor internet-document onto the shared requestFirst<T>()",
+      "layer": "app",
+      "deps": ["T2"],
+      "acs": [],
+      "dod": "internet-document's private firstOrThrow() is removed; getDocumentPrice/getDocumentDeliveryDate call client.requestFirst() instead; internet-document's existing unit suite (test/unit/modules/internet-document.test.ts) passes unmodified in behavior — same call sites, same thrown-error message shape, only the import source changes (sad.md §11 last row)",
+      "files_hint": ["src/modules/internet-document/index.ts"]
+    },
+    {
+      "id": "T4",
+      "title": "Implement checkReturnPossible and checkReturnEditPossible",
+      "layer": "app",
+      "deps": ["T1", "T2"],
+      "acs": ["AC-01", "AC-02", "AC-06"],
+      "dod": "checkReturnPossible has a happy-path unit test (returns typed ReturnAddressOption[] including NonCash) and an authorization-decline test (recipient-key call throws NovaPoshtaApiError, AC-02); checkReturnEditPossible has a happy-path test asserting the assembled { options, info } result reads both requestEnvelope()'s data and info fields (ADR-0001), and a decline test",
+      "files_hint": ["src/modules/additional-service/index.ts"]
+    },
+    {
+      "id": "T5",
+      "title": "Implement createReturn and calculateReturn with the discriminant payload builder",
+      "layer": "app",
+      "deps": ["T1", "T2"],
+      "acs": ["AC-02", "AC-03", "AC-04", "AC-05"],
+      "dod": "a shared internal payload builder strips CreateReturnPayload's Destination discriminant and sets OrderType: \"orderCargoReturn\" before the wire call, for all 3 variants; createReturn has a happy-path test per variant (returns { Number, Ref }) and an authorization-decline test (AC-02); calculateReturn has a test asserting the outgoing request carries OnlyGetPricing: \"1\" and no order is created; a compile-time test proves mixing two variants' fields under one Destination tag fails to compile, including when the payload is assembled field-by-field in a variable (AC-04)",
+      "files_hint": ["src/modules/additional-service/index.ts"]
+    },
+    {
+      "id": "T6",
+      "title": "Implement updateReturn",
+      "layer": "app",
+      "deps": ["T1", "T2"],
+      "acs": ["AC-06", "AC-07"],
+      "dod": "updateReturn has a happy-path unit test (applies a corrected field, resolves the response as typed) and a status-decline test (a non-Accepted return's update throws NovaPoshtaApiError, AC-07) — no client-side status check is added",
+      "files_hint": ["src/modules/additional-service/index.ts"]
+    },
+    {
+      "id": "T7",
+      "title": "Implement getReturnOrdersList, getReturnReasons, getReturnReasonsSubtypes",
+      "layer": "app",
+      "deps": ["T1", "T2"],
+      "acs": ["AC-08"],
+      "dod": "each of the three methods has a unit test for the unfiltered happy path, and getReturnOrdersList/getReturnReasonsSubtypes each have a second test asserting a documented filter (Number/Ref/BeginDate/EndDate/Page/Limit, ReasonRef) is passed through unmodified with no client-side re-filtering, sorting, or pagination (AC-08)",
+      "files_hint": ["src/modules/additional-service/index.ts"]
+    },
+    {
+      "id": "T8",
+      "title": "Implement checkRedirectPossible and checkRedirectEditPossible",
+      "layer": "app",
+      "deps": ["T1", "T2"],
+      "acs": ["AC-09", "AC-12"],
+      "dod": "checkRedirectPossible has a happy-path unit test asserting it resolves one typed record via requestFirst() (not an array) and a decline test; checkRedirectEditPossible has a happy-path test (resolves the Partial<RedirectPossibility> subset) and a decline test",
+      "files_hint": ["src/modules/additional-service/index.ts"]
+    },
+    {
+      "id": "T9",
+      "title": "Implement createRedirect and calculateRedirect",
+      "layer": "app",
+      "deps": ["T1", "T2"],
+      "acs": ["AC-09", "AC-10", "AC-11"],
+      "dod": "createRedirect has a happy-path unit test (returns { Number, Ref }) and a test asserting the Recipient counterparty Ref is passed through unmodified with no existence/ownership check of its own (AC-10); calculateRedirect has a test asserting the outgoing request carries OnlyGetPricing: \"1\" and no order is created (AC-11)",
+      "files_hint": ["src/modules/additional-service/index.ts"]
+    },
+    {
+      "id": "T10",
+      "title": "Implement updateRedirect and getRedirectionOrdersList",
+      "layer": "app",
+      "deps": ["T1", "T2"],
+      "acs": ["AC-12", "AC-13", "AC-14"],
+      "dod": "updateRedirect has a happy-path unit test and a field-permission-decline test (a rejected field surfaces as NovaPoshtaApiError, AC-13) with no role parameter in the payload and no client-side role check; getRedirectionOrdersList has a happy-path test and a filter-pass-through test (AC-14)",
+      "files_hint": ["src/modules/additional-service/index.ts"]
+    },
+    {
+      "id": "T11",
+      "title": "Implement checkWaybillEditPossible, createWaybillEdit, getChangeEWOrdersList",
+      "layer": "app",
+      "deps": ["T1", "T2"],
+      "acs": ["AC-15", "AC-16", "AC-17"],
+      "dod": "checkWaybillEditPossible has a happy-path unit test asserting all 11 Can... flags are returned untouched (AC-16); createWaybillEdit has a happy-path test (returns { Number, Ref }) and a test asserting a change to a flagged-not-changeable field is still sent as-is, with no client-side gating (AC-16); getChangeEWOrdersList has a happy-path test including before/after field values (AC-17)",
+      "files_hint": ["src/modules/additional-service/index.ts"]
+    },
+    {
+      "id": "T12",
+      "title": "Implement deleteAdditionalServiceOrder",
+      "layer": "app",
+      "deps": ["T1", "T2"],
+      "acs": ["AC-18", "AC-19"],
+      "dod": "deleteAdditionalServiceOrder has a happy-path unit test covering all three order kinds (return/redirect/waybill-edit Ref, same method) and a status-decline test for a non-Accepted waybill-edit order (AC-19) — no client-side status check is added",
+      "files_hint": ["src/modules/additional-service/index.ts"]
+    },
+    {
+      "id": "T13",
+      "title": "Implement createReturnIfPossible",
+      "layer": "app",
+      "deps": ["T4", "T5"],
+      "acs": ["AC-20"],
+      "dod": "createReturnIfPossible has a happy-path unit test (checks then creates in one call, returns the same shape createReturn would); an empty-option-list test asserting it throws this module's own NovaPoshtaApiError (\"no return address available for this waybill\") with zero create calls attempted; and a check-declined test asserting it propagates Nova Poshta's own decline with zero create calls attempted",
+      "files_hint": ["src/modules/additional-service/index.ts"]
+    },
+    {
+      "id": "T14",
+      "title": "Wire additional-service module into the public package surface",
+      "layer": "wiring",
+      "deps": ["T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12", "T13"],
+      "acs": [],
+      "dod": "createAdditionalServiceModule and its 19 exported types import and type-check from nova-poshta-lib's public entry point; no cross-module runtime call to internet-document/address/counterparty is added",
+      "files_hint": ["src/index.ts"]
+    },
+    {
+      "id": "T15",
+      "title": "Unit test suite for additional-service's shared error contract",
+      "layer": "tests",
+      "deps": ["T14"],
+      "acs": [
+        "AC-01", "AC-02", "AC-03", "AC-04", "AC-05", "AC-06", "AC-07", "AC-08", "AC-09", "AC-10",
+        "AC-11", "AC-12", "AC-13", "AC-14", "AC-15", "AC-16", "AC-17", "AC-18", "AC-19", "AC-20",
+        "AC-21", "AC-22", "AC-23"
+      ],
+      "dod": "npm test passes with every AC-01..AC-23 covered by a named/tagged test, including a shared error-contract fixture (network failure, envelope-level decline, malformed data) exercised across all 19 methods with fetch mocked (AC-21/AC-22/AC-23), the OnlyGetPricing:\"1\" isolation check for both calculateReturn/calculateRedirect, and the <=5ms overhead benchmark across the 18 raw methods (createReturnIfPossible excluded by design)",
+      "files_hint": ["test/unit/modules/additional-service.test.ts"]
+    },
+    {
+      "id": "T16",
+      "title": "Extend published-build type-surface check",
+      "layer": "tests",
+      "deps": ["T14"],
+      "acs": [],
+      "dod": "test/unit/build-surface.test.ts fails if any of additional-service's 19 method identifiers is missing from dist/index.d.ts or dist/index.d.cts, and passes after npm run build",
+      "files_hint": ["test/unit/build-surface.test.ts"]
+    },
+    {
+      "id": "T17",
+      "title": "Update README usage example",
+      "layer": "docs",
+      "deps": ["T14"],
+      "acs": [],
+      "dod": "README's Usage section shows a real, type-checked additional-service call (createReturn or createReturnIfPossible) and documents the open ReturnAddressRef-mapping risk next to it (contracts/public-api.md header, sad.md §11 row 1)",
+      "files_hint": ["README.md"]
+    }
+  ]
+}

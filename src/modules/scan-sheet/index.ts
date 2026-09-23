@@ -11,14 +11,19 @@ import type {
   ScanSheetListItem,
 } from "../../types/scan-sheet.js";
 
+/** Nova Poshta's scan-sheet methods — groups of waybills bundled for courier pickup. */
 export interface ScanSheetModule {
   /** sad.md §4 decision 2: delegates straight to client.request(), no client-side split/cap/reorder
    *  of DocumentRefs. Fills `Ref` with `""` internally when the caller omits it — the caller-facing
    *  `Ref` stays optional (AC-01/AC-02). */
   insertDocuments(payload: InsertDocumentsPayload): Promise<InsertDocumentsItem[]>;
+  /** Fetches a scan sheet's full detail. */
   getScanSheet(payload: GetScanSheetPayload): Promise<ScanSheetDetail[]>;
+  /** Lists all scan sheets. */
   getScanSheetList(): Promise<ScanSheetListItem[]>;
+  /** Removes documents from a scan sheet. */
   removeDocuments(payload: RemoveDocumentsPayload): Promise<RemoveDocumentsItem[]>;
+  /** Deletes scan sheets entirely. */
   deleteScanSheet(payload: DeleteScanSheetPayload): Promise<DeleteScanSheetItem[]>;
   /** spec.md §1 Decision override — convenience wrapper: calls getScanSheetList once, finds today's
    *  (Europe/Kyiv calendar date) most recently created still-unprinted sheet if one exists, then adds
@@ -74,6 +79,7 @@ function toComparableTimestamp(dateTime: unknown): string {
   return `${extractDatePart(dateTime)} ${timeMatch ? timeMatch[1] : ""}`;
 }
 
+/** Creates the {@link ScanSheetModule} bound to the given {@link NovaPoshtaClient}. */
 export function createScanSheetModule(client: NovaPoshtaClient): ScanSheetModule {
   const insertDocuments = (payload: InsertDocumentsPayload) =>
     client.request<InsertDocumentsItem>("ScanSheet", "insertDocuments", {

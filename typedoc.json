@@ -6,10 +6,10 @@
   "excludePrivate": true,
   "excludeProtected": true,
   "validation": {
-    "notExported": true,
+    "notExported": false,
     "invalidLink": true,
     "notDocumented": true
   },
   "requiredToBeDocumented": ["Enum", "Variable", "Function", "Class", "Interface", "TypeAlias", "Method"],
-  "treatWarningsAsErrors": false
+  "treatWarningsAsErrors": true
 }

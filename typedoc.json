@@ -8,7 +8,8 @@
   "validation": {
     "notExported": true,
     "invalidLink": true,
-    "notDocumented": false
+    "notDocumented": true
   },
+  "requiredToBeDocumented": ["Enum", "Variable", "Function", "Class", "Interface", "TypeAlias", "Method"],
   "treatWarningsAsErrors": false
 }

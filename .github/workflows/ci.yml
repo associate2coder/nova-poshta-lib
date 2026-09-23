@@ -20,3 +20,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run lint
+      # Report-only (AC-06): typedoc.json's validation.notDocumented is on, so this prints every
+      # missing-comment warning, but treatWarningsAsErrors stays off — it cannot fail this step yet.
+      # T8 flips treatWarningsAsErrors on once the report confirms zero missing.
+      - run: npx typedoc --emit none

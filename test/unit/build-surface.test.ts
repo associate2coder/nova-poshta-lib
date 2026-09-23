@@ -73,6 +73,28 @@ const SCAN_SHEET_METHOD_NAMES = [
   "addToTodaysScanSheet",
 ];
 
+const ADDITIONAL_SERVICE_METHOD_NAMES = [
+  "checkReturnPossible",
+  "checkReturnEditPossible",
+  "createReturn",
+  "calculateReturn",
+  "updateReturn",
+  "getReturnOrdersList",
+  "getReturnReasons",
+  "getReturnReasonsSubtypes",
+  "checkRedirectPossible",
+  "checkRedirectEditPossible",
+  "createRedirect",
+  "calculateRedirect",
+  "updateRedirect",
+  "getRedirectionOrdersList",
+  "checkWaybillEditPossible",
+  "createWaybillEdit",
+  "getChangeEWOrdersList",
+  "deleteAdditionalServiceOrder",
+  "createReturnIfPossible",
+];
+
 function declarationPath(relativePath: string): string {
   return fileURLToPath(new URL(`../../${relativePath.replace(/^\.\//, "")}`, import.meta.url));
 }
@@ -253,6 +275,25 @@ describe("published build surface (AC-07)", () => {
 
     for (const method of SCAN_SHEET_METHOD_NAMES) {
       expect(interfaceBody, `expected ${relativePath}'s ScanSheetModule to declare ${method}`).toMatch(
+        new RegExp(`\\b${method}\\b`),
+      );
+    }
+  });
+
+  it.each([
+    [ESM_TYPES_PATH, "ESM"],
+    [CJS_TYPES_PATH, "CJS"],
+  ])("%s (%s) declares createAdditionalServiceModule and all 19 additional-service identifiers (T16)", (relativePath) => {
+    const contents = readFreshDeclaration(relativePath);
+
+    expect(contents).toMatch(/\bcreateAdditionalServiceModule\b/);
+
+    const interfaceMatch = contents.match(/interface AdditionalServiceModule \{([\s\S]*?)\n\}/);
+    expect(interfaceMatch, `expected ${relativePath} to declare an AdditionalServiceModule interface`).not.toBeNull();
+    const interfaceBody = interfaceMatch![1];
+
+    for (const method of ADDITIONAL_SERVICE_METHOD_NAMES) {
+      expect(interfaceBody, `expected ${relativePath}'s AdditionalServiceModule to declare ${method}`).toMatch(
         new RegExp(`\\b${method}\\b`),
       );
     }

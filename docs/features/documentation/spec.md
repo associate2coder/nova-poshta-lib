@@ -19,7 +19,7 @@ This is the roadmap's final step (step 8 of 8), deliberately sequenced last: it 
 
 The committed approach is to add TSDoc comments to the library's whole current public surface (the core client plus all seven modules — on the order of 150 exported symbols as of 2026-09-23), generate a static reference site with TypeDoc, and enforce completeness in CI using TypeDoc's own three-flag combination (a documentation-required list, a check for anything missing from it, and a setting that turns that into a hard build failure) so a pull request that adds an undocumented export fails CI. A competitive-research pass found no comparable open-source TypeScript client library that has actually shipped this exact three-flag combination gating a pull request before — the closest precedent (the Model Context Protocol TypeScript SDK) validates but only warns, and the closest hard-fail precedent is TypeDoc's own documentation, not a peer library in production — so this feature includes a one-time validation spike that runs the check against this library's already-TSDoc'd codebase first, to catch false positives before the hard-fail rule is relied on for real. A failure-mode pass surfaced the risk that the generated site could show methods before they are actually installable if it rebuilt on every merge to main, since this repo's release process is a separate, later version-bump-PR step.
 
-Decision override: the reference site rebuilds only when a new version actually reaches npm (the same moment the release workflow publishes), not on every merge to main — closing the gap the failure-mode pass surfaced. Decision override: internal-only re-exports (a shared record-base type, a lookup-table constant, and similar plumbing surfaced by the failure-mode pass — e.g. `AddressReferenceRecordBase`, `CounterpartyRecordBase`, `SearchWrapper`, `OpenEnum`, `TRACKING_STATUS_CODES`) are marked with TypeDoc's `@internal` tag and excluded from both the generated site and the CI coverage requirement, keeping the reference focused on what a consuming developer actually calls — the coverage requirement (§2, §5, §6) therefore always means "every **non-internal** exported symbol," not literally every export. Decision override: only type/function/parameter/return-level comments are required, not a comment on every individual field of a wire-shape type — this library's fields already mirror Nova Poshta's own field names, and per-field coverage would multiply the writing effort several-fold for comparatively little reader benefit. Decision override: this session also evaluated where the generated reference is hosted and settled on GitHub Pages — a free static-site host built into GitHub — as the concrete target; recorded here as a fixed decision for `design` to wire up, not to be re-litigated there.
+Decision override: the reference site rebuilds only when a new version actually reaches npm (the same moment the release workflow publishes), not on every merge to main — closing the gap the failure-mode pass surfaced. There is no separate manual or on-demand rebuild trigger — a documentation-only fix reaches the public site only via the next npm release, same as any other change. Decision override: internal-only re-exports (a shared record-base type, a lookup-table constant, and similar plumbing surfaced by the failure-mode pass — e.g. `AddressReferenceRecordBase`, `CounterpartyRecordBase`, `SearchWrapper`, `OpenEnum`, `TRACKING_STATUS_CODES`) are marked with TypeDoc's `@internal` tag and excluded from both the generated site and the CI coverage requirement, keeping the reference focused on what a consuming developer actually calls — the coverage requirement (§2, §5, §6) therefore always means "every **non-internal** exported symbol," not literally every export. Decision override: only type/function/parameter/return-level comments are required, not a comment on every individual field of a wire-shape type — this library's fields already mirror Nova Poshta's own field names, and per-field coverage would multiply the writing effort several-fold for comparatively little reader benefit. Decision override: this session also evaluated where the generated reference is hosted and settled on GitHub Pages — a free static-site host built into GitHub — as the concrete target; recorded here as a fixed decision for `design` to wire up, not to be re-litigated there.
 
 ## 2. Goals
 
@@ -33,6 +33,8 @@ Decision override: the reference site rebuilds only when a new version actually 
 - Documenting every individual field of large wire-shape types is out of scope — one type-level comment plus documented function/parameter/return signatures is the scope; field names already mirror Nova Poshta's own naming.
 - Archiving per-version documentation is out of scope — only the latest released version is shown; a developer pinned to an older version reads that version's own installed TSDoc comments directly instead.
 - Registering the new CI check as a required branch-protection status check in GitHub's repository settings is out of scope for this feature — that is a repo-admin action outside this codebase, consistent with how this repo already treats branch-protection configuration (`docs/architecture-map.md`'s Constraints note); tracked as an open question below.
+- Automated post-publish verification that the live reference site actually loads (a smoke/health check of the published URL) is out of scope — the rebuild step's own success/failure signal (AC-05) is this feature's only freshness guarantee.
+- Building automated tooling to scan or scrape GitHub issues for the §7 support-question KPI is out of scope — that KPI is tracked by manual periodic review, not by tooling this feature builds.
 
 ## 4. User stories
 
@@ -45,7 +47,7 @@ Decision override: the reference site rebuilds only when a new version actually 
 ### US-02: Trust full coverage
 
 **As a** consuming developer
-**I want** every exported method and type to appear on the reference with a real description
+**I want** every exported method and type to appear on the reference with a documentation comment describing it
 **So that** I never have to guess about an undocumented piece
 
 ### US-03: Get blocked on missing docs
@@ -82,9 +84,9 @@ Decision override: the reference site rebuilds only when a new version actually 
 
 ### AC-02 (US-03) — error
 
-**Given** a contributor's pull request adds a new exported function or type without a comment
+**Given** a contributor's pull request adds a new exported function or type with no documentation comment at all
 **When** CI runs the documentation check
-**Then** it fails and names exactly which exported symbol is missing its comment
+**Then** it fails and names exactly which exported symbol is missing its comment — presence of a comment is what's checked, not its length or quality (see §6.1)
 
 ### AC-03 (US-04) — authorization (visibility boundary)
 
@@ -94,21 +96,21 @@ Decision override: the reference site rebuilds only when a new version actually 
 
 ### AC-04 (US-02) — domain invariant
 
-**Given** the full existing non-internal public surface (core client + all 7 modules)
+**Given** the full existing non-internal public surface (core client + all 7 modules) — "non-internal exported symbol" means exactly what `src/index.ts` re-exports as this library's public surface (per `CLAUDE.md`'s own definition of that file), minus whatever the §8 `@internal`-marking open question ultimately excludes; this AC cannot be evaluated until that open question closes
 **When** the one-time TSDoc pass is complete and CI's documentation check runs
 **Then** it reports zero non-internal exported symbols missing a comment — "every public export is documented" holds for the whole current surface, not just new code
 
 ### AC-05 (US-05) — cross-context
 
-**Given** a new version has just been published to npm
+**Given** a new **stable** version has just been published to npm (a pre-release/beta version does not trigger this)
 **When** that release completes
-**Then** the published reference site rebuilds and reflects exactly that version — never an older or not-yet-released state
+**Then** the published reference site rebuilds and reflects exactly that version — never an older or not-yet-released state; rebuilding is a separate mechanism from the npm publish step itself, so a rebuild failure never blocks, delays, or undoes the already-completed npm publish — it surfaces as a visible failure for the team to fix
 
 ### AC-06 (US-06) — happy path (rollout safety)
 
-**Given** the documentation CI check is enabled for the first time
-**When** it runs against the newly-completed TSDoc pass across the whole existing codebase
-**Then** it passes with zero false-positive failures before the hard-fail rule is relied on for future contributions
+**Given** the documentation CI check is enabled for the first time, run in report-only mode against the newly-completed TSDoc pass across the whole existing codebase
+**When** that run completes
+**Then** it reports zero missing comments — the same zero-missing outcome AC-04 requires — confirming the check's own configuration (what counts as documented, what's excluded as internal) is correct before the hard-fail rule starts blocking future pull requests
 
 ## 6. Non-functional requirements
 
@@ -116,10 +118,10 @@ Decision override: the reference site rebuilds only when a new version actually 
 
 | Aspect | Target | Measurement |
 |---|---|---|
-| TypeDoc site build time | ≤ 60s | CI job step duration (the `typedoc` build step) |
-| Documentation-check step added to CI | ≤ 30s added to the existing pipeline | CI job step duration |
+| TypeDoc site build time (observed budget, not a CI-failing threshold) | ≤ 60s, on this repo's existing GitHub-hosted `ubuntu-latest` runner | CI job step duration (the `typedoc` build step) |
+| Documentation-check step added to CI (observed budget, not a CI-failing threshold) | ≤ 30s added to the existing pipeline, same runner class | CI job step duration |
 | Docs-site freshness after a release | ≤ 5 min from npm publish to site update | GitHub Actions workflow run timestamps |
-| Coverage of non-internal exported symbols | 100% (0 missing) | TypeDoc's own validation report, 0 warnings |
+| Coverage of non-internal exported symbols (this is the only row that fails CI — see AC-02) | 100% (0 missing) | TypeDoc's own validation report, 0 warnings |
 
 ## 6.1 Security / privacy
 
@@ -130,7 +132,7 @@ Decision override: the reference site rebuilds only when a new version actually 
   - Malicious content embedded in a TSDoc comment rendered on the public site: TypeDoc escapes comment text by default; normal PR review of docs-only diffs is the backstop.
   - A secret or live API key pasted into an example comment and published publicly: mitigated by standard PR review; no automated secret scanning is added by this feature.
   - Placeholder/low-effort comments satisfying the presence check without being useful: the CI check verifies presence only, not quality — caught by ordinary PR review (see §3 non-goals).
-  - A compromised or misconfigured automated publishing step pushing unintended content to the public site: mitigated by pinning any third-party automation used for publishing to an explicit version and scoping its permissions to only what publishing needs — the concrete wiring is a `design`-stage decision.
+  - A compromised or misconfigured automated publishing step pushing unintended content to the public site: mitigated by pinning any third-party automation used for publishing to an explicit version and scoping its permissions to only what publishing needs — the concrete wiring is a `design`-stage decision. The publishing mechanism must not introduce a new long-lived credential (e.g. a personal access token stored as a repository secret) — it must use a short-lived, narrowly-scoped credential instead, consistent with how this repo's existing release workflow is already permissioned. The docs rebuild also runs as a mechanism separate from the existing release-to-npm workflow, so a compromise or bug in it cannot reach the npm publish step itself.
 - **Security review:** N/A — no new authz boundary, no personal data, no change to the library's Nova Poshta wire behavior; purely additive dev-tooling producing a static, fully public output.
 
 ## 7. Metrics / KPIs
@@ -138,7 +140,7 @@ Decision override: the reference site rebuilds only when a new version actually 
 - **TSDoc coverage of exported symbols** — baseline: 0% (today), target: 100% before the CI hard-fail rule is enabled.
 - **False-positive rate of the new CI check against existing code** — baseline: untested, target: 0 false positives in the validation spike, before the hard-fail rule is turned on.
 - **Docs-site freshness lag (release → site update)** — baseline: N/A (no site exists yet), target: ≤ 5 minutes, confirmed across the first 3 real releases after launch.
-- **Consuming-developer support questions attributable to missing/unclear reference docs** — baseline: 0 (this repo is 3 days old as of this spec and has no reference site yet, so there is no prior window to sample); measurement plan: starting from the site's launch, scan new GitHub issues for phrases like "how do I", "is there docs for", "what does X do". Target: average no more than 1 such issue per month across the first 90 days after launch — any month exceeding that is a signal the reference needs improvement.
+- **Consuming-developer support questions attributable to missing/unclear reference docs** — baseline: 0 (this repo is 3 days old as of this spec and has no reference site yet, so there is no prior window to sample); measurement plan: starting from the site's launch, the Tech Lead manually and periodically scans new GitHub issues for phrases like "how do I", "is there docs for", "what does X do" — no automated scanning tool is built by this feature (see §3 non-goals). Target: average no more than 1 such issue per month across the first 90 days after launch — any month exceeding that is a signal the reference needs improvement.
 
 ## 8. Open questions
 

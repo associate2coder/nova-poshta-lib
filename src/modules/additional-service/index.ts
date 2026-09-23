@@ -1,11 +1,14 @@
 import type { NovaPoshtaClient } from "../../client.js";
 import type {
+  CheckRedirectEditPossiblePayload,
+  CheckRedirectPossiblePayload,
   CheckReturnEditPossiblePayload,
   CheckReturnEditPossibleResult,
   CheckReturnPossiblePayload,
   CreateReturnPayload,
   OrderListFilters,
   OrderPricingEstimate,
+  RedirectPossibility,
   ReturnAddressOption,
   ReturnEditInfo,
   ReturnEditOption,
@@ -47,6 +50,13 @@ export interface AdditionalServiceModule {
   /** public-api.md §3.1/§5, AC-08: thin pass-through to client.request() — ReasonRef travels to
    *  the wire unmodified; no client-side re-filtering. */
   getReturnReasonsSubtypes(filters?: ReturnReasonSubtypeFilters): Promise<ReturnReasonSubtype[]>;
+  /** public-api.md §3.2/§5, AC-09, sad.md §5's asymmetry note: unlike checkReturnPossible's array
+   *  of destination choices, checkPossibilityForRedirecting resolves ONE info record — uses
+   *  client.requestFirst(), not client.request(). */
+  checkRedirectPossible(payload: CheckRedirectPossiblePayload): Promise<RedirectPossibility>;
+  /** public-api.md §3.2/§5, AC-12: same wire calledMethod as checkRedirectPossible, dispatched by
+   *  payload shape (OrderRef + fields) — resolves the same record type, partially populated. */
+  checkRedirectEditPossible(payload: CheckRedirectEditPossiblePayload): Promise<Partial<RedirectPossibility>>;
 }
 
 /** AC-03/AC-04/AC-05, sad.md §4 decision 4: shared builder for createReturn/calculateReturn — strips
@@ -105,6 +115,18 @@ export function createAdditionalServiceModule(client: NovaPoshtaClient): Additio
         "AdditionalServiceGeneral",
         "getReturnReasonsSubtypes",
         (filters ?? {}) as unknown as Record<string, unknown>,
+      ),
+    checkRedirectPossible: (payload: CheckRedirectPossiblePayload) =>
+      client.requestFirst<RedirectPossibility>(
+        "AdditionalServiceGeneral",
+        "checkPossibilityForRedirecting",
+        payload as unknown as Record<string, unknown>,
+      ),
+    checkRedirectEditPossible: (payload: CheckRedirectEditPossiblePayload) =>
+      client.requestFirst<Partial<RedirectPossibility>>(
+        "AdditionalServiceGeneral",
+        "checkPossibilityForRedirecting",
+        payload as unknown as Record<string, unknown>,
       ),
   };
 }

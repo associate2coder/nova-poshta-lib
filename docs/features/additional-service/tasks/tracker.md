@@ -12,7 +12,7 @@
 | T5 | `createReturn` / `calculateReturn` | app | TBD lead | L | T1, T2 | done |
 | T6 | `updateReturn` | app | TBD lead | S | T1, T2 | done |
 | T7 | Return list/reason reads | app | TBD lead | S | T1, T2 | done |
-| T8 | `checkRedirectPossible` / `checkRedirectEditPossible` | app | TBD lead | M | T1, T2 | todo |
+| T8 | `checkRedirectPossible` / `checkRedirectEditPossible` | app | TBD lead | M | T1, T2 | done |
 | T9 | `createRedirect` / `calculateRedirect` | app | TBD lead | M | T1, T2 | todo |
 | T10 | `updateRedirect` / `getRedirectionOrdersList` | app | TBD lead | M | T1, T2 | todo |
 | T11 | Waybill-edit group | app | TBD lead | M | T1, T2 | todo |

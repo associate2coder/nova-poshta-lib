@@ -8,6 +8,7 @@ import type {
   CreateReturnToSenderAddressPayload,
   OrderListFilters,
   OrderPricingEstimate,
+  RedirectPossibility,
   ReturnAddressOption,
   ReturnEditOption,
   ReturnOrderListItem,
@@ -492,5 +493,124 @@ describe("additional-service module — getReturnReasonsSubtypes (T7, AC-08)", (
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(sentBody.calledMethod).toBe("getReturnReasonsSubtypes");
     expect(sentBody.methodProperties).toEqual(filters);
+  });
+});
+
+// --- T8 (app layer, AC-09/AC-12): checkRedirectPossible / checkRedirectEditPossible ---
+//
+// public-api.md §3.2/§5: sad.md §5's asymmetry note — unlike checkReturnPossible's array of
+// destination choices, this wire method (checkPossibilityForRedirecting) resolves ONE info record
+// via client.requestFirst(), not client.request(). checkRedirectPossible and checkRedirectEditPossible
+// share the same calledMethod but dispatch on payload shape (Number vs. OrderRef+fields).
+// Neither method exists on the module yet (T4-T7 only shipped the return group), so this is expected
+// to fail to compile/run until T8's implementation lands.
+
+function redirectPossibility(overrides: Partial<RedirectPossibility> = {}): RedirectPossibility {
+  return {
+    Ref: "redirect-request-ref-1",
+    Number: "20450000000001",
+    PayerType: "Sender",
+    PaymentMethod: "Cash",
+    WarehouseRef: "warehouse-ref-1",
+    WarehouseDescription: "Warehouse #1",
+    AddressDescription: "1 Khreshchatyk St",
+    StreetDescription: "Khreshchatyk",
+    BuildingNumber: "1",
+    CityRecipient: "city-ref-1",
+    CityRecipientDescription: "Kyiv",
+    SettlementRecipient: "settlement-ref-1",
+    SettlementRecipientDescription: "Kyiv",
+    SettlementType: "city",
+    CounterpartyRecipientRef: "counterparty-ref-1",
+    CounterpartyRecipientDescription: "ACME LLC",
+    RecipientName: "Jane Doe",
+    PhoneSender: "380500000000",
+    PhoneRecipient: "380500000001",
+    DocumentWeight: "1.5",
+    ...overrides,
+  };
+}
+
+describe("additional-service module — checkRedirectPossible (T8, AC-09)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("resolves ONE typed RedirectPossibility record (not an array) via requestFirst(), sending Number, calledMethod checkPossibilityForRedirecting (AC-09)", async () => {
+    const record = redirectPossibility();
+    const fetchMock = mockFetchOnce(() => successEnvelope([record]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const result: RedirectPossibility = await additionalService.checkRedirectPossible({
+      Number: "20450000000001",
+    });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(sentBody.calledMethod).toBe("checkPossibilityForRedirecting");
+    expect(sentBody.methodProperties).toEqual({ Number: "20450000000001" });
+    // requestFirst() semantics: the resolved value IS the record itself, not [record] —
+    // proves this is not accidentally routed through request()/checkReturnPossible's array shape.
+    expect(result).toEqual(record);
+    expect(Array.isArray(result)).toBe(false);
+  });
+
+  it("propagates NovaPoshtaApiError unchanged when the check declines (AC-09 decline)", async () => {
+    mockFetchOnce(() => declinedEnvelope(["Waybill not found"], ["404"]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const err = await additionalService
+      .checkRedirectPossible({ Number: "no-such-waybill" })
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Waybill not found"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["404"]);
+  });
+});
+
+describe("additional-service module — checkRedirectEditPossible (T8, AC-12)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("resolves a Partial<RedirectPossibility> record via requestFirst(), sending OrderRef + address/recipient fields, SAME calledMethod as checkRedirectPossible (AC-12)", async () => {
+    const partialRecord: Partial<RedirectPossibility> = {
+      Ref: "redirect-request-ref-1",
+      CityRecipient: "city-ref-2",
+      RecipientName: "John Roe",
+    };
+    const fetchMock = mockFetchOnce(() => successEnvelope([partialRecord]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const result = await additionalService.checkRedirectEditPossible({
+      OrderRef: "redirect-request-ref-1",
+      CityRecipient: "city-ref-2",
+      RecipientName: "John Roe",
+    });
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    // same wire method as checkRedirectPossible — payload shape (OrderRef + fields) is what dispatches
+    expect(sentBody.calledMethod).toBe("checkPossibilityForRedirecting");
+    expect(sentBody.methodProperties.OrderRef).toBe("redirect-request-ref-1");
+    expect(sentBody.methodProperties.CityRecipient).toBe("city-ref-2");
+    expect(sentBody.methodProperties.RecipientName).toBe("John Roe");
+    // requestFirst() semantics again: resolved value is the single (partial) record, not an array
+    expect(result).toEqual(partialRecord);
+    expect(Array.isArray(result)).toBe(false);
+  });
+
+  it("propagates NovaPoshtaApiError unchanged when the edit-possibility check declines (AC-12 decline)", async () => {
+    mockFetchOnce(() => declinedEnvelope(["Redirect request not found"], ["404"]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const err = await additionalService
+      .checkRedirectEditPossible({ OrderRef: "no-such-ref" })
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Redirect request not found"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["404"]);
   });
 });

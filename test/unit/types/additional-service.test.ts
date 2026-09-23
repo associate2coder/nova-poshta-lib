@@ -23,6 +23,7 @@ import type {
   RedirectPossibility,
   ReturnDestination,
   ReturnEditInfo,
+  ReturnEditOption,
   ReturnOrderListItem,
   ReturnReason,
   ReturnReasonSubtype,
@@ -329,6 +330,13 @@ describe("additional-service domain types (T1)", () => {
       };
       expect(result.options).toHaveLength(2);
 
+      // ReturnEditOption.Type is widened to `string`, not a closed 2-member union (review round-4
+      // finding: the docs only ever showed these two values together in one example, with nothing
+      // confirming that's the complete set) — a value the docs have never shown must still compile,
+      // proving this isn't still the old closed union in disguise.
+      const futureType: ReturnEditOption["Type"] = "SomeFutureValueNotYetSeenInDocs";
+      expect(futureType).toBe("SomeFutureValueNotYetSeenInDocs");
+
       // info is optional — official docs wrap it in a single-element array, unwrapped by the module;
       // an envelope that omits it resolves undefined rather than a forced cast (review 2026-09-23 finding 4)
       const resultWithoutInfo: CheckReturnEditPossibleResult = { options: [] };
@@ -367,7 +375,7 @@ describe("additional-service domain types (T1)", () => {
       expect(updateRedirect.Ref).toBe("redirect-order-ref-2");
     });
 
-    it("5. CreateRedirectPayload.ServiceType is plain string, not a narrow enum — the one item still genuinely open after the 2026-09-23 official-docs capture (field presence + one example value confirmed, full enum not independently re-sourced for this module, unlike internet-document's ServiceType)", () => {
+    it("5. CreateRedirectPayload.ServiceType is the confirmed 4-value enum (review round-4: the redirect-calculate page's own field table enumerates all four values explicitly)", () => {
       const payload: CreateRedirectPayload = {
         IntDocNumber: "waybill-11",
         PaymentMethod: "Cash",
@@ -375,10 +383,13 @@ describe("additional-service domain types (T1)", () => {
         RecipientContactName: "Recipient Contact",
         RecipientPhone: "380500000004",
         PayerType: "Sender",
-        ServiceType: "NotACrossCheckedEnumValue",
+        ServiceType: "DoorsDoors",
       };
 
-      expect(payload.ServiceType).toBe("NotACrossCheckedEnumValue");
+      expect(payload.ServiceType).toBe("DoorsDoors");
+      // @ts-expect-error — no longer a plain string; an unconfirmed value is now a compile-time error
+      const rejected: CreateRedirectPayload["ServiceType"] = "NotACrossCheckedEnumValue";
+      void rejected;
     });
   });
 
@@ -388,6 +399,13 @@ describe("additional-service domain types (T1)", () => {
         Pricing: { Services: [{ Service: "Return", Cost: 0 }], Total: 100, FirstDayStorage: "0000-00-00 00:00:00" },
         ScheduledDeliveryDate: "25.09.2026",
       };
+      expect(pricing.Pricing.Total).toBe(100);
+      // Pricing.Total is `number`, not `number | string` (review round-5 finding: the prior
+      // `number | string` widening rested on a "5.52"-quoted-string example that never actually
+      // existed in spec.md; both genuine calculate examples show a plain JSON number).
+      // @ts-expect-error — a quoted string is no longer accepted now that Total is `number` only.
+      const rejectedTotal: OrderPricingEstimate["Pricing"]["Total"] = "5.52";
+      void rejectedTotal;
       // Page/Limit are string on the wire — official docs' own list examples send "1"/"50" quoted
       // (spec.md §1, 2026-09-23), corrected from the original `number` typing (review round-3 finding).
       const filters: OrderListFilters = { Number: "waybill-12", Page: "1", Limit: "20" };

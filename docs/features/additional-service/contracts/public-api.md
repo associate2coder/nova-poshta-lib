@@ -87,11 +87,10 @@ export type PaymentMethod = "Cash" | "NonCash";
 export type ReturnDestination = "SenderAddress" | "NewAddress" | "NewWarehouse";
 ```
 
-*`createRedirect`/`updateRedirect`'s `ServiceType` field (spec.md §1 row 11/13) has no confirmed enum
-values in this session's sourcing pass for this module specifically — unlike `internet-document`'s
-`ServiceType`, which was independently re-fetched and widened. Typed as plain `string`, pass-through
-only (§4 decision 6's "type loosely rather than falsely precisely" — see `api-sync-report.md` row
-`createRedirect.ServiceType`).*
+*`createRedirect`/`updateRedirect`'s `ServiceType` field (spec.md §1 row 11/13) has its full 4-value
+enum confirmed by the redirect-calculate page's own field table (round-4 capture, 2026-09-23):
+`"DoorsWarehouse" | "WarehouseWarehouse" | "WarehouseDoors" | "DoorsDoors"` — see `api-sync-report.md`
+row `createRedirect.ServiceType`.*
 
 ## 3. Methods
 
@@ -229,9 +228,10 @@ createReturn(payload: CreateReturnPayload): Promise<SavedReturnOrder>;
 export interface OrderPricingEstimate {
   Pricing: {
     Services: { Service: string; Cost: number }[]; // confirmed by official docs (spec.md §1, 2026-09-23)
-    Total: number | string; // official docs' own examples genuinely disagree on this field's JSON
-                             // shape across two captured calls (spec.md §8, review round-3 finding) —
-                             // typed permissively rather than picking one
+    Total: number; // both genuine calculate-return and calculate-redirect examples show an unquoted
+                    // JSON number here (spec.md §1 "Round 4" subsection, 2026-09-23) — the round-3
+                    // "genuinely disagrees with a quoted \"5.52\" string" claim rested on a quote that
+                    // never actually existed in spec.md (review round-4 finding); reverted to `number`
     FirstDayStorage: string; // official docs' own examples always show a datetime string here
   };
   ScheduledDeliveryDate: string;
@@ -393,8 +393,8 @@ export interface CreateRedirectPayload {
   RecipientPhone: string;
   PayerType: string;
   Customer?: string;
-  ServiceType?: string; // field confirmed by official docs (example value "WarehouseWarehouse"); full
-                        // enum not independently re-sourced for this module — see §2 note
+  ServiceType?: "DoorsWarehouse" | "WarehouseWarehouse" | "WarehouseDoors" | "DoorsDoors"; // full
+                        // enum confirmed by official docs' redirect-calculate field table — see §2 note
   RecipientSettlement?: string;
   RecipientSettlementStreet?: string;
   BuildingNumber?: string;
@@ -438,7 +438,7 @@ export interface UpdateRedirectPayload {
   SettlementRecipient?: string;
   BuildingNumber?: string;
   RecipientSettlementStreet?: string;
-  ServiceType?: string;
+  ServiceType?: "DoorsWarehouse" | "WarehouseWarehouse" | "WarehouseDoors" | "DoorsDoors";
   PayerType?: string;
 }
 
@@ -701,9 +701,9 @@ plain-return case only (US-13). No equivalent exists for redirect or waybill-edi
 ## 10. Field-origins summary
 
 See `api-sync-report.md` for the full per-field table. In short: every field in §3 now traces to a
-directly quoted official-docs excerpt (`spec.md` §1's "Official documentation quotes" and "Round 3"
-subsections), captured across two sessions on 2026-09-23, cross-checked against 5 independent SDKs.
-Points originally carried forward as genuinely open:
+directly quoted official-docs excerpt (`spec.md` §1's "Official documentation quotes", "Round 3", and
+"Round 4" subsections), captured across three sessions on 2026-09-23, cross-checked against 5
+independent SDKs. Points originally carried forward as genuinely open:
 
 1. ~~`ReturnAddressOption.Ref` ↔ `CreateReturnToSenderAddressPayload.ReturnAddressRef` — same value?~~
    **Resolved** — confirmed by the official docs' own `save`/`orderCargoReturn` example.
@@ -714,24 +714,29 @@ Points originally carried forward as genuinely open:
    now set internally by this module. Response shape stays loosely typed (genuinely variable per docs'
    own examples). **`update` IS a full-replace call** (spec.md §3 non-goal) — this doc previously
    contradicted that in this same section (review round-2 finding, fixed).
-5. `CreateRedirectPayload.ServiceType`'s enum values — **still open** (not independently re-sourced
-   beyond one confirmed example value); typed as plain `string`.
+5. ~~`CreateRedirectPayload.ServiceType`'s enum values~~ **Resolved** (`/sdd:review` round 4,
+   2026-09-23) — the redirect-calculate page's own field table explicitly enumerates all four values
+   (`DoorsWarehouse, WarehouseWarehouse, WarehouseDoors, DoorsDoors`); narrowed from plain `string` to
+   this union on both `CreateRedirectPayload` and `UpdateRedirectPayload`.
 6. ~~`createRedirect`'s whole request, `checkRedirectPossible`'s whole contract, `updateRedirect`'s
    field list, the three list methods, `getReturnReasons(Subtypes)`, `delete`'s schema, all three
    `save` results, and 8 of 19 wire `calledMethod` literals~~ **Resolved** (`/sdd:review` round 3,
    2026-09-23) — an exhaustive field-by-field audit found these shipped with no genuine quote despite
    several being graded `high` in `api-sync-report.md`; the second, complete docs capture (spec.md §1
    "Round 3" subsection) resolves all of them.
-7. `PaymentMethod`'s `"NonCash"` member — **still open** — every request example across both captures
-   only shows `"Cash"`; carried over from `internet-document`'s own confirmed 2-value enum for the
-   same field.
-8. `OrderPricingEstimate.Pricing.Total`'s JSON shape — **documented discrepancy, not fully resolved** —
-   two official-docs examples captured the same session disagree (`0` unquoted vs. `"5.52"` quoted);
-   typed `number | string` rather than guessing.
+7. ~~`PaymentMethod`'s `"NonCash"` member~~ **Resolved** (`/sdd:review` round 4, 2026-09-23) — confirmed
+   directly on `AdditionalServiceGeneral`'s own pages (return-save, redirect-save, redirect-calculate
+   field-description columns all read "Cash/NonCash" verbatim), not carried over from `internet-document`.
+8. ~~`OrderPricingEstimate.Pricing.Total`'s JSON shape~~ **Resolved** (`/sdd:review` round 4,
+   2026-09-23) — the "disagreeing `\"5.52\"` example" had no actual quote behind it anywhere in
+   spec.md; both genuine calculate examples (return and redirect) show an unquoted JSON number (`0`).
+   Reverted from `number | string` to `number`.
 9. ~~`OrderListFilters.Page`/`Limit` — number or string on the wire?~~ **Resolved** (round 3) — every
    list-method example sends them as quoted JSON strings; corrected from `number` to `string`.
-6. ~~Whether a waybill-edit order genuinely has no `update` capability~~ **Resolved** — official docs'
-   complete waybill-edit section lists no `update` method.
+10. ~~Whether a waybill-edit order genuinely has no `update` capability~~ **Resolved** — official docs'
+    complete waybill-edit section lists no `update` method.
 
-Item 5 remains typed defensively (plain `string` in place of a false-precision enum) per `sad.md` §4
-decision 6 — never silently guessed, never blocking the whole feature.
+No open item remains as of the round-4 fix (2026-09-23) — items 5, 7, and 8 were re-resolved this
+round after round-4 review found they, and `createWaybillEdit`'s field list (folded into item 6 above),
+had been marked resolved on citations that turned out unbacked or fabricated; a third docs capture
+(spec.md §1 "Round 4" subsection) now genuinely backs all of them.

@@ -1483,6 +1483,43 @@ describe("additional-service module — shared error-contract fixture across all
   }
 });
 
+// review round-4 finding: the module's only empty-data-array test (line ~530) covers
+// getReturnOrdersList, a request()-backed list method where [] is a valid, non-error result. The
+// gap round 3 asked for was the requestFirst()-backed single-record methods, where an empty data
+// array must throw (ADR-0002) — client.test.ts pins requestFirst() itself doing this generically,
+// but no per-method assertion existed at this module's own boundary.
+const requestFirstBackedMethodNames = new Set([
+  "createReturn",
+  "calculateReturn",
+  "updateReturn",
+  "checkRedirectPossible",
+  "checkRedirectEditPossible",
+  "createRedirect",
+  "calculateRedirect",
+  "updateRedirect",
+  "checkWaybillEditPossible",
+  "createWaybillEdit",
+  "deleteAdditionalServiceOrder",
+]);
+
+describe("additional-service module — empty data array on requestFirst-backed methods throws (review round-4 finding)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  for (const { name, invoke } of allMethodInvocations) {
+    if (!requestFirstBackedMethodNames.has(name)) continue;
+    it(`${name} raises NovaPoshtaApiError on an empty data array, not a false-successful undefined result`, async () => {
+      mockFetchOnce(() => successEnvelope([]));
+      const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+      const err = await invoke(additionalService).catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    });
+  }
+});
+
 // review round-3 finding: the 5 read methods above had no dedicated decline test of their own (only
 // the generic instanceof check ran for them), so AC-21/AC-23's "containing Nova Poshta's own
 // explanation" was never actually asserted for this subset — every other method has its own

@@ -1,10 +1,9 @@
 /** Independent of internet-document's PaymentMethod — this module defines its own copy rather than
  *  importing across modules, matching sad.md §5's "additional-service does not call internet-document
- *  at runtime" boundary and CLAUDE.md's one-folder-per-model convention. `"Cash"` is confirmed by every
- *  official-docs request example this module's spec captured (spec.md §1, 2026-09-23); `"NonCash"`
- *  itself is not yet directly quoted in an AdditionalServiceGeneral example — carried over from
- *  internet-document's own confirmed enum for the same 2-value field, tracked as a small remaining
- *  open item (spec.md §8). */
+ *  at runtime" boundary and CLAUDE.md's one-folder-per-model convention. Both members confirmed by
+ *  AdditionalServiceGeneral's own docs: the field-description column reads "Форма розрахунку
+ *  (Cash/NonCash)" verbatim on the return-save, redirect-save, and redirect-calculate pages alike
+ *  (spec.md §1, 2026-09-23 round-4 capture) — an explicit enumeration, not an inferred single example. */
 export type PaymentMethod = "Cash" | "NonCash";
 
 /** sad.md §4 decision 4, AC-04: TS-only discriminant on createReturn's destination-variant union —
@@ -37,9 +36,13 @@ export interface CheckReturnEditPossiblePayload {
 }
 
 /** Fields confirmed verbatim by official docs' edit-check response example (spec.md §1,
- *  2026-09-23) — same shape as ReturnAddressOption, plus the discriminant Type. */
+ *  2026-09-23) — same shape as ReturnAddressOption, plus the discriminant Type. `Type` is widened to
+ *  `string` rather than a closed 2-member union: the one response example that sources it shows both
+ *  values together, but nothing in the docs states that's the complete set (review round-4 finding —
+ *  same false-precision risk this module already avoids for CreateRedirectPayload's pre-round-4
+ *  ServiceType). */
 export interface ReturnEditOption {
-  Type: "CustomReturnAddress" | "OrderReturn";
+  Type: string;
   NonCash: boolean;
   City: string;
   Counterparty: string;
@@ -133,12 +136,13 @@ export interface OrderPricingEstimate {
     // per-service cost breakdown — confirmed by official docs' own calculateReturn/calculateRedirect
     // examples (spec.md §1, 2026-09-23)
     Services: { Service: string; Cost: number }[];
-    // official docs' own examples disagree on this field's JSON shape across two genuine calls: a
-    // free calculate example shows an unquoted 0 (number), an update-with-recalculation example shows
-    // a quoted "5.52" (string) — both captured 2026-09-23. Typed permissively rather than picking one,
-    // since CLAUDE.md's sourcing policy treats a cross-source discrepancy as something to document
-    // honestly, not silently resolve by guessing (spec.md §8).
-    Total: number | string;
+    // official docs' own return-calculate AND redirect-calculate examples both show an unquoted JSON
+    // number here (0) — confirmed by two independently-fetched pages (spec.md §1, 2026-09-23 round-4
+    // capture). A prior round claimed a conflicting quoted "5.52" string from an update-recalculation
+    // example; no such quote actually exists anywhere in this spec (round-4 review finding) — that
+    // response belongs to updateReturn/updateRedirect's own loosely-typed Record<string, unknown>
+    // return value, never to this type, so there was never a genuine cross-source disagreement here.
+    Total: number;
     FirstDayStorage: string; // official docs' own examples always show a datetime string here
                               // (e.g. "0000-00-00 00:00:00"), never a number
   };
@@ -285,10 +289,11 @@ export interface CreateRedirectPayload {
   RecipientPhone: string;
   PayerType: string;
   Customer?: string;
-  ServiceType?: string; // field confirmed present by official docs (example value "WarehouseWarehouse",
-                        // matching internet-document's own enum member) — the full enum for THIS
-                        // module isn't independently re-sourced, so kept as plain string rather than
-                        // asserting internet-document's 4-value enum applies identically here
+  // full 4-value enum confirmed by AdditionalServiceGeneral's own redirect-calculate page field
+  // table: "Тип послуги (DoorsWarehouse, WarehouseWarehouse, WarehouseDoors, DoorsDoors)" — an
+  // explicit enumeration, not one example value (spec.md §1, 2026-09-23 round-4 capture; closes the
+  // open value-set gap public-api.md §10 item 5 previously tracked).
+  ServiceType?: "DoorsWarehouse" | "WarehouseWarehouse" | "WarehouseDoors" | "DoorsDoors";
   RecipientSettlement?: string;
   RecipientSettlementStreet?: string;
   BuildingNumber?: string;
@@ -330,7 +335,11 @@ export interface UpdateRedirectPayload {
   SettlementRecipient?: string;
   BuildingNumber?: string;
   RecipientSettlementStreet?: string;
-  ServiceType?: string;
+  // same field, same domain as CreateRedirectPayload.ServiceType — the update example itself only
+  // shows the one already-confirmed value ("WarehouseWarehouse"), but the create/calculate page's
+  // explicit 4-value enumeration is treated as authoritative for this shared wire concept too, the
+  // same way this module already carries PaymentMethod's confirmed enum across create/update.
+  ServiceType?: "DoorsWarehouse" | "WarehouseWarehouse" | "WarehouseDoors" | "DoorsDoors";
   PayerType?: string;
 }
 
@@ -387,11 +396,21 @@ export interface CheckWaybillEditPossiblePayload {
   IntDocNumber: string;
 }
 
-/** All 8 fields confirmed verbatim by official docs' own save/orderChangeEW request example (spec.md
- *  §1, 2026-09-23) — resolves review round-3's finding that this request was sourced by naming two
- *  SDKs (platx's SaveChangeEWReq, sirkostya009's ChangeEWRequest) without quoting either. The other
- *  8 Can... flags have no corresponding field here regardless of what checkWaybillEditPossible just
- *  reported (AC-16). OrderType: "orderChangeEW" is set internally. */
+/** All 8 fields confirmed verbatim by official docs' own "Змінити дані" (save/orderChangeEW) page —
+ *  a page that exists live but isn't linked from AdditionalServiceGeneral's own site navigation,
+ *  found via the exact URL platx/go-nova-poshta's source comments cite for this method, and fetched
+ *  directly (spec.md §1, 2026-09-23 round-4 capture). A round-3 fix had claimed this same field list
+ *  was "confirmed verbatim" by a docs quote that, on review-round-4 re-inspection, turned out to be a
+ *  fabricated placeholder (every value was a bare "...", unlike every genuine capture in this spec) —
+ *  this replaces that citation with a real one. The genuine quote also disproves the round-3 claim
+ *  that two SDKs "agree" on this shape: sirkostya009/go-novapost has no create/save method for
+ *  ChangeEW at all (the struct previously cited as its agreement, ChangeEWRequest, is actually that
+ *  SDK's list-filter struct for getChangeEWOrdersList, unrelated to this request); only platx has one,
+ *  and its own test fixture for it is independently buggy (sends "OrderType": "orderCargoReturn"
+ *  instead of "orderChangeEW", and includes Reason/SubtypeReason fields absent from the real docs
+ *  page) — neither SDK was ever a reliable source for this shape. The other 8 Can... flags have no
+ *  corresponding field here regardless of what checkWaybillEditPossible just reported (AC-16).
+ *  OrderType: "orderChangeEW" is set internally. */
 export interface CreateWaybillEditPayload {
   IntDocNumber: string;
   PaymentMethod: PaymentMethod;

@@ -6,9 +6,14 @@ import type {
   CreateReturnToNewAddressPayload,
   CreateReturnToNewWarehousePayload,
   CreateReturnToSenderAddressPayload,
+  OrderListFilters,
   OrderPricingEstimate,
   ReturnAddressOption,
   ReturnEditOption,
+  ReturnOrderListItem,
+  ReturnReason,
+  ReturnReasonSubtype,
+  ReturnReasonSubtypeFilters,
   SavedReturnOrder,
   UpdateReturnPayload,
 } from "../../../src/types/additional-service.js";
@@ -363,5 +368,129 @@ describe("additional-service module — updateReturn (T6, AC-06/AC-07)", () => {
     expect(err).toBeInstanceOf(NovaPoshtaApiError);
     expect((err as NovaPoshtaApiError).errors).toEqual(["Return request is not in status Accepted"]);
     expect((err as NovaPoshtaApiError).errorCodes).toEqual(["409"]);
+  });
+});
+
+// --- T7 (app layer, AC-08): getReturnOrdersList / getReturnReasons / getReturnReasonsSubtypes ---
+//
+// public-api.md §3.1/§5: all three route through client.request() with calledMethod matching the
+// method name itself ("getReturnOrdersList", "getReturnReasons", "getReturnReasonsSubtypes"), plain
+// reads — no client-side re-filtering, sorting, or pagination (AC-08). None of the three exist on
+// the module yet (T4/T5/T6 only shipped the check/create/calculate/update quintet), so this is
+// expected to fail to compile/run until T7's implementation lands.
+
+function returnOrderListItem(overrides: Partial<ReturnOrderListItem> = {}): ReturnOrderListItem {
+  return {
+    OrderRef: "return-order-ref-1",
+    OrderNumber: "1",
+    OrderStatus: "Accepted",
+    DocumentNumber: "20450000000001",
+    CounterpartyRecipient: "ACME LLC",
+    ContactPersonRecipient: "Jane Doe",
+    AddressRecipient: "1 Khreshchatyk St",
+    DeliveryCost: "45.00",
+    EstimatedDeliveryDate: "2026-09-25",
+    ExpressWaybillNumber: "20450000000099",
+    ExpressWaybillStatus: "In transit",
+    ...overrides,
+  };
+}
+
+function returnReason(overrides: Partial<ReturnReason> = {}): ReturnReason {
+  return { Ref: "reason-ref-1", Description: "Wrong size", ...overrides };
+}
+
+function returnReasonSubtype(overrides: Partial<ReturnReasonSubtype> = {}): ReturnReasonSubtype {
+  return {
+    Ref: "subtype-ref-1",
+    Description: "Too small",
+    ReasonRef: "reason-ref-1",
+    ...overrides,
+  };
+}
+
+describe("additional-service module — getReturnOrdersList (T7, AC-08)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("unfiltered: sends calledMethod getReturnOrdersList, resolves typed ReturnOrderListItem[] (AC-08)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([returnOrderListItem()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const result: ReturnOrderListItem[] = await additionalService.getReturnOrdersList();
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(sentBody.calledMethod).toBe("getReturnOrdersList");
+    expect(result).toEqual([returnOrderListItem()]);
+  });
+
+  it("filter pass-through: Number/BeginDate/EndDate/Page/Limit reach the wire call unmodified, no client-side re-filtering/sorting/pagination (AC-08)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([returnOrderListItem()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const filters: OrderListFilters = {
+      Number: "20450000000001",
+      BeginDate: "01.09.2026",
+      EndDate: "23.09.2026",
+      Page: 2,
+      Limit: 50,
+    };
+
+    await additionalService.getReturnOrdersList(filters);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.calledMethod).toBe("getReturnOrdersList");
+    expect(sentBody.methodProperties).toEqual(filters);
+  });
+});
+
+describe("additional-service module — getReturnReasons (T7, AC-08)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("takes no arguments, sends calledMethod getReturnReasons, resolves typed ReturnReason[] (AC-08)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([returnReason()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const result: ReturnReason[] = await additionalService.getReturnReasons();
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(sentBody.calledMethod).toBe("getReturnReasons");
+    expect(result).toEqual([returnReason()]);
+  });
+});
+
+describe("additional-service module — getReturnReasonsSubtypes (T7, AC-08)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("unfiltered: sends calledMethod getReturnReasonsSubtypes, resolves typed ReturnReasonSubtype[] (AC-08)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([returnReasonSubtype()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const result: ReturnReasonSubtype[] = await additionalService.getReturnReasonsSubtypes();
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(sentBody.calledMethod).toBe("getReturnReasonsSubtypes");
+    expect(result).toEqual([returnReasonSubtype()]);
+  });
+
+  it("filter pass-through: ReasonRef reaches the wire call unmodified, no client-side re-filtering (AC-08)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([returnReasonSubtype()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const filters: ReturnReasonSubtypeFilters = { ReasonRef: "reason-ref-1" };
+
+    await additionalService.getReturnReasonsSubtypes(filters);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.calledMethod).toBe("getReturnReasonsSubtypes");
+    expect(sentBody.methodProperties).toEqual(filters);
   });
 });

@@ -4,10 +4,15 @@ import type {
   CheckReturnEditPossibleResult,
   CheckReturnPossiblePayload,
   CreateReturnPayload,
+  OrderListFilters,
   OrderPricingEstimate,
   ReturnAddressOption,
   ReturnEditInfo,
   ReturnEditOption,
+  ReturnOrderListItem,
+  ReturnReason,
+  ReturnReasonSubtype,
+  ReturnReasonSubtypeFilters,
   SavedReturnOrder,
   UpdateReturnPayload,
 } from "../../types/additional-service.js";
@@ -32,6 +37,16 @@ export interface AdditionalServiceModule {
    *  return) is the sole enforcer (AC-07). Response shape is genuinely ambiguous (types' own note),
    *  so it's returned loosely typed rather than falsely precisely. */
   updateReturn(payload: UpdateReturnPayload): Promise<Record<string, unknown>>;
+  /** public-api.md §3.1/§5, AC-08: thin pass-through to client.request() — filters (Number, Ref,
+   *  BeginDate, EndDate, Page, Limit) travel to the wire unmodified; no client-side re-filtering,
+   *  sorting, or pagination. */
+  getReturnOrdersList(filters?: OrderListFilters): Promise<ReturnOrderListItem[]>;
+  /** public-api.md §3.1/§5, AC-08: thin pass-through to client.request(); no arguments in the
+   *  public signature — Nova Poshta's own getReturnReasons takes none. */
+  getReturnReasons(): Promise<ReturnReason[]>;
+  /** public-api.md §3.1/§5, AC-08: thin pass-through to client.request() — ReasonRef travels to
+   *  the wire unmodified; no client-side re-filtering. */
+  getReturnReasonsSubtypes(filters?: ReturnReasonSubtypeFilters): Promise<ReturnReasonSubtype[]>;
 }
 
 /** AC-03/AC-04/AC-05, sad.md §4 decision 4: shared builder for createReturn/calculateReturn — strips
@@ -76,6 +91,20 @@ export function createAdditionalServiceModule(client: NovaPoshtaClient): Additio
         "AdditionalServiceGeneral",
         "update",
         payload as unknown as Record<string, unknown>,
+      ),
+    getReturnOrdersList: (filters?: OrderListFilters) =>
+      client.request<ReturnOrderListItem>(
+        "AdditionalServiceGeneral",
+        "getReturnOrdersList",
+        (filters ?? {}) as unknown as Record<string, unknown>,
+      ),
+    getReturnReasons: () =>
+      client.request<ReturnReason>("AdditionalServiceGeneral", "getReturnReasons", {}),
+    getReturnReasonsSubtypes: (filters?: ReturnReasonSubtypeFilters) =>
+      client.request<ReturnReasonSubtype>(
+        "AdditionalServiceGeneral",
+        "getReturnReasonsSubtypes",
+        (filters ?? {}) as unknown as Record<string, unknown>,
       ),
   };
 }

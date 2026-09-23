@@ -16,7 +16,7 @@
 | T9 | Add docs-deploy job to `release.yml` | wiring | associate2coder | M | T1 | done* |
 | T10 | Fix `Area`/`WarehouseType` unbrowsable aliases | docs | associate2coder | XS | — | done |
 | T11 | Export `ReferenceRecordBase`, fix 9 unbrowsable common aliases (found a 9th beyond the review's 8: `PayerTypeForRedelivery`), re-enable `notExported` | docs | associate2coder | S | — | done |
-| T12 | Export `DeleteBatchInternetDocumentPayload` from `src/index.ts` | docs | associate2coder | XS | — | todo |
+| T12 | Export `DeleteBatchInternetDocumentPayload` from `src/index.ts` | docs | associate2coder | XS | — | done |
 | T13 | Add `contents: read` to `docs-deploy` job | wiring | associate2coder | XS | — | todo |
 | T14 | Add `enablement: true` to `configure-pages` step | wiring | associate2coder | XS | — | todo |
 | T15 | Automated test for AC-02's exact-symbol-name behavior | tests | associate2coder | S | — | todo |

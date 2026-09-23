@@ -86,6 +86,7 @@ export { createInternetDocumentModule } from "./modules/internet-document/index.
 export type { InternetDocumentModule } from "./modules/internet-document/index.js";
 export type {
   BackwardDeliveryData,
+  DeleteBatchInternetDocumentPayload,
   DeleteInternetDocumentPayload,
   DeletedInternetDocumentOutcome,
   DocumentDeliveryDateEstimate,

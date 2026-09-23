@@ -1,0 +1,86 @@
+{
+  "slug": "documentation",
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Add typedoc.json + typedoc devDependency + docs:build script",
+      "layer": "infra",
+      "deps": [],
+      "acs": [],
+      "dod": "npm run docs:build succeeds locally and produces static HTML output from src/index.ts",
+      "files_hint": ["typedoc.json", "package.json"]
+    },
+    {
+      "id": "T2",
+      "title": "Audit and mark all internal-only exports @internal",
+      "layer": "docs",
+      "deps": [],
+      "acs": ["AC-03"],
+      "dod": "every exported symbol in src/index.ts's surface is classified public or internal, and every internal symbol carries @internal",
+      "files_hint": ["src/index.ts", "src/types", "src/modules"]
+    },
+    {
+      "id": "T3",
+      "title": "TSDoc the core client (src/client.ts)",
+      "layer": "docs",
+      "deps": ["T2"],
+      "acs": ["AC-04"],
+      "dod": "every non-internal export in src/client.ts has a TSDoc comment rendering description, parameters, and return type",
+      "files_hint": ["src/client.ts"]
+    },
+    {
+      "id": "T4",
+      "title": "TSDoc common + address modules",
+      "layer": "docs",
+      "deps": ["T2"],
+      "acs": ["AC-04"],
+      "dod": "every non-internal export in src/modules/common, src/modules/address, and their type files has a TSDoc comment",
+      "files_hint": ["src/modules/common", "src/modules/address", "src/types/common.ts", "src/types/address.ts"]
+    },
+    {
+      "id": "T5",
+      "title": "TSDoc counterparty + internet-document modules",
+      "layer": "docs",
+      "deps": ["T2"],
+      "acs": ["AC-04"],
+      "dod": "every non-internal export in src/modules/counterparty, src/modules/internet-document, and their type files has a TSDoc comment",
+      "files_hint": ["src/modules/counterparty", "src/modules/internet-document", "src/types/counterparty.ts", "src/types/internet-document.ts"]
+    },
+    {
+      "id": "T6",
+      "title": "TSDoc tracking-document + scan-sheet + additional-service modules",
+      "layer": "docs",
+      "deps": ["T2"],
+      "acs": ["AC-04"],
+      "dod": "every non-internal export in the three remaining modules and their type files has a TSDoc comment",
+      "files_hint": ["src/modules/tracking-document", "src/modules/scan-sheet", "src/modules/additional-service", "src/types/tracking-document.ts", "src/types/scan-sheet.ts", "src/types/additional-service.ts"]
+    },
+    {
+      "id": "T7",
+      "title": "Add documentation-coverage step to ci.yml, report-only",
+      "layer": "wiring",
+      "deps": ["T1"],
+      "acs": ["AC-06"],
+      "dod": "the step runs on every PR/push to main, reports missing-comment warnings, and does not yet fail the build",
+      "files_hint": [".github/workflows/ci.yml"]
+    },
+    {
+      "id": "T8",
+      "title": "Run the validation spike, then flip to hard-fail",
+      "layer": "tests",
+      "deps": ["T3", "T4", "T5", "T6", "T7"],
+      "acs": ["AC-02", "AC-04", "AC-06"],
+      "dod": "report-only run shows 0 missing, treatWarningsAsErrors is enabled, and a temporarily-added undocumented export was confirmed to fail CI naming exactly that symbol",
+      "files_hint": [".github/workflows/ci.yml", "typedoc.json"]
+    },
+    {
+      "id": "T9",
+      "title": "Add docs-deploy job to release.yml",
+      "layer": "wiring",
+      "deps": ["T1"],
+      "acs": ["AC-01", "AC-05"],
+      "dod": "a stable npm publish rebuilds and deploys the reference site within 5 minutes, never using NPM_TOKEN, without affecting the release job's own status on failure",
+      "files_hint": [".github/workflows/release.yml"]
+    }
+  ]
+}

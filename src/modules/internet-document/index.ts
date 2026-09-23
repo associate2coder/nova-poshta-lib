@@ -51,22 +51,6 @@ async function firstOrUndefined<T>(
   return records[0];
 }
 
-async function firstOrThrow<T>(
-  client: NovaPoshtaClient,
-  modelName: string,
-  calledMethod: string,
-  methodProperties: Record<string, unknown>,
-): Promise<T> {
-  const records = await client.request<T>(modelName, calledMethod, methodProperties);
-  const [first] = records;
-  if (first === undefined) {
-    throw new NovaPoshtaApiError(
-      `Nova Poshta API response for ${modelName}.${calledMethod} reported success but returned no record`,
-    );
-  }
-  return first;
-}
-
 /** ADR-0005: one Nova Poshta call per Ref. Since the response can only ever concern this one Ref,
  *  no per-Ref message-attribution logic is needed (unlike the pre-ADR-0005 batch implementation) —
  *  any warning/error on a reported-unremoved response is this Ref's own reason. */
@@ -170,15 +154,13 @@ export function createInternetDocumentModule(client: NovaPoshtaClient): Internet
         filters as unknown as Record<string, unknown>,
       ),
     getDocumentPrice: (payload: GetDocumentPricePayload) =>
-      firstOrThrow<DocumentPriceEstimate>(
-        client,
+      client.requestFirst<DocumentPriceEstimate>(
         "InternetDocument",
         "getDocumentPrice",
         payload as unknown as Record<string, unknown>,
       ),
     getDocumentDeliveryDate: (payload: GetDocumentDeliveryDatePayload) =>
-      firstOrThrow<DocumentDeliveryDateEstimate>(
-        client,
+      client.requestFirst<DocumentDeliveryDateEstimate>(
         "InternetDocument",
         "getDocumentDeliveryDate",
         payload as unknown as Record<string, unknown>,

@@ -27,14 +27,22 @@ available as a typed, tested, documented module in `nova-poshta-lib`, published 
 | 4 | internet-document — typed shipment/waybill creation module, built on address + counterparty `Ref`s and common's reference types | [`docs/features/internet-document/spec.md`](features/internet-document/spec.md) | M | shipped |
 | 5 | tracking-document — typed module (1 raw method + 1 single-waybill convenience) for tracking a shipment by waybill number + optional phone, independent of internet-document and `common` | [`docs/features/tracking-document/spec.md`](features/tracking-document/spec.md) | S | shipped |
 | 6 | scan-sheet — typed module (5 raw methods + `addToTodaysScanSheet` convenience) for batching waybills into a scan sheet for courier handoff | [`docs/features/scan-sheet/spec.md`](features/scan-sheet/spec.md) | S | shipped |
-| 7 | additional-service — typed module for post-creation shipment actions: returns, redirections, waybill edits | `docs/architecture-map.md` §Constraints & known tech-debt | M | idea |
+| 7 | additional-service — typed module (18 raw methods + `createReturnIfPossible` convenience) for post-creation shipment actions: returns, redirections, waybill edits | [`docs/features/additional-service/spec.md`](features/additional-service/spec.md) | M | spec'd |
 | 8 | documentation — TSDoc comments on every exported symbol across all modules + TypeDoc-generated static API reference, wired into CI/publish | `docs/architecture-map.md` §Intent ("documented" listed as a foundation requirement; no step covers it — the README has usage snippets but no generated reference) | S | idea |
 
 Sizing note: 4 and 7 are called **M** rather than **S** like their shipped precedents because each
 has a genuinely broader method surface than `common`/`address`/`counterparty` — 4 adds
 creation + pricing/date-calculator + report/printing sub-flows; 7 adds five distinct write-payload
 shapes (plain return, return-to-new-address, return-to-new-warehouse, redirect, waybill edit) —
-even though PR count may land near the S/M border same as the shipped modules. 8 is **S**: no new
+even though PR count may land near the S/M border same as the shipped modules. **Updated
+(2026-09-23, `additional-service` specify session):** now that step 7 is spec'd, its confirmed
+surface against Nova Poshta's official docs is 19 typed methods (18 raw + 1 convenience) — broader
+than originally framed, but still **M**, not L: every method lives in one new, self-contained
+module folder, touches no shared infrastructure, and breaks no existing consumer (the criteria that
+would actually push it to L); the 19 methods also decompose into a handful of structurally repeated
+shapes (4 near-identical possibility checks, 3 list reads, 2 reason lookups, 2 pricing calculators
+mirroring their sibling create calls, 1 shared delete) rather than 19 independently novel designs —
+see `docs/features/additional-service/spec.md` §1's decision override. 8 is **S**: no new
 module/API/migration and no breaking changes, just a TSDoc pass over the existing public surface
 plus a TypeDoc + CI publish step (2–5 PRs).
 

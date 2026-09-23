@@ -9,6 +9,7 @@ import type {
   CreateReturnToSenderAddressPayload,
   OrderListFilters,
   OrderPricingEstimate,
+  RedirectOrderListItem,
   RedirectPossibility,
   ReturnAddressOption,
   ReturnEditOption,
@@ -18,6 +19,7 @@ import type {
   ReturnReasonSubtypeFilters,
   SavedRedirectOrder,
   SavedReturnOrder,
+  UpdateRedirectPayload,
   UpdateReturnPayload,
 } from "../../../src/types/additional-service.js";
 
@@ -728,5 +730,116 @@ describe("additional-service module — calculateRedirect (T9, AC-11)", () => {
     expect(err).toBeInstanceOf(NovaPoshtaApiError);
     expect((err as NovaPoshtaApiError).errors).toEqual(["Waybill not eligible for redirect"]);
     expect((err as NovaPoshtaApiError).errorCodes).toEqual(["409"]);
+  });
+});
+
+// --- T10 (app layer, AC-12/AC-13/AC-14): updateRedirect / getRedirectionOrdersList ---
+//
+// public-api.md §3.2/§5: updateRedirect routes through client.requestFirst() to `update` — payload
+// (Ref + whatever subset of corrected fields the caller supplies) is passed through as-is, no
+// client-side transformation and, per AC-13/§7, NO role field of any kind (sender-vs-recipient is
+// inferred by Nova Poshta solely from the calling API key). getRedirectionOrdersList routes through
+// client.request() with calledMethod "getRedirectionOrdersList", same OrderListFilters shape as
+// getReturnOrdersList (AC-14). Neither method exists on the module yet (T4-T9 shipped only through
+// calculateRedirect), so this is expected to fail to compile/run until T10's implementation lands.
+
+function updateRedirectPayload(overrides: Partial<UpdateRedirectPayload> = {}): UpdateRedirectPayload {
+  return {
+    Ref: "redirect-request-ref-1",
+    ...overrides,
+  };
+}
+
+function redirectOrderListItem(overrides: Partial<RedirectOrderListItem> = {}): RedirectOrderListItem {
+  return {
+    OrderRef: "redirect-order-ref-1",
+    OrderNumber: "1",
+    DateTime: "2026-09-23",
+    Note: "",
+    CityRecipient: "city-ref-1",
+    RecipientAddress: "1 Khreshchatyk St",
+    CounterpartyRecipient: "ACME LLC",
+    RecipientName: "Jane Doe",
+    PhoneRecipient: "380500000000",
+    PayerType: "Sender",
+    DeliveryCost: "45.00",
+    EstimatedDeliveryDate: "2026-09-25",
+    ExpressWaybillNumber: "20450000000099",
+    ExpressWaybillStatus: "In transit",
+    ...overrides,
+  };
+}
+
+describe("additional-service module — updateRedirect (T10, AC-12/AC-13)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("applies a corrected field, sends the payload through as-is via update with NO role/PayerType-inference field added, resolves the typed response (AC-12)", async () => {
+    const updatedOrder = { Ref: "redirect-request-ref-1", CityRecipient: "city-ref-2" };
+    const fetchMock = mockFetchOnce(() => successEnvelope([updatedOrder]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const payload = updateRedirectPayload({ CityRecipient: "city-ref-2" });
+    const result: Record<string, unknown> = await additionalService.updateRedirect(payload);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(sentBody.calledMethod).toBe("update");
+    // exactly what was given — no added role field, no client-side role inference of any kind (AC-13/§7)
+    expect(sentBody.methodProperties).toEqual(payload);
+    expect(sentBody.methodProperties.role).toBeUndefined();
+    expect(sentBody.methodProperties.Role).toBeUndefined();
+    expect(result).toEqual(updatedOrder);
+  });
+
+  it("propagates NovaPoshtaApiError unchanged when Nova Poshta declines a field the caller's inferred role may not change, no client-side field-permission check (AC-13)", async () => {
+    mockFetchOnce(() => declinedEnvelope(["Recipient is not allowed to change PaymentMethod"], ["403"]));
+    const additionalService = createAdditionalServiceModule(createClient("recipient-api-key"));
+
+    const err = await additionalService
+      .updateRedirect(updateRedirectPayload({ PaymentMethod: "NonCash" }))
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Recipient is not allowed to change PaymentMethod"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["403"]);
+  });
+});
+
+describe("additional-service module — getRedirectionOrdersList (T10, AC-14)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("unfiltered: sends calledMethod getRedirectionOrdersList, resolves typed RedirectOrderListItem[] (AC-14)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([redirectOrderListItem()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const result: RedirectOrderListItem[] = await additionalService.getRedirectionOrdersList();
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(sentBody.calledMethod).toBe("getRedirectionOrdersList");
+    expect(result).toEqual([redirectOrderListItem()]);
+  });
+
+  it("filter pass-through: Number/BeginDate/EndDate/Page/Limit reach the wire call unmodified, no client-side re-filtering/sorting/pagination (AC-14)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([redirectOrderListItem()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const filters: OrderListFilters = {
+      Number: "20450000000001",
+      BeginDate: "01.09.2026",
+      EndDate: "23.09.2026",
+      Page: 3,
+      Limit: 25,
+    };
+
+    await additionalService.getRedirectionOrdersList(filters);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.calledMethod).toBe("getRedirectionOrdersList");
+    expect(sentBody.methodProperties).toEqual(filters);
   });
 });

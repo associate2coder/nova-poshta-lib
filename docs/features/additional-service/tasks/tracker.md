@@ -14,7 +14,7 @@
 | T7 | Return list/reason reads | app | TBD lead | S | T1, T2 | done |
 | T8 | `checkRedirectPossible` / `checkRedirectEditPossible` | app | TBD lead | M | T1, T2 | done |
 | T9 | `createRedirect` / `calculateRedirect` | app | TBD lead | M | T1, T2 | done |
-| T10 | `updateRedirect` / `getRedirectionOrdersList` | app | TBD lead | M | T1, T2 | todo |
+| T10 | `updateRedirect` / `getRedirectionOrdersList` | app | TBD lead | M | T1, T2 | done |
 | T11 | Waybill-edit group | app | TBD lead | M | T1, T2 | todo |
 | T12 | `deleteAdditionalServiceOrder` | app | TBD lead | S | T1, T2 | todo |
 | T13 | `createReturnIfPossible` | app | TBD lead | M | T4, T5 | todo |

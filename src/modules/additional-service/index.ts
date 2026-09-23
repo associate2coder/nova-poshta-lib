@@ -9,6 +9,7 @@ import type {
   CreateReturnPayload,
   OrderListFilters,
   OrderPricingEstimate,
+  RedirectOrderListItem,
   RedirectPossibility,
   ReturnAddressOption,
   ReturnEditInfo,
@@ -19,6 +20,7 @@ import type {
   ReturnReasonSubtypeFilters,
   SavedRedirectOrder,
   SavedReturnOrder,
+  UpdateRedirectPayload,
   UpdateReturnPayload,
 } from "../../types/additional-service.js";
 
@@ -68,6 +70,14 @@ export interface AdditionalServiceModule {
   /** public-api.md §3.2/§5, AC-11: same wire call and payload as createRedirect, plus
    *  OnlyGetPricing: "1" — returns a pricing estimate and creates no order. */
   calculateRedirect(payload: CreateRedirectPayload): Promise<OrderPricingEstimate>;
+  /** public-api.md §3.2/§5, AC-12/AC-13: passes the payload through as-is to update via
+   *  client.requestFirst() — no role field is added and no client-side role check is performed;
+   *  Nova Poshta infers sender-vs-recipient solely from the calling API key, and a field-permission
+   *  decline (AC-13) surfaces as Nova Poshta's own NovaPoshtaApiError, unmodified. */
+  updateRedirect(payload: UpdateRedirectPayload): Promise<Record<string, unknown>>;
+  /** public-api.md §3.2/§5, AC-14: thin pass-through to client.request() — filters travel to the
+   *  wire unmodified, same OrderListFilters shape as getReturnOrdersList. */
+  getRedirectionOrdersList(filters?: OrderListFilters): Promise<RedirectOrderListItem[]>;
 }
 
 /** AC-03/AC-04/AC-05, sad.md §4 decision 4: shared builder for createReturn/calculateReturn — strips
@@ -150,5 +160,17 @@ export function createAdditionalServiceModule(client: NovaPoshtaClient): Additio
         OrderType: "orderRedirecting",
         OnlyGetPricing: "1",
       } as unknown as Record<string, unknown>),
+    updateRedirect: (payload: UpdateRedirectPayload) =>
+      client.requestFirst<Record<string, unknown>>(
+        "AdditionalServiceGeneral",
+        "update",
+        payload as unknown as Record<string, unknown>,
+      ),
+    getRedirectionOrdersList: (filters?: OrderListFilters) =>
+      client.request<RedirectOrderListItem>(
+        "AdditionalServiceGeneral",
+        "getRedirectionOrdersList",
+        (filters ?? {}) as unknown as Record<string, unknown>,
+      ),
   };
 }

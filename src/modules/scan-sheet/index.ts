@@ -27,7 +27,8 @@ export interface ScanSheetModule {
 }
 
 /** Today's Europe/Kyiv calendar date as YYYY-MM-DD — matches Nova Poshta's own timezone,
- *  regardless of where the calling code runs (spec.md §1 Decision override). */
+ *  regardless of where the calling code runs (spec.md §1 Decision override). Internal comparison
+ *  format only — see `toWireDate` for what actually goes on the wire. */
 function kyivTodayDateString(): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Kyiv",
@@ -35,6 +36,14 @@ function kyivTodayDateString(): string {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
+}
+
+/** Converts a YYYY-MM-DD date into the `insertDocuments`/`Date` wire format Nova Poshta actually
+ *  requires — confirmed live 2026-09-23 (`"Невірний формат дати"` / "invalid date format" on the
+ *  ISO-ish form; `DD.MM.YYYY` accepted), closing spec.md §8's previously-open question. */
+function toWireDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-");
+  return `${day}.${month}.${year}`;
 }
 
 /** Extracts a comparable YYYY-MM-DD date part from a Nova Poshta timestamp string, tolerating
@@ -84,12 +93,23 @@ export function createScanSheetModule(client: NovaPoshtaClient): ScanSheetModule
         "removeDocuments",
         payload as unknown as Record<string, unknown>,
       ),
-    deleteScanSheet: (payload: DeleteScanSheetPayload) =>
-      client.request<DeleteScanSheetItem>(
-        "ScanSheet",
-        "deleteScanSheet",
-        payload as unknown as Record<string, unknown>,
-      ),
+    // Confirmed live 2026-09-23: unlike every other method in this module, deleteScanSheet's
+    // successful `data` is a single object — `{ ScanSheetRefs: { Success: [...], Errors: [...] } }`
+    // — not a navigable list, so client.request()'s Array.isArray(data) check would always throw
+    // here. requestObject() skips that check; the two branches are combined into one flat
+    // DeleteScanSheetItem[] (Error: "" for a successful item) matching this module's existing
+    // per-item-Error convention (removeDocuments, insertDocuments).
+    deleteScanSheet: async (payload: DeleteScanSheetPayload): Promise<DeleteScanSheetItem[]> => {
+      const raw = await client.requestObject<{
+        ScanSheetRefs?: {
+          Success?: Array<{ Ref: string; Number: string }>;
+          Errors?: Array<{ Ref: string; Number: string; Error: string }>;
+        };
+      }>("ScanSheet", "deleteScanSheet", payload as unknown as Record<string, unknown>);
+      const succeeded = (raw.ScanSheetRefs?.Success ?? []).map((item) => ({ ...item, Error: "" }));
+      const failed = raw.ScanSheetRefs?.Errors ?? [];
+      return [...succeeded, ...failed];
+    },
     addToTodaysScanSheet: async (documentRefs: string[]) => {
       const today = kyivTodayDateString();
       const sheets = await getScanSheetList();
@@ -104,7 +124,7 @@ export function createScanSheetModule(client: NovaPoshtaClient): ScanSheetModule
             ).Ref
           : "";
 
-      return insertDocuments({ DocumentRefs: documentRefs, Ref: targetRef, Date: today });
+      return insertDocuments({ DocumentRefs: documentRefs, Ref: targetRef, Date: toWireDate(today) });
     },
   };
 }

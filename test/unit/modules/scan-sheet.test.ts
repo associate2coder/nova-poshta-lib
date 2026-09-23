@@ -49,8 +49,34 @@ function kyivTodayDateString(): string {
   }).format(new Date());
 }
 
+/** The wire `Date` format addToTodaysScanSheet must actually send — confirmed live 2026-09-23
+ *  (`DD.MM.YYYY`, not the ISO-ish comparison format `kyivTodayDateString` above produces).
+ *  Computed independently of the module under test, same as `kyivTodayDateString`. */
+function toWireDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-");
+  return `${day}.${month}.${year}`;
+}
+
 function successEnvelope(data: unknown[]) {
   return { ok: true, json: () => Promise.resolve({ success: true, data, errors: [], warnings: [] }) };
+}
+
+/** deleteScanSheet's successful `data` is a single object, not a list — confirmed live
+ *  2026-09-23 (`{ ScanSheetRefs: { Success: [...], Errors: [...] } }`). */
+function successObjectEnvelope(data: unknown) {
+  return { ok: true, json: () => Promise.resolve({ success: true, data, errors: [], warnings: [] }) };
+}
+
+/** Builds deleteScanSheet's real nested wire shape from the module's own flat per-item result
+ *  type — an item with an empty Error is "Success" (no Error key on the wire), any other item is
+ *  "Errors" (Error key kept). */
+function rawDeleteScanSheetData(items: DeleteScanSheetItem[]) {
+  return {
+    ScanSheetRefs: {
+      Success: items.filter((item) => !item.Error).map(({ Ref, Number }) => ({ Ref, Number })),
+      Errors: items.filter((item) => item.Error).map(({ Ref, Number, Error }) => ({ Ref, Number, Error })),
+    },
+  };
 }
 
 function declinedEnvelope(errors: string[], errorCodes: string[] = []) {
@@ -316,7 +342,8 @@ describe("scan-sheet module — deleteScanSheet (T2, AC-09/AC-10)", () => {
   });
 
   it("deletes sheets and returns typed per-sheet confirmation, batch unmodified (AC-09)", async () => {
-    const fetchMock = mockFetchOnce(() => successEnvelope([deleteItem(), deleteItem({ Ref: "sheet-ref-2" })]));
+    const items = [deleteItem(), deleteItem({ Ref: "sheet-ref-2" })];
+    const fetchMock = mockFetchOnce(() => successObjectEnvelope(rawDeleteScanSheetData(items)));
     const scanSheet = createScanSheetModule(createClient("test-api-key"));
 
     const scanSheetRefs = ["sheet-ref-1", "sheet-ref-2"];
@@ -324,13 +351,12 @@ describe("scan-sheet module — deleteScanSheet (T2, AC-09/AC-10)", () => {
 
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(sentBody.methodProperties.ScanSheetRefs).toEqual(scanSheetRefs);
-    expect(result).toEqual([deleteItem(), deleteItem({ Ref: "sheet-ref-2" })]);
+    expect(result).toEqual(items);
   });
 
   it("does not throw when one sheet among several carries its own per-item Error (AC-09, ADR-0001)", async () => {
-    mockFetchOnce(() =>
-      successEnvelope([deleteItem(), deleteItem({ Ref: "sheet-ref-2", Error: "Sheet already deleted" })]),
-    );
+    const items = [deleteItem(), deleteItem({ Ref: "sheet-ref-2", Error: "Sheet already deleted" })];
+    mockFetchOnce(() => successObjectEnvelope(rawDeleteScanSheetData(items)));
     const scanSheet = createScanSheetModule(createClient("test-api-key"));
 
     const result = await scanSheet.deleteScanSheet({ ScanSheetRefs: ["sheet-ref-1", "sheet-ref-2"] });
@@ -339,7 +365,7 @@ describe("scan-sheet module — deleteScanSheet (T2, AC-09/AC-10)", () => {
   });
 
   it("makes no call to any waybill-invalidating endpoint (AC-10)", async () => {
-    const fetchMock = mockFetchOnce(() => successEnvelope([deleteItem()]));
+    const fetchMock = mockFetchOnce(() => successObjectEnvelope(rawDeleteScanSheetData([deleteItem()])));
     const scanSheet = createScanSheetModule(createClient("test-api-key"));
 
     await scanSheet.deleteScanSheet({ ScanSheetRefs: ["sheet-ref-1"] });
@@ -352,8 +378,8 @@ describe("scan-sheet module — deleteScanSheet (T2, AC-09/AC-10)", () => {
     expect(calledMethods).not.toContain("delete");
   });
 
-  it("resolves with [] and does not throw when success is true but data is a completely empty array (AC-09, ADR-0001)", async () => {
-    mockFetchOnce(() => successEnvelope([]));
+  it("resolves with [] and does not throw when success is true but both Success/Errors are empty (AC-09, ADR-0001)", async () => {
+    mockFetchOnce(() => successObjectEnvelope({ ScanSheetRefs: { Success: [], Errors: [] } }));
     const scanSheet = createScanSheetModule(createClient("test-api-key"));
 
     await expect(
@@ -364,7 +390,9 @@ describe("scan-sheet module — deleteScanSheet (T2, AC-09/AC-10)", () => {
   // review-2026-09-22.md finding 8 (re-review) — T12's DoD covers DocumentRefs/ScanSheetRefs on
   // both write methods, not just insertDocuments's DocumentRefs.
   it("passes an empty ScanSheetRefs request array through to the wire unmodified (AC-09, pass-through non-goal)", async () => {
-    const fetchMock = mockFetchOnce(() => successEnvelope([]));
+    const fetchMock = mockFetchOnce(() =>
+      successObjectEnvelope({ ScanSheetRefs: { Success: [], Errors: [] } }),
+    );
     const scanSheet = createScanSheetModule(createClient("test-api-key"));
 
     await scanSheet.deleteScanSheet({ ScanSheetRefs: [] });
@@ -377,7 +405,7 @@ describe("scan-sheet module — deleteScanSheet (T2, AC-09/AC-10)", () => {
   // a successfully deleted sheet" postcondition, observed end-to-end across two calls.
   it("a deleted sheet's Ref is absent from a subsequent getScanSheetList call (AC-09 postcondition)", async () => {
     const fetchMock = mockFetchSequence([
-      () => successEnvelope([deleteItem({ Ref: "sheet-ref-1" })]),
+      () => successObjectEnvelope(rawDeleteScanSheetData([deleteItem({ Ref: "sheet-ref-1" })])),
       () => successEnvelope([listItem({ Ref: "sheet-ref-2" })]),
     ]);
     const scanSheet = createScanSheetModule(createClient("test-api-key"));
@@ -475,7 +503,7 @@ describe("scan-sheet module — addToTodaysScanSheet (T3, AC-03)", () => {
     expect(secondBody.calledMethod).toBe("insertDocuments");
     expect(secondBody.methodProperties.Ref).toBe("newer-today-ref");
     expect(secondBody.methodProperties.DocumentRefs).toEqual(documentRefs);
-    expect(secondBody.methodProperties.Date).toBe(today);
+    expect(secondBody.methodProperties.Date).toBe(toWireDate(today));
     expect(result).toEqual([insertItem({ Ref: "newer-today-ref" })]);
   });
 
@@ -498,7 +526,7 @@ describe("scan-sheet module — addToTodaysScanSheet (T3, AC-03)", () => {
     expect(secondBody.calledMethod).toBe("insertDocuments");
     expect(secondBody.methodProperties.Ref).toBe("");
     expect(secondBody.methodProperties.DocumentRefs).toEqual(documentRefs);
-    expect(secondBody.methodProperties.Date).toBe(today);
+    expect(secondBody.methodProperties.Date).toBe(toWireDate(today));
     expect(result).toEqual([insertItem({ Ref: "brand-new-ref" })]);
   });
 

@@ -1,5 +1,3 @@
-import type { NovaPoshtaEnvelope } from "./types/envelope.js";
-
 const API_URL = "https://api.novaposhta.ua/v2.0/json/";
 
 export class NovaPoshtaApiError extends Error {
@@ -46,14 +44,35 @@ export interface NovaPoshtaClient {
    *  returned array — and throws `NovaPoshtaApiError` (naming `modelName`/`calledMethod`) if that
    *  array is empty (ADR-0002). */
   requestFirst<T>(modelName: string, calledMethod: string, methodProperties?: Record<string, unknown>): Promise<T>;
+  /** For the rare Nova Poshta method whose successful `data` is a single object, not a navigable
+   *  list — confirmed live against `ScanSheet.deleteScanSheet` (2026-09-23), whose `data` is
+   *  `{ ScanSheetRefs: { Success: [...], Errors: [...] } }`. Same success/error validation as
+   *  `request()`, but skips its `Array.isArray(data)` check and resolves `data` as-is. */
+  requestObject<T>(modelName: string, calledMethod: string, methodProperties?: Record<string, unknown>): Promise<T>;
+}
+
+/** Same wire shape as the public `NovaPoshtaEnvelope<T>` (re-exported for consumers who expect
+ *  `data: T[]`), but generic over `data`'s actual shape rather than assuming a list — used only
+ *  internally by `fetchEnvelope`, since `ScanSheet.deleteScanSheet` confirmed live that `data` is
+ *  sometimes a single object, not an array. */
+interface RawEnvelope<D> {
+  success: boolean;
+  data: D;
+  errors: string[];
+  errorCodes?: string[];
+  warnings: string[];
+  info?: unknown;
 }
 
 export function createClient(apiKey: string): NovaPoshtaClient {
-  async function sendRequest<T>(
+  /** Fetches + parses the envelope and enforces the success/error contract — but does not assume
+   *  `data`'s shape, since one confirmed Nova Poshta method (`ScanSheet.deleteScanSheet`) returns a
+   *  single object there, not a list. Callers that need a navigable list assert that themselves. */
+  async function fetchEnvelope<D>(
     modelName: string,
     calledMethod: string,
     methodProperties: Record<string, unknown>,
-  ): Promise<NovaPoshtaSuccessEnvelope<T>> {
+  ): Promise<{ data: D; errors: string[]; warnings: string[]; info?: unknown }> {
     let response: Response;
     try {
       response = await fetch(API_URL, {
@@ -71,9 +90,9 @@ export function createClient(apiKey: string): NovaPoshtaClient {
       throw new NovaPoshtaApiError(`Nova Poshta API request failed with status ${response.status}`);
     }
 
-    let envelope: NovaPoshtaEnvelope<T>;
+    let envelope: RawEnvelope<D>;
     try {
-      envelope = (await response.json()) as NovaPoshtaEnvelope<T>;
+      envelope = (await response.json()) as RawEnvelope<D>;
     } catch (cause) {
       throw new NovaPoshtaApiError(
         `Nova Poshta API response for ${modelName}.${calledMethod} was not valid JSON: ${(cause as Error).message}`,
@@ -92,18 +111,28 @@ export function createClient(apiKey: string): NovaPoshtaClient {
       );
     }
 
-    if (!Array.isArray(envelope.data)) {
-      throw new NovaPoshtaApiError(
-        `Nova Poshta API response for ${modelName}.${calledMethod} was not a navigable list`,
-      );
-    }
-
     return {
       data: envelope.data,
       errors: Array.isArray(envelope.errors) ? envelope.errors : [],
       warnings: Array.isArray(envelope.warnings) ? envelope.warnings : [],
       info: envelope.info,
     };
+  }
+
+  async function sendRequest<T>(
+    modelName: string,
+    calledMethod: string,
+    methodProperties: Record<string, unknown>,
+  ): Promise<NovaPoshtaSuccessEnvelope<T>> {
+    const envelope = await fetchEnvelope<T[]>(modelName, calledMethod, methodProperties);
+
+    if (!Array.isArray(envelope.data)) {
+      throw new NovaPoshtaApiError(
+        `Nova Poshta API response for ${modelName}.${calledMethod} was not a navigable list`,
+      );
+    }
+
+    return envelope;
   }
 
   const client = {
@@ -135,6 +164,14 @@ export function createClient(apiKey: string): NovaPoshtaClient {
         );
       }
       return first;
+    },
+    async requestObject<T>(
+      modelName: string,
+      calledMethod: string,
+      methodProperties: Record<string, unknown> = {},
+    ): Promise<T> {
+      const envelope = await fetchEnvelope<T>(modelName, calledMethod, methodProperties);
+      return envelope.data;
     },
   };
 

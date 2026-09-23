@@ -121,3 +121,53 @@ describe("core client — apiKey is not enumerable (review 2026-09-21 finding 3)
     expect(client.apiKey).toBe("my-secret-key");
   });
 });
+
+describe("core client — requestFirst() (ADR-0002)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("resolves the first element when request() returns a non-empty array", async () => {
+    mockFetchOnce({ success: true, data: [{ Ref: "1" }, { Ref: "2" }], errors: [], warnings: [] });
+    const client = createClient("test-api-key");
+
+    await expect(client.requestFirst("Common", "getPaymentForms")).resolves.toEqual({ Ref: "1" });
+  });
+
+  it("throws NovaPoshtaApiError naming modelName/calledMethod when request() returns an empty array", async () => {
+    mockFetchOnce({ success: true, data: [], errors: [], warnings: [] });
+    const client = createClient("test-api-key");
+
+    await expect(client.requestFirst("Common", "getPaymentForms")).rejects.toThrow(
+      "Nova Poshta API response for Common.getPaymentForms reported success but returned no record",
+    );
+  });
+});
+
+describe("core client — requestEnvelope() info pass-through (ADR-0001)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("carries the envelope's info field through when present", async () => {
+    mockFetchOnce({
+      success: true,
+      data: [{ Ref: "1" }],
+      errors: [],
+      warnings: [],
+      info: { PayerTypeDefault: "Recipient", Number: "1" },
+    });
+    const client = createClient("test-api-key");
+
+    const envelope = await client.requestEnvelope("Common", "getPaymentForms");
+    expect(envelope.info).toEqual({ PayerTypeDefault: "Recipient", Number: "1" });
+  });
+
+  it("leaves info undefined when the raw envelope omits it", async () => {
+    mockFetchOnce({ success: true, data: [{ Ref: "1" }], errors: [], warnings: [] });
+    const client = createClient("test-api-key");
+
+    const envelope = await client.requestEnvelope("Common", "getPaymentForms");
+    expect(envelope.info).toBeUndefined();
+  });
+});

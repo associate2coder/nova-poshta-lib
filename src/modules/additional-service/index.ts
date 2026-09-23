@@ -10,6 +10,8 @@ import type {
   CreateRedirectPayload,
   CreateReturnPayload,
   CreateWaybillEditPayload,
+  DeleteAdditionalServiceOrderPayload,
+  DeletedAdditionalServiceOrder,
   OrderListFilters,
   OrderPricingEstimate,
   RedirectOrderListItem,
@@ -96,6 +98,13 @@ export interface AdditionalServiceModule {
    *  shape as the other list methods; resolves ChangeEWOrderListItem[] including the wire's own
    *  Before/AfterChange field naming. */
   getChangeEWOrdersList(filters?: OrderListFilters): Promise<ChangeEWOrderListItem[]>;
+  /** public-api.md §3.4/§5, AC-18/AC-19: one wire call (delete via client.requestFirst()) shared by
+   *  return, redirect, and waybill-edit orders alike — the library never branches on order kind, it
+   *  can't tell from a Ref alone. No client-side status check; the "Accepted"-only gate confirmed for
+   *  waybill-edit orders (AC-19) is enforced solely by Nova Poshta's own decline. */
+  deleteAdditionalServiceOrder(
+    payload: DeleteAdditionalServiceOrderPayload,
+  ): Promise<DeletedAdditionalServiceOrder>;
 }
 
 /** AC-03/AC-04/AC-05, sad.md §4 decision 4: shared builder for createReturn/calculateReturn — strips
@@ -206,6 +215,12 @@ export function createAdditionalServiceModule(client: NovaPoshtaClient): Additio
         "AdditionalServiceGeneral",
         "getChangeEWOrdersList",
         (filters ?? {}) as unknown as Record<string, unknown>,
+      ),
+    deleteAdditionalServiceOrder: (payload: DeleteAdditionalServiceOrderPayload) =>
+      client.requestFirst<DeletedAdditionalServiceOrder>(
+        "AdditionalServiceGeneral",
+        "delete",
+        payload as unknown as Record<string, unknown>,
       ),
   };
 }

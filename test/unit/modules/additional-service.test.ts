@@ -9,6 +9,8 @@ import type {
   CreateReturnToNewWarehousePayload,
   CreateReturnToSenderAddressPayload,
   CreateWaybillEditPayload,
+  DeleteAdditionalServiceOrderPayload,
+  DeletedAdditionalServiceOrder,
   OrderListFilters,
   OrderPricingEstimate,
   RedirectOrderListItem,
@@ -1067,5 +1069,87 @@ describe("additional-service module — getChangeEWOrdersList (T11, AC-17)", () 
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(sentBody.calledMethod).toBe("getChangeEWOrdersList");
     expect(sentBody.methodProperties).toEqual(filters);
+  });
+});
+
+// --- T12 (app layer, AC-18/AC-19): deleteAdditionalServiceOrder ---
+//
+// public-api.md §3.4/§5: ONE method, ONE wire call (`delete` via client.requestFirst()) shared by
+// return, redirect, and waybill-edit orders alike — the library never branches on which order kind a
+// Ref belongs to (it can't tell). The three happy-path cases below reuse the exact same call shape
+// with three different Refs to prove that: same calledMethod, same modelName, same payload shape,
+// same resolved DeletedAdditionalServiceOrder result, regardless of order kind. AC-19: the
+// "Accepted"-only status gate is confirmed specifically for waybill-edit orders — a decline propagates
+// unchanged, no client-side status pre-check. deleteAdditionalServiceOrder doesn't exist on the module
+// yet (T4-T11 only shipped the other 17 methods), so this is expected to fail to compile/run until
+// T12's implementation lands.
+
+function deleteAdditionalServiceOrderPayload(
+  overrides: Partial<DeleteAdditionalServiceOrderPayload> = {},
+): DeleteAdditionalServiceOrderPayload {
+  return { Ref: "return-order-ref-1", ...overrides };
+}
+
+describe("additional-service module — deleteAdditionalServiceOrder (T12, AC-18/AC-19)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("deletes a return order: sends calledMethod delete with { Ref }, resolves the typed Number (AC-18)", async () => {
+    const deleted: DeletedAdditionalServiceOrder = { Number: "1" };
+    const fetchMock = mockFetchOnce(() => successEnvelope([deleted]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const payload = deleteAdditionalServiceOrderPayload({ Ref: "return-order-ref-1" });
+    const result = await additionalService.deleteAdditionalServiceOrder(payload);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(sentBody.calledMethod).toBe("delete");
+    expect(sentBody.methodProperties).toEqual(payload);
+    expect(result).toEqual(deleted);
+  });
+
+  it("deletes a redirect order: same calledMethod/payload shape, different Ref, same resolved result (AC-18)", async () => {
+    const deleted: DeletedAdditionalServiceOrder = { Number: "2" };
+    const fetchMock = mockFetchOnce(() => successEnvelope([deleted]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const payload = deleteAdditionalServiceOrderPayload({ Ref: "redirect-order-ref-1" });
+    const result = await additionalService.deleteAdditionalServiceOrder(payload);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(sentBody.calledMethod).toBe("delete");
+    expect(sentBody.methodProperties).toEqual(payload);
+    expect(result).toEqual(deleted);
+  });
+
+  it("deletes a waybill-edit order: same calledMethod/payload shape, different Ref, same resolved result (AC-18)", async () => {
+    const deleted: DeletedAdditionalServiceOrder = { Number: "3" };
+    const fetchMock = mockFetchOnce(() => successEnvelope([deleted]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const payload = deleteAdditionalServiceOrderPayload({ Ref: "waybill-edit-order-ref-1" });
+    const result = await additionalService.deleteAdditionalServiceOrder(payload);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(sentBody.calledMethod).toBe("delete");
+    expect(sentBody.methodProperties).toEqual(payload);
+    expect(result).toEqual(deleted);
+  });
+
+  it("propagates NovaPoshtaApiError unchanged when a non-Accepted waybill-edit order is declined, no client-side status check (AC-19)", async () => {
+    mockFetchOnce(() => declinedEnvelope(["Order is not in status Accepted"], ["409"]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const err = await additionalService
+      .deleteAdditionalServiceOrder(deleteAdditionalServiceOrderPayload({ Ref: "waybill-edit-order-ref-1" }))
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Order is not in status Accepted"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["409"]);
   });
 });

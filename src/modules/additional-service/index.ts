@@ -5,6 +5,7 @@ import type {
   CheckReturnEditPossiblePayload,
   CheckReturnEditPossibleResult,
   CheckReturnPossiblePayload,
+  CreateRedirectPayload,
   CreateReturnPayload,
   OrderListFilters,
   OrderPricingEstimate,
@@ -16,6 +17,7 @@ import type {
   ReturnReason,
   ReturnReasonSubtype,
   ReturnReasonSubtypeFilters,
+  SavedRedirectOrder,
   SavedReturnOrder,
   UpdateReturnPayload,
 } from "../../types/additional-service.js";
@@ -57,6 +59,15 @@ export interface AdditionalServiceModule {
   /** public-api.md §3.2/§5, AC-12: same wire calledMethod as checkRedirectPossible, dispatched by
    *  payload shape (OrderRef + fields) — resolves the same record type, partially populated. */
   checkRedirectEditPossible(payload: CheckRedirectEditPossiblePayload): Promise<Partial<RedirectPossibility>>;
+  /** public-api.md §3.2/§5, AC-09/AC-10: unlike createReturn's Destination, CreateRedirectPayload has
+   *  no discriminant to strip — it's forwarded to save/orderRedirecting as-is via client.requestFirst(),
+   *  with OrderType: "orderRedirecting" set internally, never caller-settable. AC-10: Recipient (a
+   *  counterparty Ref from the counterparty module) travels through unmodified — no ownership/existence
+   *  check of this module's own. */
+  createRedirect(payload: CreateRedirectPayload): Promise<SavedRedirectOrder>;
+  /** public-api.md §3.2/§5, AC-11: same wire call and payload as createRedirect, plus
+   *  OnlyGetPricing: "1" — returns a pricing estimate and creates no order. */
+  calculateRedirect(payload: CreateRedirectPayload): Promise<OrderPricingEstimate>;
 }
 
 /** AC-03/AC-04/AC-05, sad.md §4 decision 4: shared builder for createReturn/calculateReturn — strips
@@ -128,5 +139,16 @@ export function createAdditionalServiceModule(client: NovaPoshtaClient): Additio
         "checkPossibilityForRedirecting",
         payload as unknown as Record<string, unknown>,
       ),
+    createRedirect: (payload: CreateRedirectPayload) =>
+      client.requestFirst<SavedRedirectOrder>("AdditionalServiceGeneral", "save", {
+        ...payload,
+        OrderType: "orderRedirecting",
+      } as unknown as Record<string, unknown>),
+    calculateRedirect: (payload: CreateRedirectPayload) =>
+      client.requestFirst<OrderPricingEstimate>("AdditionalServiceGeneral", "save", {
+        ...payload,
+        OrderType: "orderRedirecting",
+        OnlyGetPricing: "1",
+      } as unknown as Record<string, unknown>),
   };
 }

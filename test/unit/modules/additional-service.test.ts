@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createClient, NovaPoshtaApiError } from "../../../src/index.js";
 import { createAdditionalServiceModule } from "../../../src/modules/additional-service/index.js";
 import type {
+  CreateRedirectPayload,
   CreateReturnPayload,
   CreateReturnToNewAddressPayload,
   CreateReturnToNewWarehousePayload,
@@ -15,6 +16,7 @@ import type {
   ReturnReason,
   ReturnReasonSubtype,
   ReturnReasonSubtypeFilters,
+  SavedRedirectOrder,
   SavedReturnOrder,
   UpdateReturnPayload,
 } from "../../../src/types/additional-service.js";
@@ -612,5 +614,119 @@ describe("additional-service module — checkRedirectEditPossible (T8, AC-12)", 
     expect(err).toBeInstanceOf(NovaPoshtaApiError);
     expect((err as NovaPoshtaApiError).errors).toEqual(["Redirect request not found"]);
     expect((err as NovaPoshtaApiError).errorCodes).toEqual(["404"]);
+  });
+});
+
+// --- T9 (app layer, AC-09/AC-10/AC-11): createRedirect / calculateRedirect ---
+//
+// public-api.md §3.2/§5: both route through client.requestFirst() to save/orderRedirecting;
+// calculateRedirect additionally injects OnlyGetPricing: "1". Unlike createReturn,
+// CreateRedirectPayload is one flat interface — no Destination-like discriminant exists for
+// redirect (public-api.md §3.2 note, spec.md §1's "no AC-04-equivalent discriminant guard" note),
+// so there is nothing to strip; OrderType: "orderRedirecting" is set internally, never
+// caller-settable. AC-10: Recipient is a counterparty Ref from a separate bounded context (the
+// counterparty module) — passed through unmodified, no ownership/existence check of this module's
+// own. Neither method exists on the module yet (T4-T8 shipped only through
+// checkRedirectEditPossible), so this is expected to fail to compile/run until T9's implementation
+// lands.
+
+function createRedirectPayload(overrides: Partial<CreateRedirectPayload> = {}): CreateRedirectPayload {
+  return {
+    IntDocNumber: "20450000000001",
+    PaymentMethod: "Cash",
+    Recipient: "counterparty-ref-1",
+    RecipientContactName: "Jane Doe",
+    RecipientPhone: "380500000000",
+    PayerType: "Sender",
+    ...overrides,
+  };
+}
+
+function savedRedirectOrder(overrides: Partial<SavedRedirectOrder> = {}): SavedRedirectOrder {
+  return { Number: "20450000000001", Ref: "redirect-order-ref-1", ...overrides };
+}
+
+describe("additional-service module — createRedirect (T9, AC-09/AC-10)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("creates the redirect via save/orderRedirecting (OrderType set internally), resolves typed SavedRedirectOrder (AC-09)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([savedRedirectOrder()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const result: SavedRedirectOrder = await additionalService.createRedirect(createRedirectPayload());
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(sentBody.calledMethod).toBe("save");
+    expect(sentBody.methodProperties.OrderType).toBe("orderRedirecting");
+    // no Destination-like discriminant exists on CreateRedirectPayload — nothing for this module
+    // to strip, unlike createReturn's Destination
+    expect(sentBody.methodProperties.IntDocNumber).toBe("20450000000001");
+    expect(sentBody.methodProperties.RecipientContactName).toBe("Jane Doe");
+    expect(result).toEqual(savedRedirectOrder());
+  });
+
+  it("passes the Recipient counterparty Ref through to the wire payload byte-for-byte unmodified — no ownership/existence check of this module's own (AC-10)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([savedRedirectOrder()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const recipientRef = "counterparty-ref-from-a-different-bounded-context-42";
+    await additionalService.createRedirect(createRedirectPayload({ Recipient: recipientRef }));
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    // byte-for-byte: the exact same string value reaches the wire, never re-derived, normalized,
+    // or checked against the counterparty module by this module itself
+    expect(sentBody.methodProperties.Recipient).toBe(recipientRef);
+    expect(typeof sentBody.methodProperties.Recipient).toBe("string");
+  });
+
+  it("propagates NovaPoshtaApiError unchanged when Nova Poshta declines the create call", async () => {
+    mockFetchOnce(() => declinedEnvelope(["Waybill not eligible for redirect"], ["409"]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const err = await additionalService.createRedirect(createRedirectPayload()).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Waybill not eligible for redirect"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["409"]);
+  });
+});
+
+describe("additional-service module — calculateRedirect (T9, AC-11)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends OnlyGetPricing: \"1\" alongside OrderType: \"orderRedirecting\", returns typed OrderPricingEstimate, creates no order (AC-11)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([orderPricingEstimate()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const result: OrderPricingEstimate = await additionalService.calculateRedirect(createRedirectPayload());
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(sentBody.calledMethod).toBe("save");
+    expect(sentBody.methodProperties.OrderType).toBe("orderRedirecting");
+    expect(sentBody.methodProperties.OnlyGetPricing).toBe("1");
+    // proves the resolved value is a pricing estimate, not a SavedRedirectOrder — no order created
+    // (spec.md §6 "Calculate/create isolation" measurement)
+    expect(result).toEqual(orderPricingEstimate());
+    expect(result.Pricing.Total).toBe(4500);
+    expect(result.ScheduledDeliveryDate).toBe("2026-09-25 00:00:00");
+    expect((result as unknown as Partial<SavedRedirectOrder>).Number).toBeUndefined();
+    expect((result as unknown as Partial<SavedRedirectOrder>).Ref).toBeUndefined();
+  });
+
+  it("propagates NovaPoshtaApiError unchanged when Nova Poshta declines the pricing call", async () => {
+    mockFetchOnce(() => declinedEnvelope(["Waybill not eligible for redirect"], ["409"]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const err = await additionalService.calculateRedirect(createRedirectPayload()).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Waybill not eligible for redirect"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["409"]);
   });
 });

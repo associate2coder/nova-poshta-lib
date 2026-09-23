@@ -10,6 +10,7 @@ import type {
   ReturnAddressOption,
   ReturnEditOption,
   SavedReturnOrder,
+  UpdateReturnPayload,
 } from "../../../src/types/additional-service.js";
 
 function mockFetchOnce(handler: (body: unknown) => { ok: boolean; status?: number; json: () => Promise<unknown> }) {
@@ -311,5 +312,56 @@ describe("additional-service module — createReturn/calculateReturn discriminan
     });
 
     expect(true).toBe(true);
+  });
+});
+
+// --- T6 (app layer, AC-06/AC-07): updateReturn ---
+//
+// public-api.md §3.1/§5: routes through client.requestFirst() to `update` — payload (Ref + whatever
+// subset of corrected fields the caller supplies) is passed through as-is, no client-side
+// transformation. Response shape is genuinely ambiguous (contract §3.1 note), so this asserts loosely:
+// the resolved value equals whatever the mocked response's first record is, typed as
+// Record<string, unknown>. updateReturn doesn't exist on the module yet (T4/T5 only shipped
+// checkReturnPossible/checkReturnEditPossible/createReturn/calculateReturn), so this is expected to
+// fail to compile/run until T6's implementation lands.
+
+function updateReturnPayload(overrides: Partial<UpdateReturnPayload> = {}): UpdateReturnPayload {
+  return {
+    Ref: "return-request-ref-1",
+    ...overrides,
+  };
+}
+
+describe("additional-service module — updateReturn (T6, AC-06/AC-07)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("applies a corrected field, sends the payload through as-is via update, resolves the typed response (AC-06)", async () => {
+    const updatedOrder = { Ref: "return-request-ref-1", PaymentMethod: "NonCash", BuildingNumber: "12" };
+    const fetchMock = mockFetchOnce(() => successEnvelope([updatedOrder]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const payload = updateReturnPayload({ PaymentMethod: "NonCash", BuildingNumber: "12" });
+    const result: Record<string, unknown> = await additionalService.updateReturn(payload);
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
+    expect(sentBody.calledMethod).toBe("update");
+    expect(sentBody.methodProperties).toEqual(payload);
+    expect(result).toEqual(updatedOrder);
+  });
+
+  it("propagates NovaPoshtaApiError unchanged when the return's status is no longer Accepted, no client-side status check (AC-07)", async () => {
+    mockFetchOnce(() => declinedEnvelope(["Return request is not in status Accepted"], ["409"]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const err = await additionalService
+      .updateReturn(updateReturnPayload({ PaymentMethod: "NonCash" }))
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NovaPoshtaApiError);
+    expect((err as NovaPoshtaApiError).errors).toEqual(["Return request is not in status Accepted"]);
+    expect((err as NovaPoshtaApiError).errorCodes).toEqual(["409"]);
   });
 });

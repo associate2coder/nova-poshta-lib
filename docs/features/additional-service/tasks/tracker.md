@@ -10,7 +10,7 @@
 | T3 | Refactor internet-document onto shared `requestFirst<T>()` | app | TBD lead | S | T2 | done |
 | T4 | `checkReturnPossible` / `checkReturnEditPossible` | app | TBD lead | M | T1, T2 | done |
 | T5 | `createReturn` / `calculateReturn` | app | TBD lead | L | T1, T2 | done |
-| T6 | `updateReturn` | app | TBD lead | S | T1, T2 | todo |
+| T6 | `updateReturn` | app | TBD lead | S | T1, T2 | done |
 | T7 | Return list/reason reads | app | TBD lead | S | T1, T2 | todo |
 | T8 | `checkRedirectPossible` / `checkRedirectEditPossible` | app | TBD lead | M | T1, T2 | todo |
 | T9 | `createRedirect` / `calculateRedirect` | app | TBD lead | M | T1, T2 | todo |

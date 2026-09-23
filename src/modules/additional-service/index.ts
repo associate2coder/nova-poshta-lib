@@ -9,6 +9,7 @@ import type {
   ReturnEditInfo,
   ReturnEditOption,
   SavedReturnOrder,
+  UpdateReturnPayload,
 } from "../../types/additional-service.js";
 
 export interface AdditionalServiceModule {
@@ -26,6 +27,11 @@ export interface AdditionalServiceModule {
   /** public-api.md §3.1/§5, AC-05: same wire call and payload builder as createReturn, plus
    *  OnlyGetPricing: "1" — returns a pricing estimate and creates no order. */
   calculateReturn(payload: CreateReturnPayload): Promise<OrderPricingEstimate>;
+  /** public-api.md §3.1/§5, AC-06/AC-07: passes the payload through as-is to update via
+   *  client.requestFirst() — no client-side status check; Nova Poshta's own decline (a non-Accepted
+   *  return) is the sole enforcer (AC-07). Response shape is genuinely ambiguous (types' own note),
+   *  so it's returned loosely typed rather than falsely precisely. */
+  updateReturn(payload: UpdateReturnPayload): Promise<Record<string, unknown>>;
 }
 
 /** AC-03/AC-04/AC-05, sad.md §4 decision 4: shared builder for createReturn/calculateReturn — strips
@@ -65,5 +71,11 @@ export function createAdditionalServiceModule(client: NovaPoshtaClient): Additio
         ...buildCreateReturnMethodProperties(payload),
         OnlyGetPricing: "1",
       }),
+    updateReturn: (payload: UpdateReturnPayload) =>
+      client.requestFirst<Record<string, unknown>>(
+        "AdditionalServiceGeneral",
+        "update",
+        payload as unknown as Record<string, unknown>,
+      ),
   };
 }

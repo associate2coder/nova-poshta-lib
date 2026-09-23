@@ -19,7 +19,7 @@
 | T12 | `deleteAdditionalServiceOrder` | app | TBD lead | S | T1, T2 | done |
 | T13 | `createReturnIfPossible` | app | TBD lead | M | T4, T5 | done |
 | T14 | Wire into public package surface | wiring | TBD lead | S | T4, T5, T6, T7, T8, T9, T10, T11, T12, T13 | done |
-| T15 | Unit test suite (shared error contract) | tests | TBD lead | L | T14 | todo |
+| T15 | Unit test suite (shared error contract) | tests | TBD lead | L | T14 | done |
 | T16 | Build-surface check | tests | TBD lead | S | T14 | todo |
 | T17 | README usage example | docs | TBD lead | S | T14 | todo |
 

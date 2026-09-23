@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createClient, NovaPoshtaApiError } from "../../../src/index.js";
-import { createAdditionalServiceModule } from "../../../src/modules/additional-service/index.js";
+import {
+  createAdditionalServiceModule,
+  type AdditionalServiceModule,
+} from "../../../src/modules/additional-service/index.js";
 import type {
   ChangeEWOrderListItem,
   CreateRedirectPayload,
@@ -1261,5 +1264,202 @@ describe("additional-service module — createReturnIfPossible (T13, AC-20)", ()
     expect((err as NovaPoshtaApiError).errorCodes).toEqual(["404"]);
     expect((err as NovaPoshtaApiError).message).not.toBe("no return address available for this waybill");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// --- T15 (tests, AC-01..AC-23 coverage audit + gap-fill, spec.md §6 NFR table) ---
+//
+// T4-T13 already named-covered AC-01..AC-20 individually (see each describe block's own header
+// above). The remaining gap is the three *generic*, cross-cutting ACs — AC-21 (envelope-level
+// decline/malformation), AC-22 (network failure/non-JSON), AC-23 (API-key denial) — which spec.md
+// §5 states apply to "any of this module's methods", not to one method in particular. client.ts's
+// sendRequest() already implements all three paths uniformly (proven by T2's client.test.ts); this
+// closes the breadth gap by exercising every one of the 19 typed methods against each scenario,
+// table-driven, plus the two spec §6 NFR checks (isolation, ≤5ms overhead) that no prior task added.
+
+/** One minimal, valid-shaped invocation per typed method — reuses this file's own fixture builders
+ *  so each call is what a real caller would send, not an empty/garbage payload. */
+const allMethodInvocations: Array<{ name: string; invoke: (m: AdditionalServiceModule) => Promise<unknown> }> = [
+  { name: "checkReturnPossible", invoke: (m) => m.checkReturnPossible({ Number: "20450000000001" }) },
+  {
+    name: "checkReturnEditPossible",
+    invoke: (m) => m.checkReturnEditPossible({ Ref: "return-request-ref-1", Address: {} }),
+  },
+  { name: "createReturn", invoke: (m) => m.createReturn(senderAddressPayload()) },
+  { name: "calculateReturn", invoke: (m) => m.calculateReturn(senderAddressPayload()) },
+  { name: "updateReturn", invoke: (m) => m.updateReturn(updateReturnPayload()) },
+  { name: "getReturnOrdersList", invoke: (m) => m.getReturnOrdersList() },
+  { name: "getReturnReasons", invoke: (m) => m.getReturnReasons() },
+  { name: "getReturnReasonsSubtypes", invoke: (m) => m.getReturnReasonsSubtypes() },
+  { name: "checkRedirectPossible", invoke: (m) => m.checkRedirectPossible({ Number: "20450000000001" }) },
+  {
+    name: "checkRedirectEditPossible",
+    invoke: (m) => m.checkRedirectEditPossible({ OrderRef: "redirect-request-ref-1" }),
+  },
+  { name: "createRedirect", invoke: (m) => m.createRedirect(createRedirectPayload()) },
+  { name: "calculateRedirect", invoke: (m) => m.calculateRedirect(createRedirectPayload()) },
+  { name: "updateRedirect", invoke: (m) => m.updateRedirect(updateRedirectPayload()) },
+  { name: "getRedirectionOrdersList", invoke: (m) => m.getRedirectionOrdersList() },
+  { name: "checkWaybillEditPossible", invoke: (m) => m.checkWaybillEditPossible({ IntDocNumber: "20450000000001" }) },
+  { name: "createWaybillEdit", invoke: (m) => m.createWaybillEdit(createWaybillEditPayload()) },
+  { name: "getChangeEWOrdersList", invoke: (m) => m.getChangeEWOrdersList() },
+  {
+    name: "deleteAdditionalServiceOrder",
+    invoke: (m) => m.deleteAdditionalServiceOrder(deleteAdditionalServiceOrderPayload()),
+  },
+  { name: "createReturnIfPossible", invoke: (m) => m.createReturnIfPossible(createReturnIfPossiblePayload()) },
+];
+
+/** Shared fetch-mock scenarios matching client.ts's sendRequest() error paths precisely:
+ *  network-throw (AC-22), non-JSON body (AC-22), envelope success:false (AC-21/AC-23), and
+ *  data missing/not-an-array (AC-21). Every scenario always returns the SAME outcome on every call —
+ *  correct even for createReturnIfPossible's two sequential wire calls, since its very first call
+ *  (checkReturnPossible) already hits the mocked failure and the second call is never reached. */
+const errorScenarios: Array<{ name: string; setup: () => void }> = [
+  {
+    name: "network failure — fetch itself throws (AC-22)",
+    setup: () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          throw new Error("network down");
+        }),
+      );
+    },
+  },
+  {
+    name: "malformed body — response.json() throws / non-JSON (AC-22)",
+    setup: () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({
+          ok: true,
+          json: () => Promise.reject(new Error("Unexpected token < in JSON")),
+        })),
+      );
+    },
+  },
+  {
+    name: "envelope-level decline — success: false (AC-21/AC-23)",
+    setup: () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => declinedEnvelope(["Api key is wrong or fraud"], ["401"])),
+      );
+    },
+  },
+  {
+    name: "malformed envelope — data missing / not a navigable list (AC-21)",
+    setup: () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({
+          ok: true,
+          json: () => Promise.resolve({ success: true, data: null, errors: [], warnings: [] }),
+        })),
+      );
+    },
+  },
+];
+
+describe("additional-service module — shared error-contract fixture across all 19 methods (T15, AC-21/AC-22/AC-23)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  for (const scenario of errorScenarios) {
+    describe(scenario.name, () => {
+      for (const { name, invoke } of allMethodInvocations) {
+        it(`${name} raises NovaPoshtaApiError, not an empty/partial result that looks valid`, async () => {
+          scenario.setup();
+          const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+          const err = await invoke(additionalService).catch((e: unknown) => e);
+
+          expect(err).toBeInstanceOf(NovaPoshtaApiError);
+        });
+      }
+    });
+  }
+});
+
+// --- T15 (tests, NFR: Calculate/create isolation, spec.md §6) ---
+//
+// T5/T9's own AC-05/AC-11 tests already assert this in passing; these two are named explicitly
+// under the NFR's own framing so the isolation guarantee has its own directly-traceable test,
+// independent of whichever AC-numbered describe block it happens to live under.
+
+describe("additional-service module — NFR: calculate/create isolation, OnlyGetPricing: \"1\" (T15, spec §6)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("calculateReturn's outgoing request carries OnlyGetPricing: \"1\" — 0 real return orders created (isolation check)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([orderPricingEstimate()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    await additionalService.calculateReturn(senderAddressPayload());
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.methodProperties.OnlyGetPricing).toBe("1");
+  });
+
+  it("calculateRedirect's outgoing request carries OnlyGetPricing: \"1\" — 0 real redirect orders created (isolation check)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([orderPricingEstimate()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    await additionalService.calculateRedirect(createRedirectPayload());
+
+    const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(sentBody.methodProperties.OnlyGetPricing).toBe("1");
+  });
+});
+
+// --- T15 (tests, NFR: library-added overhead ≤5ms, spec.md §6) ---
+//
+// fetch is stubbed to resolve with a minimal valid envelope via a plain resolved Promise (no
+// setTimeout/real timers) — as close to zero network latency as this test environment offers — so
+// the measured performance.now() delta is almost entirely this library's own call-building/
+// envelope-unwrapping overhead, not the stub's own latency. Runs each of the 18 raw methods
+// (createReturnIfPossible excluded — it makes two network calls by design, spec §6) 3 times each
+// (54 samples total, comfortably over the spec's "≥30 repeated calls" bar) and asserts the median
+// added overhead is ≤5ms. Kept to a few dozen mocked calls so the test itself stays CI-fast.
+
+describe("additional-service module — NFR: library-added overhead ≤5ms across the 18 raw methods (T15, spec §6)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("median added overhead per call stays ≤5ms, fetch stubbed to near-zero latency", async () => {
+    const rawMethodInvocations = allMethodInvocations.filter((m) => m.name !== "createReturnIfPossible");
+    expect(rawMethodInvocations).toHaveLength(18);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: () => Promise.resolve({ success: true, data: [{}], errors: [], warnings: [] }),
+      })),
+    );
+
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+    const samples: number[] = [];
+    const REPEATS_PER_METHOD = 3;
+
+    for (let round = 0; round < REPEATS_PER_METHOD; round += 1) {
+      for (const { invoke } of rawMethodInvocations) {
+        const start = performance.now();
+        await invoke(additionalService);
+        samples.push(performance.now() - start);
+      }
+    }
+
+    expect(samples.length).toBeGreaterThanOrEqual(30);
+
+    samples.sort((a, b) => a - b);
+    const mid = Math.floor(samples.length / 2);
+    const median = samples.length % 2 === 0 ? (samples[mid - 1]! + samples[mid]!) / 2 : samples[mid]!;
+
+    expect(median).toBeLessThanOrEqual(5);
   });
 });

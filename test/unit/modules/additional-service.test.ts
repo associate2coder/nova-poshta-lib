@@ -59,7 +59,7 @@ function declinedEnvelope(errors: string[], errorCodes: string[] = []) {
 function returnAddressOption(overrides: Partial<ReturnAddressOption> = {}): ReturnAddressOption {
   return {
     Ref: "return-address-ref-1",
-    NonCash: "1",
+    NonCash: true,
     City: "Kyiv",
     Counterparty: "ACME LLC",
     ContactPerson: "Jane Doe",
@@ -70,7 +70,17 @@ function returnAddressOption(overrides: Partial<ReturnAddressOption> = {}): Retu
 }
 
 function returnEditOption(overrides: Partial<ReturnEditOption> = {}): ReturnEditOption {
-  return { Type: "OrderReturn", ...overrides };
+  return {
+    Type: "OrderReturn",
+    NonCash: false,
+    City: "Kyiv",
+    Counterparty: "ACME LLC",
+    ContactPerson: "Jane Doe",
+    Address: "1 Khreshchatyk St",
+    Phone: "380500000000",
+    Ref: "return-edit-option-ref-1",
+    ...overrides,
+  };
 }
 
 describe("additional-service module — checkReturnPossible (T4, AC-01/AC-02)", () => {
@@ -89,7 +99,7 @@ describe("additional-service module — checkReturnPossible (T4, AC-01/AC-02)", 
     expect(sentBody.calledMethod).toBe("CheckPossibilityCreateReturn");
     expect(sentBody.methodProperties.Number).toBe("20450000000001");
     expect(result).toEqual([returnAddressOption()]);
-    expect(result[0]!.NonCash).toBe("1");
+    expect(result[0]!.NonCash).toBe(true);
   });
 
   it("propagates NovaPoshtaApiError unchanged when Nova Poshta declines a recipient-key call (AC-02)", async () => {
@@ -111,22 +121,36 @@ describe("additional-service module — checkReturnEditPossible (T4, AC-06)", ()
     vi.unstubAllGlobals();
   });
 
-  it("assembles { options, info } from requestEnvelope()'s data + info fields (ADR-0001), same calledMethod, Ref+Address payload (AC-06)", async () => {
+  it("assembles { options, info } from requestEnvelope()'s data + info fields (ADR-0001), unwrapping official docs' single-element info array, same calledMethod, Ref+Address payload (AC-06)", async () => {
     const info = { PayerTypeDefault: "Sender", Number: "20450000000001" };
-    const fetchMock = mockFetchOnce(() => successEnvelope([returnEditOption()], info));
+    // official docs wrap `info` in a single-element array (spec.md §1, 2026-09-23), not a bare object
+    const fetchMock = mockFetchOnce(() => successEnvelope([returnEditOption()], [info]));
     const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
 
     const result = await additionalService.checkReturnEditPossible({
       Ref: "return-request-ref-1",
-      Address: { CityRef: "city-ref-1" },
+      Address: "м. Київ, площа Харківська, 10",
     });
 
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
     expect(sentBody.calledMethod).toBe("CheckPossibilityCreateReturn");
     expect(sentBody.methodProperties.Ref).toBe("return-request-ref-1");
-    expect(sentBody.methodProperties.Address).toEqual({ CityRef: "city-ref-1" });
+    expect(sentBody.methodProperties.Address).toBe("м. Київ, площа Харківська, 10");
     expect(result).toEqual({ options: [returnEditOption()], info });
+  });
+
+  it("resolves info: undefined, not a raw TypeError, when the envelope omits info entirely (AC-21 edge case, review 2026-09-23 finding 4)", async () => {
+    const fetchMock = mockFetchOnce(() => successEnvelope([returnEditOption()]));
+    const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
+
+    const result = await additionalService.checkReturnEditPossible({
+      Ref: "return-request-ref-1",
+      Address: "м. Київ, площа Харківська, 10",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ options: [returnEditOption()], info: undefined });
   });
 
   it("propagates NovaPoshtaApiError unchanged when the check declines (AC-06 decline)", async () => {
@@ -134,7 +158,7 @@ describe("additional-service module — checkReturnEditPossible (T4, AC-06)", ()
     const additionalService = createAdditionalServiceModule(createClient("test-api-key"));
 
     const err = await additionalService
-      .checkReturnEditPossible({ Ref: "no-such-ref", Address: {} })
+      .checkReturnEditPossible({ Ref: "no-such-ref", Address: "some address" })
       .catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(NovaPoshtaApiError);
@@ -192,7 +216,7 @@ function savedReturnOrder(overrides: Partial<SavedReturnOrder> = {}): SavedRetur
 
 function orderPricingEstimate(overrides: Partial<OrderPricingEstimate> = {}): OrderPricingEstimate {
   return {
-    Pricing: { Services: [], Total: 4500, FirstDayStorage: 0 },
+    Pricing: { Services: [], Total: 4500, FirstDayStorage: "0000-00-00 00:00:00" },
     ScheduledDeliveryDate: "2026-09-25 00:00:00",
     ...overrides,
   };
@@ -279,7 +303,7 @@ describe("additional-service module — calculateReturn (T5, AC-02/AC-05)", () =
     // shape confused with a pricing preview (measurement, spec.md §6 "Calculate/create isolation")
     expect(result).toEqual(orderPricingEstimate());
     expect(result.Pricing.Total).toBe(4500);
-    expect(result.Pricing.FirstDayStorage).toBe(0);
+    expect(result.Pricing.FirstDayStorage).toBe("0000-00-00 00:00:00");
     expect(result.ScheduledDeliveryDate).toBe("2026-09-25 00:00:00");
     expect((result as unknown as Partial<SavedReturnOrder>).Number).toBeUndefined();
     expect((result as unknown as Partial<SavedReturnOrder>).Ref).toBeUndefined();
@@ -368,7 +392,9 @@ describe("additional-service module — updateReturn (T6, AC-06/AC-07)", () => {
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
     expect(sentBody.calledMethod).toBe("update");
-    expect(sentBody.methodProperties).toEqual(payload);
+    // OrderType is required by official docs' own update example (spec.md §1, 2026-09-23) and is
+    // set internally — never a field on the public UpdateReturnPayload
+    expect(sentBody.methodProperties).toEqual({ ...payload, OrderType: "orderCargoReturn" });
     expect(result).toEqual(updatedOrder);
   });
 
@@ -765,6 +791,7 @@ function redirectOrderListItem(overrides: Partial<RedirectOrderListItem> = {}): 
     OrderRef: "redirect-order-ref-1",
     OrderNumber: "1",
     DateTime: "2026-09-23",
+    DocumentNumber: "20450000000001",
     Note: "",
     CityRecipient: "city-ref-1",
     RecipientAddress: "1 Khreshchatyk St",
@@ -796,8 +823,10 @@ describe("additional-service module — updateRedirect (T10, AC-12/AC-13)", () =
     const sentBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(sentBody.modelName).toBe("AdditionalServiceGeneral");
     expect(sentBody.calledMethod).toBe("update");
-    // exactly what was given — no added role field, no client-side role inference of any kind (AC-13/§7)
-    expect(sentBody.methodProperties).toEqual(payload);
+    // exactly what was given, plus OrderType (required by official docs' own update example,
+    // spec.md §1, 2026-09-23, set internally) — no added role field, no client-side role inference
+    // of any kind (AC-13/§7)
+    expect(sentBody.methodProperties).toEqual({ ...payload, OrderType: "orderRedirecting" });
     expect(sentBody.methodProperties.role).toBeUndefined();
     expect(sentBody.methodProperties.Role).toBeUndefined();
     expect(result).toEqual(updatedOrder);
@@ -1283,7 +1312,7 @@ const allMethodInvocations: Array<{ name: string; invoke: (m: AdditionalServiceM
   { name: "checkReturnPossible", invoke: (m) => m.checkReturnPossible({ Number: "20450000000001" }) },
   {
     name: "checkReturnEditPossible",
-    invoke: (m) => m.checkReturnEditPossible({ Ref: "return-request-ref-1", Address: {} }),
+    invoke: (m) => m.checkReturnEditPossible({ Ref: "return-request-ref-1", Address: "some address" }),
   },
   { name: "createReturn", invoke: (m) => m.createReturn(senderAddressPayload()) },
   { name: "calculateReturn", invoke: (m) => m.calculateReturn(senderAddressPayload()) },

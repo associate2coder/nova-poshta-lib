@@ -16,9 +16,9 @@ export interface CheckReturnPossiblePayload {
 }
 
 export interface ReturnAddressOption {
-  Ref: string; // sad.md §1 ¶4 — assumed identical to createReturn's ReturnAddressRef (open risk, see contract header)
-  NonCash: string; // "0" | "1" wire flag — kept as raw string, not coerced to boolean (matches this
-                    // library's BeginDate/EndDate convention: no client-side type coercion)
+  Ref: string; // official docs' own `save`/orderCargoReturn example uses this exact field name as
+               // ReturnAddressRef's value source (spec.md §1 official-docs quote, 2026-09-23)
+  NonCash: boolean; // official docs' own example returns a JSON boolean here (not a "0"/"1" string)
   City: string;
   Counterparty: string;
   ContactPerson: string;
@@ -26,16 +26,24 @@ export interface ReturnAddressOption {
   Phone: string;
 }
 
-/** sad.md §5's asymmetry note + AC-06: Address's own shape is unconfirmed (spec.md §8 OQ-4) — a
- *  Ref string, or a structured object. Typed loosely rather than falsely precisely (§4 decision 6). */
+/** sad.md §5's asymmetry note + AC-06: Address is confirmed a plain string by official docs' own
+ *  edit-check example (`"Address": "м. Київ, площа Харківська, 10"`, spec.md §1, 2026-09-23). */
 export interface CheckReturnEditPossiblePayload {
   Ref: string; // the existing return request's own Ref
-  Address: unknown; // unconfirmed shape — spec.md §8 OQ-4
+  Address: string;
 }
 
+/** Fields confirmed verbatim by official docs' edit-check response example (spec.md §1,
+ *  2026-09-23) — same shape as ReturnAddressOption, plus the discriminant Type. */
 export interface ReturnEditOption {
   Type: "CustomReturnAddress" | "OrderReturn";
-  [key: string]: unknown; // other per-Type fields unconfirmed (spec.md §8 OQ-4)
+  NonCash: boolean;
+  City: string;
+  Counterparty: string;
+  ContactPerson: string;
+  Address: string;
+  Phone: string;
+  Ref: string;
 }
 
 export interface ReturnEditInfo {
@@ -44,10 +52,13 @@ export interface ReturnEditInfo {
 }
 
 /** Assembled by this module from requestEnvelope()'s data + info fields (ADR-0001) — never Nova
- *  Poshta's raw envelope shape as-is; info is narrowed here, not by the client. */
+ *  Poshta's raw envelope shape as-is; info is narrowed here, not by the client. info is optional:
+ *  official docs' own envelope wraps it in a single-element array (`info: [{...}]`, spec.md §1,
+ *  2026-09-23), which this module unwraps — an envelope that omits `info` altogether resolves
+ *  `undefined` here rather than a forced, possibly-wrong cast. */
 export interface CheckReturnEditPossibleResult {
   options: ReturnEditOption[];
-  info: ReturnEditInfo;
+  info?: ReturnEditInfo;
 }
 
 /** AC-04, sad.md §4 decision 4: one discriminated union, one function — mixing a second variant's
@@ -65,7 +76,8 @@ interface CreateReturnCommonFields {
 
 export interface CreateReturnToSenderAddressPayload extends CreateReturnCommonFields {
   Destination: "SenderAddress";
-  ReturnAddressRef: string; // see contract header — open risk on whether this equals ReturnAddressOption.Ref
+  ReturnAddressRef: string; // field name confirmed by official docs' own save/orderCargoReturn
+                            // example (spec.md §1, 2026-09-23); see contract header for the naming note
 }
 
 export interface CreateReturnToNewAddressPayload extends CreateReturnCommonFields {
@@ -93,9 +105,12 @@ export interface SavedReturnOrder {
 
 export interface OrderPricingEstimate {
   Pricing: {
-    Services: unknown[]; // per-service cost breakdown — not independently sourced this session, kept opaque
+    // per-service cost breakdown — confirmed by official docs' own calculateReturn/calculateRedirect
+    // examples (spec.md §1, 2026-09-23)
+    Services: { Service: string; Cost: number }[];
     Total: number;
-    FirstDayStorage: number;
+    FirstDayStorage: string; // official docs' own examples always show a datetime string here
+                              // (e.g. "0000-00-00 00:00:00"), never a number
   };
   ScheduledDeliveryDate: string;
 }
@@ -104,8 +119,9 @@ export interface OrderPricingEstimate {
  *  confirmed full-replace semantics) — spec.md §1's field list is a documented subset, and the
  *  response is genuinely ambiguous ("updated order fields, or Pricing+ScheduledDeliveryDate when
  *  recalculating"). Both request and response are typed defensively rather than with false
- *  precision (§4 decision 6). Ref's own literal field name is itself unconfirmed against a live call
- *  (spec.md §1 naming note, §8 OQ-5) — modeled here to match delete's Ref, pending verification. */
+ *  precision (§4 decision 6). Ref is confirmed by official docs' own update example (spec.md §1,
+ *  2026-09-23); OrderType is required by the same example and is set internally by this module
+ *  (never a field on this public payload — matches createReturn's discriminant-stripping pattern). */
 export interface UpdateReturnPayload {
   Ref: string;
   RecipientSettlement?: string;
@@ -189,11 +205,25 @@ export interface RedirectPossibility {
   DocumentWeight: string;
 }
 
-/** spec.md §8 OQ-4: the exact address/recipient field list this dual-purpose wire method expects
- *  under the OrderRef+fields dispatch branch is unconfirmed — typed loosely (§4 decision 6). */
+/** Field list confirmed verbatim by official docs' own edit-check request example (spec.md §1,
+ *  2026-09-23) — every field but OrderRef is optional, since a caller only supplies the ones being
+ *  corrected. */
 export interface CheckRedirectEditPossiblePayload {
   OrderRef: string;
-  [key: string]: unknown; // unconfirmed address/recipient fields — spec.md §8 OQ-4
+  AddressDescription?: string;
+  RecipientName?: string;
+  PhoneSender?: string;
+  StreetDescription?: string;
+  PhoneRecipient?: string;
+  BuildingNumber?: string;
+  CityRecipient?: string;
+  DocumentWeight?: string;
+  SettlementRecipient?: string;
+  SettlementType?: string;
+  PayerType?: string;
+  PaymentMethod?: string;
+  CounterpartyRecipientRef?: string;
+  WarehouseRef?: string;
 }
 
 /** No AC-04-equivalent discriminant guard exists for redirect (spec.md doesn't mandate one the way
@@ -210,7 +240,10 @@ export interface CreateRedirectPayload {
   RecipientPhone: string;
   PayerType: string;
   Customer?: string;
-  ServiceType?: string; // unconfirmed enum for this module — see PaymentMethod/ReturnDestination note above
+  ServiceType?: string; // field confirmed present by official docs (example value "WarehouseWarehouse",
+                        // matching internet-document's own enum member) — the full enum for THIS
+                        // module isn't independently re-sourced, so kept as plain string rather than
+                        // asserting internet-document's 4-value enum applies identically here
   RecipientSettlement?: string;
   RecipientSettlementStreet?: string;
   BuildingNumber?: string;
@@ -224,10 +257,12 @@ export interface SavedRedirectOrder {
 }
 
 /** AC-12/AC-13: Ref is the same order updateRedirect addresses (see contract §1 naming note —
- *  OrderRef on the check, Ref on the update). No role field — Nova Poshta infers sender-vs-recipient
- *  solely from the calling key (AC-13, 2-SDK-confirmed) and may silently narrow which fields this
- *  update actually applies; the response is typed defensively for the same reason updateReturn's is
- *  (§4 decision 6). */
+ *  OrderRef on the check, Ref on the update; both confirmed by official docs, spec.md §1,
+ *  2026-09-23). No role field — Nova Poshta infers sender-vs-recipient solely from the calling key
+ *  (AC-13, 2-SDK-confirmed) and may silently narrow which fields this update actually applies; the
+ *  response is typed defensively for the same reason updateReturn's is (§4 decision 6). OrderType is
+ *  required by official docs' own example and is set internally by this module (never a field on
+ *  this public payload). */
 export interface UpdateRedirectPayload {
   Ref: string;
   PaymentMethod?: PaymentMethod;
@@ -251,6 +286,7 @@ export interface RedirectOrderListItem {
   OrderRef: string;
   OrderNumber: string;
   DateTime: string;
+  DocumentNumber: string; // present in official docs' own example response (spec.md §1, 2026-09-23)
   Note: string;
   CityRecipient: string;
   RecipientAddress: string;
@@ -347,8 +383,8 @@ export interface DeletedAdditionalServiceOrder {
 
 /** US-13, AC-20, sad.md §4 decision 5 / Flow 1. Composes this module's own checkReturnPossible +
  *  createReturn internally — never a separate lookup path. Takes the first returned address option's
- *  Ref, uses it as ReturnAddressRef (see this module's contract header for the open-risk tracking on
- *  that mapping). An empty option list is treated as ineligible: throws this module's own
+ *  Ref, uses it as ReturnAddressRef (confirmed by official docs' own save/orderCargoReturn example,
+ *  spec.md §1, 2026-09-23). An empty option list is treated as ineligible: throws this module's own
  *  NovaPoshtaApiError ("no return address available for this waybill") without attempting a create
  *  call — a check-declined response throws Nova Poshta's own error the same way. */
 export type CreateReturnIfPossiblePayload = Omit<

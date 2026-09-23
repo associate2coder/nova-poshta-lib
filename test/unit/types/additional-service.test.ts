@@ -23,7 +23,6 @@ import type {
   RedirectPossibility,
   ReturnDestination,
   ReturnEditInfo,
-  ReturnEditOption,
   ReturnOrderListItem,
   ReturnReason,
   ReturnReasonSubtype,
@@ -271,63 +270,89 @@ describe("additional-service domain types (T1)", () => {
     });
   });
 
-  describe("the 6 open items from public-api.md §10 are typed defensively, never falsely precisely", () => {
-    it("1. ReturnAddressOption.Ref and CreateReturnToSenderAddressPayload.ReturnAddressRef are both plain, independently-typed strings — no assumed shared branding for the unconfirmed mapping", () => {
+  describe("public-api.md §10's items — resolved by the 2026-09-23 official-docs capture (review round 1), except item 5", () => {
+    it("1. ReturnAddressOption.Ref and CreateReturnToSenderAddressPayload.ReturnAddressRef are both plain, independently-typed strings — mapping now confirmed by official docs, but no shared branding is introduced", () => {
       const option: CheckReturnPossiblePayload = { Number: "waybill-10" };
       const senderAddress: CreateReturnToSenderAddressPayload = {
         IntDocNumber: "waybill-10",
         PaymentMethod: "Cash",
         Reason: "reason-ref-2",
         Destination: "SenderAddress",
-        ReturnAddressRef: "return-address-ref-7", // could be any string — mapping unconfirmed
+        ReturnAddressRef: "return-address-ref-7",
       };
 
       expect(option.Number).toBe("waybill-10");
       expect(typeof senderAddress.ReturnAddressRef).toBe("string");
     });
 
-    it("2. CheckReturnEditPossiblePayload.Address is unknown, not a narrowly-typed string or object", () => {
-      const withStringAddress: CheckReturnEditPossiblePayload = {
+    it("2. CheckReturnEditPossiblePayload.Address is a plain string (confirmed by official docs, spec.md §1, 2026-09-23) — was typed unknown before this round's fix", () => {
+      const payload: CheckReturnEditPossiblePayload = {
         Ref: "return-order-ref-2",
-        Address: "address-ref-1",
+        Address: "м. Київ, площа Харківська, 10",
       };
+
       const withObjectAddress: CheckReturnEditPossiblePayload = {
         Ref: "return-order-ref-2",
+        // @ts-expect-error — Address no longer accepts a structured object now that it's confirmed a string.
         Address: { City: "Kyiv", Street: "Khreshchatyk" },
       };
 
-      // @ts-expect-error — `unknown` cannot be assigned to `string` without a narrowing check first;
-      // this proves Address is typed `unknown`, not `any` (which would allow this assignment).
-      // Types are erased at runtime (esbuild/vitest), so this line still executes as plain JS; the
-      // `@ts-expect-error` above is checked only by `npm run typecheck` (`tsc --noEmit`), not vitest.
-      const asString: string = withStringAddress.Address;
-
-      expect(withStringAddress.Ref).toBe("return-order-ref-2");
+      expect(payload.Ref).toBe("return-order-ref-2");
+      expect(payload.Address).toBe("м. Київ, площа Харківська, 10");
       expect(withObjectAddress.Ref).toBe("return-order-ref-2");
-      expect(asString).toBe("address-ref-1");
 
       const result: CheckReturnEditPossibleResult = {
         options: [
-          { Type: "CustomReturnAddress", City: "Kyiv" } as ReturnEditOption,
-          { Type: "OrderReturn" } as ReturnEditOption,
+          {
+            Type: "CustomReturnAddress",
+            NonCash: false,
+            City: "Kyiv",
+            Counterparty: "ACME LLC",
+            ContactPerson: "Jane Doe",
+            Address: "1 Khreshchatyk St",
+            Phone: "380500000000",
+            Ref: "return-edit-option-ref-1",
+          },
+          {
+            Type: "OrderReturn",
+            NonCash: false,
+            City: "Kyiv",
+            Counterparty: "ACME LLC",
+            ContactPerson: "Jane Doe",
+            Address: "1 Khreshchatyk St",
+            Phone: "380500000000",
+            Ref: "return-edit-option-ref-2",
+          },
         ],
         info: { PayerTypeDefault: "Sender", Number: "1234569" } as ReturnEditInfo,
       };
       expect(result.options).toHaveLength(2);
+
+      // info is optional — official docs wrap it in a single-element array, unwrapped by the module;
+      // an envelope that omits it resolves undefined rather than a forced cast (review 2026-09-23 finding 4)
+      const resultWithoutInfo: CheckReturnEditPossibleResult = { options: [] };
+      expect(resultWithoutInfo.info).toBeUndefined();
     });
 
-    it("3. CheckRedirectEditPossiblePayload's field list is defensive — OrderRef is confirmed, everything else passes through an index signature", () => {
+    it("3. CheckRedirectEditPossiblePayload's full field list is confirmed by official docs (spec.md §1, 2026-09-23) — was an index signature before this round's fix", () => {
       const payload: CheckRedirectEditPossiblePayload = {
         OrderRef: "redirect-order-ref-1",
-        RecipientCityName: "Kyiv",
+        CityRecipient: "Kyiv",
+        WarehouseRef: "warehouse-ref-1",
+      };
+
+      const withUnconfirmedField: CheckRedirectEditPossiblePayload = {
+        OrderRef: "redirect-order-ref-1",
+        // @ts-expect-error — an unconfirmed field name is no longer accepted now that the field list
+        // is fully typed instead of passing through an index signature.
         SomeFieldNotYetConfirmedByAnySource: 123,
       };
 
       expect(payload.OrderRef).toBe("redirect-order-ref-1");
-      expect(payload["SomeFieldNotYetConfirmedByAnySource"]).toBe(123);
+      expect(withUnconfirmedField.OrderRef).toBe("redirect-order-ref-1");
     });
 
-    it("4. UpdateReturnPayload/UpdateRedirectPayload use Ref (matching delete's field name, per spec.md §1's naming note) and keep every other field optional, since update's exact response shape is unconfirmed", () => {
+    it("4. UpdateReturnPayload/UpdateRedirectPayload use Ref (confirmed by official docs, spec.md §1, 2026-09-23) and keep every other field optional, since update's exact response shape is genuinely variable", () => {
       const updateReturn: UpdateReturnPayload = {
         Ref: "return-order-ref-3",
         Reason: "reason-ref-3",
@@ -341,7 +366,7 @@ describe("additional-service domain types (T1)", () => {
       expect(updateRedirect.Ref).toBe("redirect-order-ref-2");
     });
 
-    it("5. CreateRedirectPayload.ServiceType is plain string, not a narrow enum (unconfirmed for this module, unlike internet-document's ServiceType)", () => {
+    it("5. CreateRedirectPayload.ServiceType is plain string, not a narrow enum — the one item still genuinely open after the 2026-09-23 official-docs capture (field presence + one example value confirmed, full enum not independently re-sourced for this module, unlike internet-document's ServiceType)", () => {
       const payload: CreateRedirectPayload = {
         IntDocNumber: "waybill-11",
         PaymentMethod: "Cash",
@@ -359,7 +384,7 @@ describe("additional-service domain types (T1)", () => {
   describe("remaining shared/list/reason types round out the module's contract surface", () => {
     it("OrderPricingEstimate, OrderListFilters, and the three *OrdersList item shapes compile", () => {
       const pricing: OrderPricingEstimate = {
-        Pricing: { Services: [], Total: 100, FirstDayStorage: 0 },
+        Pricing: { Services: [{ Service: "Return", Cost: 0 }], Total: 100, FirstDayStorage: "0000-00-00 00:00:00" },
         ScheduledDeliveryDate: "25.09.2026",
       };
       const filters: OrderListFilters = { Number: "waybill-12", Page: 1, Limit: 20 };
@@ -380,6 +405,7 @@ describe("additional-service domain types (T1)", () => {
         OrderRef: "redirect-order-ref-3",
         OrderNumber: "1234572",
         DateTime: "22.09.2026 10:00:00",
+        DocumentNumber: "waybill-13",
         Note: "",
         CityRecipient: "city-1",
         RecipientAddress: "address-2",

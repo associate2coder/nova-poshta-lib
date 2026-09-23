@@ -47,10 +47,12 @@ export interface AdditionalServiceModule {
   /** public-api.md §3.1/§5, AC-05: same wire call and payload builder as createReturn, plus
    *  OnlyGetPricing: "1" — returns a pricing estimate and creates no order. */
   calculateReturn(payload: CreateReturnPayload): Promise<OrderPricingEstimate>;
-  /** public-api.md §3.1/§5, AC-06/AC-07: passes the payload through as-is to update via
-   *  client.requestFirst() — no client-side status check; Nova Poshta's own decline (a non-Accepted
-   *  return) is the sole enforcer (AC-07). Response shape is genuinely ambiguous (types' own note),
-   *  so it's returned loosely typed rather than falsely precisely. */
+  /** public-api.md §3.1/§5, AC-06/AC-07: passes the payload through to update via
+   *  client.requestFirst(), adding OrderType: "orderCargoReturn" internally (required by official
+   *  docs' own update example, spec.md §1, 2026-09-23; never caller-settable) — no client-side status
+   *  check; Nova Poshta's own decline (a non-Accepted return) is the sole enforcer (AC-07). Response
+   *  shape is genuinely ambiguous (types' own note), so it's returned loosely typed rather than
+   *  falsely precisely. */
   updateReturn(payload: UpdateReturnPayload): Promise<Record<string, unknown>>;
   /** public-api.md §3.1/§5, AC-08: thin pass-through to client.request() — filters (Number, Ref,
    *  BeginDate, EndDate, Page, Limit) travel to the wire unmodified; no client-side re-filtering,
@@ -78,10 +80,12 @@ export interface AdditionalServiceModule {
   /** public-api.md §3.2/§5, AC-11: same wire call and payload as createRedirect, plus
    *  OnlyGetPricing: "1" — returns a pricing estimate and creates no order. */
   calculateRedirect(payload: CreateRedirectPayload): Promise<OrderPricingEstimate>;
-  /** public-api.md §3.2/§5, AC-12/AC-13: passes the payload through as-is to update via
-   *  client.requestFirst() — no role field is added and no client-side role check is performed;
-   *  Nova Poshta infers sender-vs-recipient solely from the calling API key, and a field-permission
-   *  decline (AC-13) surfaces as Nova Poshta's own NovaPoshtaApiError, unmodified. */
+  /** public-api.md §3.2/§5, AC-12/AC-13: passes the payload through to update via
+   *  client.requestFirst(), adding OrderType: "orderRedirecting" internally (required by official
+   *  docs' own update example, spec.md §1, 2026-09-23; never caller-settable) — no role field is
+   *  added and no client-side role check is performed; Nova Poshta infers sender-vs-recipient solely
+   *  from the calling API key, and a field-permission decline (AC-13) surfaces as Nova Poshta's own
+   *  NovaPoshtaApiError, unmodified. */
   updateRedirect(payload: UpdateRedirectPayload): Promise<Record<string, unknown>>;
   /** public-api.md §3.2/§5, AC-14: thin pass-through to client.request() — filters travel to the
    *  wire unmodified, same OrderListFilters shape as getReturnOrdersList. */
@@ -109,7 +113,8 @@ export interface AdditionalServiceModule {
   /** public-api.md §3.5, AC-20, sad.md §4 decision 5 / Flow 1: composes this module's OWN
    *  checkReturnPossible + createReturn internally (this repo's addToTodaysScanSheet precedent) —
    *  never a second, independent client call. Uses the FIRST returned ReturnAddressOption's Ref as
-   *  ReturnAddressRef. An empty option list throws this module's own NovaPoshtaApiError ("no return
+   *  ReturnAddressRef (confirmed by official docs' own save/orderCargoReturn example, spec.md §1,
+   *  2026-09-23). An empty option list throws this module's own NovaPoshtaApiError ("no return
    *  address available for this waybill") without attempting a create call; a check-declined response
    *  propagates Nova Poshta's own NovaPoshtaApiError unchanged, likewise with zero create calls. */
   createReturnIfPossible(payload: CreateReturnIfPossiblePayload): Promise<SavedReturnOrder>;
@@ -139,7 +144,10 @@ export function createAdditionalServiceModule(client: NovaPoshtaClient): Additio
         "CheckPossibilityCreateReturn",
         payload as unknown as Record<string, unknown>,
       );
-      return { options: envelope.data, info: envelope.info as ReturnEditInfo };
+      // official docs wrap `info` in a single-element array (spec.md §1, 2026-09-23); an envelope
+      // that omits it entirely resolves `undefined` rather than a forced, possibly-wrong cast.
+      const infoArray = Array.isArray(envelope.info) ? (envelope.info as ReturnEditInfo[]) : undefined;
+      return { options: envelope.data, info: infoArray?.[0] };
     },
     createReturn: (payload: CreateReturnPayload) =>
       client.requestFirst<SavedReturnOrder>(
@@ -153,11 +161,10 @@ export function createAdditionalServiceModule(client: NovaPoshtaClient): Additio
         OnlyGetPricing: "1",
       }),
     updateReturn: (payload: UpdateReturnPayload) =>
-      client.requestFirst<Record<string, unknown>>(
-        "AdditionalServiceGeneral",
-        "update",
-        payload as unknown as Record<string, unknown>,
-      ),
+      client.requestFirst<Record<string, unknown>>("AdditionalServiceGeneral", "update", {
+        ...payload,
+        OrderType: "orderCargoReturn",
+      } as unknown as Record<string, unknown>),
     getReturnOrdersList: (filters?: OrderListFilters) =>
       client.request<ReturnOrderListItem>(
         "AdditionalServiceGeneral",
@@ -196,11 +203,10 @@ export function createAdditionalServiceModule(client: NovaPoshtaClient): Additio
         OnlyGetPricing: "1",
       } as unknown as Record<string, unknown>),
     updateRedirect: (payload: UpdateRedirectPayload) =>
-      client.requestFirst<Record<string, unknown>>(
-        "AdditionalServiceGeneral",
-        "update",
-        payload as unknown as Record<string, unknown>,
-      ),
+      client.requestFirst<Record<string, unknown>>("AdditionalServiceGeneral", "update", {
+        ...payload,
+        OrderType: "orderRedirecting",
+      } as unknown as Record<string, unknown>),
     getRedirectionOrdersList: (filters?: OrderListFilters) =>
       client.request<RedirectOrderListItem>(
         "AdditionalServiceGeneral",

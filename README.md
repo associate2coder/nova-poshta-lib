@@ -122,12 +122,11 @@ for (const item of inserted) {
 // checkReturnPossible + createReturn pair is also available for the other two destination
 // variants, or when you need the eligibility check's own result first).
 //
-// OPEN RISK: this convenience method assumes checkReturnPossible's per-option `Ref` is the same
-// value createReturn's own `ReturnAddressRef` field expects. No source this library's spec was
-// written against could directly confirm or refute that mapping (contracts/public-api.md header,
-// sad.md §11 row 1) — if the assumption is wrong, the create call fails safely with the library's
-// standard NovaPoshtaApiError rather than creating a wrong or corrupted return, but it fails. Treat
-// a thrown error from this specific call as informative, not necessarily a real ineligibility.
+// This convenience method uses checkReturnPossible's per-option `Ref` as createReturn's own
+// `ReturnAddressRef` field — confirmed against Nova Poshta's official documentation
+// (docs/features/additional-service/spec.md §1 "Official documentation quotes", 2026-09-23). If
+// Nova Poshta itself declines the eligibility check or the create call, the failure still surfaces
+// as this library's standard NovaPoshtaApiError, same as every other method.
 const createdReturn = await additionalService.createReturnIfPossible({
   IntDocNumber: waybill!.IntDocNumber,
   PaymentMethod: "Cash",

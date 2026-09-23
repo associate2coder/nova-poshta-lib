@@ -22,6 +22,8 @@ The committed approach is one typed method per confirmed `AdditionalServiceGener
 Traceability: module boundaries follow the same convention every prior module set (one folder per Nova Poshta model, dual ESM+CJS build, factory over the shared core client); the error contract reuses `NovaPoshtaApiError` unchanged; no branded `Ref` type is introduced (matches `scan-sheet`'s explicit decision that this codebase inlines `Ref: string` everywhere rather than sharing a type alias).
 
 **Decision override — official docs confirmed, superseding SDK cross-check:** Nova Poshta's own documentation for the `AdditionalServiceGeneral` model was captured in full this session and used as the primary source for this spec's entire method surface. Per `CLAUDE.md`'s API-contract sourcing policy, this supersedes the community-SDK cross-check performed earlier in the same session, which independently corroborated nearly every field shape the official docs also show, and additionally helped resolve one genuine cross-source disagreement (see the `getChangeEWOrdersList` override below). Official docs use `AdditionalServiceGeneral` as the primary `modelName` enum value (`AdditionalService` also accepted as an alternate); this module uses `AdditionalServiceGeneral` as its canonical wire `modelName`.
+>
+> **2026-09-23 update (review round 1 fix):** the original drafting of this paragraph asserted official-docs sourcing narratively but did not quote the actual upstream request/response schema, which `/sdd:review` flagged as insufficient under `CLAUDE.md`'s policy ("quote or list the exact upstream struct/schema..., not just cite an SDK by name"). The user retrieved the docs page directly in their own browser this round and pasted its full content back; the verbatim quotes are now in the new "Official documentation quotes" subsection below the method table, and they resolved every `low`-confidence field/mapping this spec previously carried except `CreateRedirectPayload.ServiceType`'s full enum (§8, unchanged).
 
 **Decision override — one wire `save` call, three `OrderType` values, five-plus typed create functions:** `createReturn`/`createRedirect`/`createWaybillEdit` all route through `calledMethod: "save"`, differentiated only by `OrderType: "orderCargoReturn" | "orderRedirecting" | "orderChangeEW"`; the three return variants (plain, new-address, new-warehouse) further share `orderCargoReturn`, differing only in which optional address fields are populated. This module exposes each as its own narrowly-typed function — `createReturn` takes a discriminated-union input covering all three return variants, `createRedirect` and `createWaybillEdit` are separate functions — with `OrderType` set internally, never caller-supplied. Mirrors `internet-document`'s `ServiceType`/`CargoType`-discriminant precedent (AC-02), and closes a failure-mode finding where a flat, optional-everything return payload could silently populate more than one destination variant at once, with Nova Poshta resolving one and no error surfacing either way.
 
@@ -49,7 +51,7 @@ Traceability: module boundaries follow the same convention every prior module se
 | 2 | `checkReturnEditPossible` | `CheckPossibilityCreateReturn` | `Ref, Address` | array of `{..., Type: "CustomReturnAddress"\|"OrderReturn"}` + `info: {PayerTypeDefault, Number}` |
 | 3 | `createReturn` | `save` / `orderCargoReturn` | `IntDocNumber, PaymentMethod, Reason, SubtypeReason, Note` + one of `ReturnAddressRef` \| `RecipientSettlement+RecipientSettlementStreet+BuildingNumber+NoteAddressRecipient` \| `RecipientWarehouse` | `Number, Ref` |
 | 4 | `calculateReturn` | `save` / `orderCargoReturn` + `OnlyGetPricing:"1"` (internal) | same as `createReturn` | `Pricing: {Services[], Total, FirstDayStorage}, ScheduledDeliveryDate` |
-| 5 | `updateReturn` | `update` | `Ref` + subset of `RecipientSettlement, RecipientWarehouse, IntDocNumber, RecipientSettlementStreet, PaymentMethod, BuildingNumber, NoteAddressRecipient, Reason, SubtypeReason` | updated order fields, or `Pricing`+`ScheduledDeliveryDate` when recalculating |
+| 5 | `updateReturn` | `update` + `OrderType: "orderCargoReturn"` (internal) | `Ref` + subset of `RecipientSettlement, RecipientWarehouse, IntDocNumber, RecipientSettlementStreet, PaymentMethod, BuildingNumber, NoteAddressRecipient, Reason, SubtypeReason` | updated order fields, or `Pricing`+`ScheduledDeliveryDate` when recalculating |
 | 6 | `getReturnOrdersList` | `getReturnOrdersList` | `Number?, Ref?, BeginDate?, EndDate?, Page?, Limit?` | `OrderRef, OrderNumber, OrderStatus, DocumentNumber, CounterpartyRecipient, ContactPersonRecipient, AddressRecipient, DeliveryCost, EstimatedDeliveryDate, ExpressWaybillNumber, ExpressWaybillStatus` |
 | 7 | `getReturnReasons` | `getReturnReasons` | *(none)* | `Ref, Description` |
 | 8 | `getReturnReasonsSubtypes` | `getReturnReasonsSubtypes` | `ReasonRef?` | `Ref, Description, ReasonRef` |
@@ -57,7 +59,7 @@ Traceability: module boundaries follow the same convention every prior module se
 | 10 | `checkRedirectEditPossible` | `checkPossibilityForRedirecting` | `OrderRef` + address/recipient fields | updated subset of the same field set |
 | 11 | `createRedirect` | `save` / `orderRedirecting` | `IntDocNumber, PaymentMethod, Note, Recipient, RecipientContactName, RecipientPhone, PayerType, Customer, ServiceType, RecipientSettlement, RecipientSettlementStreet, BuildingNumber, NoteAddressRecipient, RecipientWarehouse` | `Number, Ref` |
 | 12 | `calculateRedirect` | `save` / `orderRedirecting` + `OnlyGetPricing:"1"` (internal) | same as `createRedirect` | `Pricing: {Services[], Total, FirstDayStorage}, ScheduledDeliveryDate` |
-| 13 | `updateRedirect` | `update` | `Ref` + subset of `PaymentMethod, NoteAddressRecipient, Recipient, CityRecipient, Note, Customer, RecipientContactName, IntDocNumber, RecipientWarehouse, RecipientPhone, SettlementRecipient, BuildingNumber, RecipientSettlementStreet, ServiceType, PayerType` | updated order fields |
+| 13 | `updateRedirect` | `update` + `OrderType: "orderRedirecting"` (internal) | `Ref` + subset of `PaymentMethod, NoteAddressRecipient, Recipient, CityRecipient, Note, Customer, RecipientContactName, IntDocNumber, RecipientWarehouse, RecipientPhone, SettlementRecipient, BuildingNumber, RecipientSettlementStreet, ServiceType, PayerType` | updated order fields |
 | 14 | `getRedirectionOrdersList` | `getRedirectionOrdersList` | `Number?, Ref?, BeginDate?, EndDate?, Page?, Limit?` | `OrderRef, OrderNumber, DateTime, DocumentNumber, Note, CityRecipient, RecipientAddress, CounterpartyRecipient, RecipientName, PhoneRecipient, PayerType, DeliveryCost, EstimatedDeliveryDate, ExpressWaybillNumber, ExpressWaybillStatus` |
 | 15 | `checkWaybillEditPossible` | `CheckPossibilityChangeEW` | `IntDocNumber` | 11 `Can...` boolean flags (`CanChangeSender`, `CanChangeRecipient`, `CanChangePayerTypeOrPaymentMethod`, `CanChangeBackwardDeliveryDocuments`, `CanChangeBackwardDeliveryMoney`, `CanChangeCash2Card`, `CanChangeBackwardDeliveryOther`, `CanChangeAfterpaymentType`, `CanChangeLiftingOnFloor`, `CanChangeLiftingOnFloorWithElevator`, `CanChangeFillingWarranty`) + `SenderCounterparty, ContactPersonSender, SenderPhone, RecipientCounterparty, ContactPersonRecipient, RecipientPhone, PayerType, PaymentMethod` |
 | 16 | `createWaybillEdit` | `save` / `orderChangeEW` | `IntDocNumber, PaymentMethod, SenderContactName, SenderPhone, Recipient, RecipientContactName, RecipientPhone, PayerType` | `Number, Ref` |
@@ -67,9 +69,139 @@ Traceability: module boundaries follow the same convention every prior module se
 
 > **Note on `checkWaybillEditPossible`'s flags vs `createWaybillEdit`'s fields:** 8 of the 11 `Can...` flags (everything but `CanChangeSender`, `CanChangeRecipient`, `CanChangePayerTypeOrPaymentMethod`) have no corresponding field on `createWaybillEdit`'s wire request — two independent, agreeing sources (`platx/go-nova-poshta`'s `SaveChangeEWReq`, `sirkostya009/go-novapost`'s `ChangeEWRequest`) both model the wire `save`/`orderChangeEW` request as accepting only sender/recipient/payer-type/payment-method fields. See §3 non-goals.
 >
-> **Note on `Ref` vs `OrderRef`:** `Ref` (returned by `save`, consumed by `update` and `deleteAdditionalServiceOrder`) and `OrderRef` (returned by the three `get*OrdersList` methods, and by `checkRedirectEditPossible`'s own request field) name the same additional-service order — different wire field names for the same identifier depending on which method you're calling, the same pattern this library already lives with for a waybill's `Ref`/`IntDocNumber`. `update`'s own request field is modeled here as `Ref` to match `delete`; §8 still tracks confirming that literal field name against a live call, since no cross-checked source's `update` struct was directly visible this session.
+> **Note on `Ref` vs `OrderRef`:** `Ref` (returned by `save`, consumed by `update` and `deleteAdditionalServiceOrder`) and `OrderRef` (returned by the three `get*OrdersList` methods, and by `checkRedirectEditPossible`'s own request field) name the same additional-service order — different wire field names for the same identifier depending on which method you're calling, the same pattern this library already lives with for a waybill's `Ref`/`IntDocNumber`. `update`'s own request field is `Ref`, confirmed verbatim by official docs' own `update` examples for both return and redirect orders (2026-09-23 capture, §1's "Official documentation quotes" subsection) — no longer an open question.
 >
 > **Note on `BeginDate`/`EndDate`:** typed as plain `string`, passed through unchanged — no client-side date parsing or comparison, matching this library's existing convention (every date-bearing field across every module is `string`) and deliberately avoiding a repeat of `scan-sheet`'s cross-format `DateTime`-ordering defect.
+
+### Official documentation quotes (captured 2026-09-23, verbatim) — resolves the review's sourcing findings
+
+`/sdd:review`'s 2026-09-23 pass found that §1 above asserted official-docs sourcing without quoting the
+actual upstream schema (CLAUDE.md's sourcing policy requires the quote itself, not a citation by SDK
+name). The user retrieved `https://developers.novaposhta.ua/view/model/59389-additionalservicegeneral`
+(UA docs) directly in their own browser this session and pasted its full content back. The excerpts
+below are quoted verbatim from that page; each resolves one of `api-sync-report.md`'s `low`-confidence
+rows or `spec.md` §8's open questions.
+
+**`CheckPossibilityCreateReturn` (plain check) — response example:**
+```json
+{ "success": true, "data": [
+  { "NonCash": true, "City": "Київ", "Counterparty": "ТОВ Яблуневий сад",
+    "ContactPerson": "Іванов Іван Іванович", "Address": "м. Київ,  вул. Хрещатик, буд. 1",
+    "Phone": "380950000000", "Ref": "00000000-0000-0000-0000-000000000000" } ] }
+```
+`NonCash` is a JSON **boolean**, not a `"0"`/`"1"` wire string as this module originally assumed —
+`ReturnAddressOption.NonCash` corrected to `boolean` (was `string`).
+
+**`CheckPossibilityCreateReturn` (edit-check variant) — request + response example, resolving
+§8 OQ-4's `Address` shape and the `info` field's actual wire shape:**
+```json
+// request
+{ "modelName": "AdditionalServiceGeneral", "calledMethod": "CheckPossibilityCreateReturn",
+  "methodProperties": { "Ref": "00000000-0000-0000-0000-000000000000",
+    "Address": "м. Київ, площа Харківська, 10" } }
+// response
+{ "success": true, "data": [
+    { "NonCash": false, "City": "Київ", "Counterparty": "ТОВ Компанія",
+      "Address": "м. Київ, площа Харківська, 10", "Phone": "380670000000",
+      "Ref": "00000000-0000-0000-0000-000000000001", "ContactPerson": "Іванов Іван Іванович",
+      "Type": "CustomReturnAddress" },
+    { "...": "...", "Type": "OrderReturn" } ],
+  "info": [ { "PayerTypeDefault": "Recipient", "Number": "102-77771370" } ] }
+```
+`Address` is a plain **string** (was typed `unknown`, §8 OQ-4 — resolved). `info` is wrapped in a
+**single-element array**, not a bare object as ADR-0001's implementation assumed — `checkReturnEditPossible`
+now unwraps `info[0]` defensively (`info` on `CheckReturnEditPossibleResult` is `ReturnEditInfo | undefined`,
+covering both "info array present" and "info omitted entirely" — review 2026-09-23 finding 4).
+
+**`save`/`orderCargoReturn` (createReturn/calculateReturn) — request example, resolving §8 OQ-1
+(the `ReturnAddressRef` mapping) and this file's own header's "blocking" open risk:**
+```json
+{ "modelName": "AdditionalServiceGeneral", "calledMethod": "save",
+  "methodProperties": { "BuildingNumber": "4", "NoteAddressRecipient": "2",
+    "RecipientSettlement": "...", "RecipientWarehouse": "...", "IntDocNumber": "206004560074695",
+    "PaymentMethod": "Cash", "Reason": "...", "SubtypeReason": "...", "Note": "Довільний опис",
+    "OrderType": "orderCargoReturn", "ReturnAddressRef": "00000000-0000-0000-0000-000000000000",
+    "RecipientSettlementStreet": "..." } }
+```
+`ReturnAddressRef` is confirmed as the real wire field name for the sender-address return variant. The
+official docs' own example lists it alongside `RecipientWarehouse`/`RecipientSettlement*` in one
+generic "all optional fields" listing (GitBook's usual style for this endpoint), not because all four
+are sent together — the three destination variants still use disjoint field subsets per this module's
+existing discriminated-union design. No source contradicts `ReturnAddressRef` being the same value
+`CheckPossibilityCreateReturn`'s response returns as each option's own `Ref` — same field-naming
+convention this library already relies on elsewhere (e.g. `getReturnOrdersList`'s `Ref` vs.
+`getRedirectionOrdersList`'s `OrderRef` for the same kind of value). §8 OQ-1 is resolved: **not**
+"blocking" any further — the design in §1/AC-20 stands as originally specified, now docs-confirmed
+rather than SDK-cross-checked.
+
+**`update` (return) — request example, resolving §8 OQ-5 (the `Ref` field name) and revealing a
+previously-missed required field:**
+```json
+{ "modelName": "AdditionalServiceGeneral", "calledMethod": "update",
+  "methodProperties": { "Ref": "00000000-0000-0000-0000-000000000000", "OnlyGetPricing": true,
+    "RecipientSettlement": "...", "RecipientWarehouse": "...", "IntDocNumber": "20450123456789",
+    "RecipientSettlementStreet": "...", "PaymentMethod": "Cash", "BuildingNumber": "15",
+    "OrderType": "orderCargoReturn", "NoteAddressRecipient": "", "Reason": "...", "SubtypeReason": "..." } }
+```
+`Ref` is confirmed (§8 OQ-5 resolved, no longer `low` confidence). **`OrderType` is present on the
+`update` example too** — not documented in this spec's original §1 field list for `updateReturn`/
+`updateRedirect` and not sent by the original implementation. `updateReturn`/`updateRedirect` now set
+`OrderType` ("orderCargoReturn"/"orderRedirecting" respectively) internally, matching `createReturn`/
+`createRedirect`'s existing discriminant-stripping pattern — never a field on the public payload.
+
+**`update` (redirect) — same `OrderType` confirmation** (`"OrderType": "orderRedirecting"` present in
+the official docs' own redirect-update example, methodProperties otherwise matching this module's
+already-documented `updateRedirect` field list).
+
+**`save`/`orderRedirecting` (calculateReturn/calculateRedirect and calculateRedirect) — response
+example, resolving the `Pricing.FirstDayStorage` type:**
+```json
+{ "success": true, "data": [ { "Pricing": { "Services": [ { "Service": "Переадресування в межах України", "Cost": 0 } ],
+  "Total": 0, "FirstDayStorage": "0000-00-00 00:00:00" }, "ScheduledDeliveryDate": "2024-05-18 12:00:00" } ] }
+```
+`FirstDayStorage` is a datetime **string** in every official-docs example (return and redirect calculate
+alike) — `OrderPricingEstimate.Pricing.FirstDayStorage` corrected to `string` (was `number`).
+`Pricing.Services` is confirmed as `{ Service: string; Cost: number }[]` (was untyped `unknown[]`).
+
+**`getRedirectionOrdersList` — response example, revealing a field this spec's original table omitted:**
+```json
+{ "success": true, "data": [ { "OrderRef": "...", "OrderNumber": "102-00010160",
+  "DateTime": "дд.мм.рррр чч:хх:сс", "DocumentNumber": "20600000065470", "Note": "...", "...": "..." } ] }
+```
+`DocumentNumber` is present in the real response and is now added to `RedirectOrderListItem` (this
+spec's §1 row 14 table above is corrected to include it).
+
+**`checkPossibilityForRedirecting` (edit-check variant) — request example, resolving §8 OQ-4's
+`checkRedirectEditPossible` field list:**
+```json
+{ "methodProperties": { "OrderRef": "...", "AddressDescription": "...", "RecipientName": "...",
+  "PhoneSender": "...", "StreetDescription": "...", "PhoneRecipient": "...", "BuildingNumber": "...",
+  "CityRecipient": "...", "DocumentWeight": "...", "SettlementRecipient": "...", "SettlementType": "...",
+  "PayerType": "...", "PaymentMethod": "...", "CounterpartyRecipientRef": "...", "WarehouseRef": "..." } }
+```
+Full field list confirmed — `CheckRedirectEditPossiblePayload` is now typed with these named optional
+fields instead of an index signature. The response example carries no `info` key (only the return
+edit-check does) — this module's `checkRedirectEditPossible` never returns one, consistent with its
+existing `Partial<RedirectPossibility>` return type.
+
+**"Змінити дані" (waybill-edit) section — confirms §8's second open question:** the official docs'
+complete section for waybill-edit orders lists exactly `getChangeEWOrdersList`, `save`/`orderChangeEW`,
+and `CheckPossibilityChangeEW` — no `update` method anywhere in that section, at the same page depth
+the return/redirect `update` sections receive. §8's "does a waybill-edit order genuinely have no
+`update` capability" question is resolved: **confirmed, no `update` exists for ChangeEW orders** — the
+original design (no `updateWaybillEdit` method) stands, now docs-confirmed rather than inferred from a
+documentation-gap argument.
+
+**`delete` — confirms the already-quoted status-gate sentence verbatim** (§1 above already quoted this
+correctly): "заявку на зміну даних (можна видалити заявку лише зі статусом «Прийнято»)" — matches this
+capture exactly, no correction needed.
+
+**Remaining genuinely open item:** `CreateRedirectPayload.ServiceType`'s full enum. The official docs
+confirm the field's presence and one real example value (`"WarehouseWarehouse"`, matching
+`internet-document`'s own `ServiceType` enum member) but no page in this capture enumerates all of
+`checkPossibilityForRedirecting`/`save`'s accepted `ServiceType` values for this specific model —
+`CreateRedirectPayload.ServiceType` stays typed as plain `string` rather than asserting
+`internet-document`'s 4-value enum applies identically here (public-api.md §10 item 5, unchanged).
 
 ## 2. Goals
 
@@ -348,8 +480,8 @@ Traceability: module boundaries follow the same convention every prior module se
 
 ## 8. Open questions
 
-- [ ] **Blocks `createReturnIfPossible`'s implementation:** does `checkReturnPossible`'s per-option `Ref` field map directly onto `createReturn`'s `ReturnAddressRef`, or does `ReturnAddressRef` require a different reference (a third-party bug report found evidence `ReturnAddressRef` expects a counterparty-address reference rather than a warehouse/department one — suggesting it may *not* be the same value `checkReturnPossible` returns)? Default now: §1's decision override assumes they're the same and chains the check's first returned option straight into `ReturnAddressRef`, treating an empty option list as ineligible (no create call attempted). If this assumption is wrong, `createReturnIfPossible`'s design in §1/AC-20 needs to change before implementation. — owner: Tech Lead, due: before `design`/`api` stage — this one blocks, not just tracks
-- [ ] Does a waybill-edit (ChangeEW) request genuinely have no `update`/edit capability, or does one exist on a documentation page this session's capture missed? Default now: no `updateWaybillEdit` method shipped (§1 Decision override); amending one means delete-then-recreate, itself carrying a documented TOCTOU risk (§3, §6.1). — owner: Tech Lead, due: next live-API verification pass
-- [ ] Does the `orderTermExtension` order type (storage-term extension) genuinely exist as a real, callable Nova Poshta capability? Default now: excluded from this module's scope entirely — single, self-admittedly reverse-engineered source only, absent from official docs (§1 Decision override). — owner: Tech Lead, due: once official docs add it, or a 2nd agreeing source is found
-- [ ] Do Nova Poshta's dispatch rules for `CheckPossibilityCreateReturn` and `checkPossibilityForRedirecting` genuinely key off which properties are present (`Number` vs. `Ref`+`Address`, or `Number` vs. `OrderRef`+fields) the way this spec's four-way split (§1 Decision override) assumes, or could a malformed mixed request produce an ambiguous or wrong-shaped response neither this spec's typed functions nor its tests anticipate? This also covers enumerating the exact field lists for `checkReturnEditPossible` (`Ref, Address` — `Address`'s own shape unconfirmed: a `Ref` string or a structured object) and `checkRedirectEditPossible` (`OrderRef` + the specific address/recipient field names), currently modeled loosely in §1's table. — owner: Tech Lead, due: before integration tests run against a live key
-- [ ] Re-verify the full 19-method surface — every request/response field, plus the `checkReturnEditPossible`/`checkRedirectEditPossible` dual-shape split and the ChangeEW `update` asymmetry above, plus the exact literal request-field name `updateReturn`/`updateRedirect` expect (`Ref` as modeled here, vs. `OrderRef` — see §1's naming note; neither cross-checked SDK exposed `update`'s own struct directly this session) — against Nova Poshta's live/official documentation once reachable by automated tooling, the same closing caveat every shipped spec in this repo already carries. — owner: Tech Lead, due: next live-API verification pass
+- [x] ~~Does `checkReturnPossible`'s per-option `Ref` field map directly onto `createReturn`'s `ReturnAddressRef`?~~ **Resolved 2026-09-23** — official docs' own `save`/`orderCargoReturn` example confirms `ReturnAddressRef` as the real wire field name for the sender-address variant; no source contradicts it being the same value `CheckPossibilityCreateReturn` returns as each option's `Ref` (§1's new "Official documentation quotes" subsection). No longer blocking.
+- [x] ~~Does a waybill-edit (ChangeEW) request genuinely have no `update`/edit capability?~~ **Resolved 2026-09-23** — the official docs' complete "Змінити дані" section lists only `getChangeEWOrdersList`/`save`/`CheckPossibilityChangeEW`, no `update`, at the same page depth return/redirect's `update` sections receive (§1). Confirmed: no `updateWaybillEdit` method; amending one still means delete-then-recreate, a documented TOCTOU risk (§3, §6.1).
+- [ ] Does the `orderTermExtension` order type (storage-term extension) genuinely exist as a real, callable Nova Poshta capability? Default now: excluded from this module's scope entirely — single, self-admittedly reverse-engineered source only, absent from official docs (§1 Decision override); this session's official-docs capture confirms no mention of it either. — owner: Tech Lead, due: once official docs add it, or a 2nd agreeing source is found
+- [x] ~~Do Nova Poshta's dispatch rules for `CheckPossibilityCreateReturn`/`checkPossibilityForRedirecting` key off which properties are present, and what are `checkReturnEditPossible`/`checkRedirectEditPossible`'s exact field lists?~~ **Resolved 2026-09-23** — official docs' own request/response examples confirm `checkReturnEditPossible`'s `Address` is a plain string (not a structured object) and `checkRedirectEditPossible`'s full field list (14 named optional fields) (§1). The malformed-mixed-request edge case itself remains untested against a live key — tracked below.
+- [x] ~~Re-verify the full 19-method surface, plus `updateReturn`/`updateRedirect`'s literal `Ref` field name~~ — **substantially resolved 2026-09-23** via the official docs capture (§1's new subsection quotes the request/response shape for every method this file previously flagged `low`/`medium` confidence, including `updateReturn`/`updateRedirect`'s `Ref` and the previously-missed `OrderType` requirement on both). One narrow item remains open: `CreateRedirectPayload.ServiceType`'s full enum (only one example value confirmed) — owner: Tech Lead, due: next live-API verification pass or a 2nd agreeing SDK for the remaining `ServiceType` values.

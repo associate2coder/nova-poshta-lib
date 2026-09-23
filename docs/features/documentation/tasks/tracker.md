@@ -9,7 +9,7 @@
 | T2 | Audit and mark all internal-only exports `@internal` | docs | associate2coder | M | — | done |
 | T3 | TSDoc the core client | docs | associate2coder | S | T2 | done |
 | T4 | TSDoc `common` + `address` modules | docs | associate2coder | M | T2 | done |
-| T5 | TSDoc `counterparty` + `internet-document` modules | docs | associate2coder | M | T2 | todo |
+| T5 | TSDoc `counterparty` + `internet-document` modules | docs | associate2coder | M | T2 | done |
 | T6 | TSDoc `tracking-document` + `scan-sheet` + `additional-service` modules | docs | associate2coder | M | T2 | todo |
 | T7 | Add documentation-coverage step to `ci.yml`, report-only | wiring | associate2coder | S | T1 | todo |
 | T8 | Run the validation spike, then flip to hard-fail | tests | associate2coder | M | T3, T4, T5, T6, T7 | todo |

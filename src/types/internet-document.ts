@@ -32,9 +32,12 @@ export type CargoType =
   | "SignedDocuments"
   | "Trays";
 
+/** Who pays for an internet-document shipment. */
 export type PayerType = "Sender" | "Recipient" | "ThirdPerson";
+/** How an internet-document shipment's cost is settled. */
 export type PaymentMethod = "Cash" | "NonCash";
 
+/** Redelivery (cash-on-delivery / document-return) details for a shipment. */
 export interface BackwardDeliveryData {
   PayerType: PayerType;
   CargoType: "Money" | "Documents";
@@ -95,22 +98,28 @@ interface RecipientDoorsLeg {
 export interface SaveWarehouseToWarehousePayload extends SaveCommonFields, SenderWarehouseLeg, RecipientWarehouseLeg {
   ServiceType: "WarehouseWarehouse";
 }
+/** Warehouse-sender, doors-recipient variant of {@link SaveInternetDocumentPayload}. */
 export interface SaveWarehouseToDoorsPayload extends SaveCommonFields, SenderWarehouseLeg, RecipientDoorsLeg {
   ServiceType: "WarehouseDoors";
 }
+/** Doors-sender, warehouse-recipient variant of {@link SaveInternetDocumentPayload}. */
 export interface SaveDoorsToWarehousePayload extends SaveCommonFields, SenderDoorsLeg, RecipientWarehouseLeg {
   ServiceType: "DoorsWarehouse";
 }
+/** Doors-to-doors variant of {@link SaveInternetDocumentPayload}. */
 export interface SaveDoorsToDoorsPayload extends SaveCommonFields, SenderDoorsLeg, RecipientDoorsLeg {
   ServiceType: "DoorsDoors";
 }
 
+/** Creates an internet document (shipment) — the payload variant's `ServiceType` picks which
+ *  sender/recipient location fields apply. */
 export type SaveInternetDocumentPayload =
   | SaveWarehouseToWarehousePayload
   | SaveWarehouseToDoorsPayload
   | SaveDoorsToWarehousePayload
   | SaveDoorsToDoorsPayload;
 
+/** The shipment record `InternetDocument.save`/`update` resolve to. */
 export interface SavedInternetDocument {
   Ref: string;
   CostOnSite: number;
@@ -148,22 +157,28 @@ interface UpdateCommonFields {
   Ref: string;
 }
 
+/** Warehouse-to-warehouse variant of {@link UpdateInternetDocumentPayload}. */
 export interface UpdateWarehouseToWarehousePayload
   extends UpdateCommonFields,
     SenderWarehouseLeg,
     RecipientWarehouseLeg {
   ServiceType: "WarehouseWarehouse";
 }
+/** Warehouse-sender, doors-recipient variant of {@link UpdateInternetDocumentPayload}. */
 export interface UpdateWarehouseToDoorsPayload extends UpdateCommonFields, SenderWarehouseLeg, RecipientDoorsLeg {
   ServiceType: "WarehouseDoors";
 }
+/** Doors-sender, warehouse-recipient variant of {@link UpdateInternetDocumentPayload}. */
 export interface UpdateDoorsToWarehousePayload extends UpdateCommonFields, SenderDoorsLeg, RecipientWarehouseLeg {
   ServiceType: "DoorsWarehouse";
 }
+/** Doors-to-doors variant of {@link UpdateInternetDocumentPayload}. */
 export interface UpdateDoorsToDoorsPayload extends UpdateCommonFields, SenderDoorsLeg, RecipientDoorsLeg {
   ServiceType: "DoorsDoors";
 }
 
+/** The discriminated-union payload `InternetDocument.update` accepts — see
+ *  {@link SaveInternetDocumentPayload}'s per-leg variants for the field-shape rationale. */
 export type UpdateInternetDocumentPayload =
   | UpdateWarehouseToWarehousePayload
   | UpdateWarehouseToDoorsPayload
@@ -195,12 +210,14 @@ export interface DeletedInternetDocumentOutcome {
   Reason?: string;
 }
 
+/** Narrows `InternetDocument.getDocumentList` to a date range and/or a page. */
 export interface GetDocumentListFilters {
   DateTimeFrom?: string;
   DateTimeTo?: string;
   Page?: number;
 }
 
+/** One shipment summary from `InternetDocument.getDocumentList`. */
 export interface WaybillListItem {
   Ref: string;
   DateTime: string;
@@ -217,6 +234,7 @@ export interface WaybillListItem {
   RejectionReason?: string;
 }
 
+/** Scopes `InternetDocument.getDocumentPrice`'s cost estimate to a route, weight, and service. */
 export interface GetDocumentPricePayload {
   CitySender: string;
   CityRecipient: string;
@@ -227,12 +245,14 @@ export interface GetDocumentPricePayload {
   SeatsAmount: number;
 }
 
+/** The cost estimate `InternetDocument.getDocumentPrice` resolves to. */
 export interface DocumentPriceEstimate {
   Cost: number;
   AssessedCost: number;
   CostRedelivery: number;
 }
 
+/** Scopes `InternetDocument.getDocumentDeliveryDate`'s estimate to a route and service. */
 export interface GetDocumentDeliveryDatePayload {
   DateTime: string;
   ServiceType: ServiceType;
@@ -240,6 +260,7 @@ export interface GetDocumentDeliveryDatePayload {
   CityRecipient: string;
 }
 
+/** The delivery-date estimate `InternetDocument.getDocumentDeliveryDate` resolves to. */
 export interface DocumentDeliveryDateEstimate {
   Date: string;
   Timezone: string;

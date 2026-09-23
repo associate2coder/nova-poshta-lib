@@ -15,7 +15,11 @@ import type {
   WaybillListItem,
 } from "../../types/internet-document.js";
 
+/** Nova Poshta's internet-document (shipment/waybill) methods: create/update/delete, list and
+ *  price/delivery-date estimates, and print-link construction. */
 export interface InternetDocumentModule {
+  /** Creates a shipment — the payload variant's `ServiceType` picks which sender/recipient
+   *  location fields apply. */
   save(payload: SaveInternetDocumentPayload): Promise<SavedInternetDocument | undefined>;
   /**
    * Full-replace (AC-06): every field the chosen ServiceType leg's Save payload declares is
@@ -31,8 +35,11 @@ export interface InternetDocumentModule {
   /** ADR-0005: this module's own sequential loop over `delete`, never a single server-side batch
    *  call — resolves one outcome per submitted Ref, in submission order. */
   deleteBatch(payload: DeleteBatchInternetDocumentPayload): Promise<DeletedInternetDocumentOutcome[]>;
+  /** Lists shipments, optionally narrowed by {@link GetDocumentListFilters}. */
   getDocumentList(filters?: GetDocumentListFilters): Promise<WaybillListItem[]>;
+  /** Estimates a shipment's cost for a given route/weight/service. */
   getDocumentPrice(payload: GetDocumentPricePayload): Promise<DocumentPriceEstimate>;
+  /** Estimates a shipment's delivery date for a given route/service. */
   getDocumentDeliveryDate(payload: GetDocumentDeliveryDatePayload): Promise<DocumentDeliveryDateEstimate>;
   /** PROVISIONAL (see PrintLinkPayload's doc comment) — the URL this resolves to is live-verified
    *  before returning, but the construction mechanism itself is contested across sources. */
@@ -120,6 +127,7 @@ async function buildAndVerifyPrintLink(
   return url;
 }
 
+/** Creates the {@link InternetDocumentModule} bound to the given {@link NovaPoshtaClient}. */
 export function createInternetDocumentModule(client: NovaPoshtaClient): InternetDocumentModule {
   const module: InternetDocumentModule = {
     save: (payload: SaveInternetDocumentPayload) =>

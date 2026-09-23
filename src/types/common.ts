@@ -1,3 +1,5 @@
+/** @internal Generic pattern type nested inside other exported types' fields (e.g.
+ * `CounterpartyProperty`) — never itself a standalone public signature. */
 export type OpenEnum<Known extends string> = Known | (string & {});
 
 interface ReferenceRecordBase {

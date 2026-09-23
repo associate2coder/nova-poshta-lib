@@ -2,6 +2,8 @@ import type { OpenEnum } from "./common.js";
 
 export type CounterpartyProperty = OpenEnum<"Sender" | "Recipient" | "ThirdParty">;
 
+/** @internal Base shape extended by the public counterparty types — never itself a standalone
+ * public signature. */
 export interface CounterpartyRecordBase {
   Ref?: string;
   Description?: string;

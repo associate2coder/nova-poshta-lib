@@ -48,11 +48,15 @@ project's own foundation intent.
   later step from merging. There is no separate manual or on-demand rebuild trigger — a
   documentation-only fix reaches the public site only via the next npm release, same as any other
   change.
-- Decision override: internal-only re-exports (e.g. `AddressReferenceRecordBase`,
-  `CounterpartyRecordBase`, `SearchWrapper`, `OpenEnum`, `TRACKING_STATUS_CODES`) are marked with
-  TypeDoc's `@internal` tag and excluded from both the generated site and the CI coverage
-  requirement — keeps the reference focused on what a consuming developer actually calls. The
-  audited full list is still open (§11).
+- Decision override: internal-only re-exports are marked with TypeDoc's `@internal` tag and
+  excluded from both the generated site and the CI coverage requirement — keeps the reference
+  focused on what a consuming developer actually calls. `implement`'s T2 ran the full-surface
+  audit: exactly 3 symbols qualify — `AddressReferenceRecordBase`, `CounterpartyRecordBase`,
+  `OpenEnum` — each used only as a base type or nested inside another exported type's fields.
+  Two symbols this document's earlier drafting had assumed were internal, `SearchWrapper` and
+  `TRACKING_STATUS_CODES`, turned out to be genuinely public on inspection (the former is the
+  literal return type of `searchSettlements`/`searchSettlementStreets`; the latter's own source
+  comment says it exists for consuming developers) and were left untouched.
 - Decision override: only type/function/parameter/return-level comments are required, not a comment
   on every individual field of a wire-shape type — fields already mirror Nova Poshta's own names;
   per-field coverage would multiply the writing effort for comparatively little reader benefit.
@@ -383,7 +387,7 @@ ADR files live under `docs/features/documentation/adr/NNNN-<title>.md`.
 | If `changesets/action`'s `published` output is ever renamed/reshaped in a future major-version bump of that action, the gate in ADR-0001 fails closed (no docs deploy) rather than open | Medium | Pin `changesets/action` to an explicit major version; a failed/skipped docs-deploy job is visible in the Actions run, so the failure is noisy, not silent | Tech Lead |
 | No explicit deadline stated in `spec.md` for this feature | Low | None needed at this size (~1 week per `.size`); add a real date here if a hard external deadline emerges | Tech Lead |
 | Open architectural decision: who registers the new documentation CI check as a required branch-protection status check | Open question | Resolve immediately after this feature's PR merges — a manual, out-of-codebase GitHub-settings step | Repo admin (associate2coder) |
-| Open architectural decision: the definitive, fully-audited list of `@internal`-marked exports | Open question | Resolve before `sdd:tasks` — a few examples are known (`AddressReferenceRecordBase`, `CounterpartyRecordBase`, `SearchWrapper`, `OpenEnum`, `TRACKING_STATUS_CODES`); a complete scan of all ~150 exports has not run yet | Implementer |
+| ~~Open architectural decision: the definitive, fully-audited list of `@internal`-marked exports~~ Resolved 2026-09-23 in `implement` T2 — the full scan found `AddressReferenceRecordBase`, `CounterpartyRecordBase`, `OpenEnum`; `SearchWrapper`/`TRACKING_STATUS_CODES` turned out public on inspection | Resolved | — | Implementer |
 | Open architectural decision: whether to add a `CONTRIBUTING.md` convention to keep TSDoc updated alongside behavior changes | Open question | Resolve before `sdd:tasks` | Tech Lead |
 
 **Accepted debt (acceptable in v1, plan to fix later):**

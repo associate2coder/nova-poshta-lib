@@ -1,5 +1,7 @@
 import type { OpenEnum } from "./common.js";
 
+/** @internal Base shape extended by the public address types — never itself a standalone public
+ * signature. */
 export interface AddressReferenceRecordBase {
   Ref?: string;
   Description?: string;

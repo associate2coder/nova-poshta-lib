@@ -31,5 +31,6 @@ and `src/types/address.ts`.
 
 ## Notes
 
-Depends on T2's internal audit (e.g. `AddressReferenceRecordBase`, `SearchWrapper` are already
-`@internal` and need no full comment, only the tag T2 already added).
+Depends on T2's internal audit (`AddressReferenceRecordBase` is `@internal` and needs no full
+comment, only the tag T2 already added — `SearchWrapper` turned out public during the audit and
+still needs a full comment here).

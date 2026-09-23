@@ -31,4 +31,5 @@ exported function/type in `src/modules/tracking-document/`, `src/modules/scan-sh
 
 ## Notes
 
-Depends on T2's internal audit (e.g. `TRACKING_STATUS_CODES` is already `@internal`).
+`TRACKING_STATUS_CODES` turned out public during T2's audit (its own source comment says it
+exists for consuming developers) — it still needs a full comment here, not a tag-and-skip.

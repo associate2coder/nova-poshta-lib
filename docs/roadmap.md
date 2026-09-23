@@ -27,7 +27,7 @@ available as a typed, tested, documented module in `nova-poshta-lib`, published 
 | 4 | internet-document — typed shipment/waybill creation module, built on address + counterparty `Ref`s and common's reference types | [`docs/features/internet-document/spec.md`](features/internet-document/spec.md) | M | shipped |
 | 5 | tracking-document — typed module (1 raw method + 1 single-waybill convenience) for tracking a shipment by waybill number + optional phone, independent of internet-document and `common` | [`docs/features/tracking-document/spec.md`](features/tracking-document/spec.md) | S | shipped |
 | 6 | scan-sheet — typed module (5 raw methods + `addToTodaysScanSheet` convenience) for batching waybills into a scan sheet for courier handoff | [`docs/features/scan-sheet/spec.md`](features/scan-sheet/spec.md) | S | shipped |
-| 7 | additional-service — typed module (18 raw methods + `createReturnIfPossible` convenience) for post-creation shipment actions: returns, redirections, waybill edits | [`docs/features/additional-service/spec.md`](features/additional-service/spec.md) | M | spec'd |
+| 7 | additional-service — typed module (18 raw methods + `createReturnIfPossible` convenience) for post-creation shipment actions: returns, redirections, waybill edits | [`docs/features/additional-service/spec.md`](features/additional-service/spec.md) | M | shipped |
 | 8 | documentation — TSDoc comments on every exported symbol across all modules + TypeDoc-generated static API reference, wired into CI/publish | `docs/architecture-map.md` §Intent ("documented" listed as a foundation requirement; no step covers it — the README has usage snippets but no generated reference) | S | idea |
 
 Sizing note: 4 and 7 are called **M** rather than **S** like their shipped precedents because each
@@ -128,3 +128,4 @@ picture, not a headless graph.
 | internet-document | 2026-09-22 | [PR #6](https://github.com/associate2coder/nova-poshta-lib/pull/6) |
 | tracking-document | 2026-09-22 | [PR #9](https://github.com/associate2coder/nova-poshta-lib/pull/9) |
 | scan-sheet | 2026-09-22 | [PR #10](https://github.com/associate2coder/nova-poshta-lib/pull/10) |
+| additional-service | 2026-09-23 | PR pending — see below |

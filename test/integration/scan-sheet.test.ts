@@ -34,11 +34,12 @@ const hasWaybillFixtures = Boolean(
 );
 
 /** DD.MM.YYYY, Europe/Kyiv calendar date — matches internet-document's own DateTime convention
- *  (test/unit/modules/internet-document.test.ts), not scan-sheet's own YYYY-MM-DD Date field
- *  below. Computed via Intl.DateTimeFormat, not the host machine's local clock — the same
- *  host-clock bug fixed in todayAsIsoDate() below applied here too (review-2026-09-22.md
- *  finding 6): a run late in the Kyiv evening on a host in an earlier timezone would otherwise
- *  send yesterday's date to the internet-document save() call that seeds this whole suite. */
+ *  (test/unit/modules/internet-document.test.ts) *and* scan-sheet's own insertDocuments Date wire
+ *  field (confirmed live 2026-09-23 — the YYYY-MM-DD form this test used before was rejected
+ *  outright as "Невірний формат дати" / invalid date format; closes spec.md §8's previously-open
+ *  question). Computed via Intl.DateTimeFormat, not the host machine's local clock
+ *  (review-2026-09-22.md finding 6): a run late in the Kyiv evening on a host in an earlier
+ *  timezone would otherwise send yesterday's date. */
 function todayAsSlashDate(): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Kyiv",
@@ -50,20 +51,6 @@ function todayAsSlashDate(): string {
     .split("-");
   const [year, month, day] = parts;
   return `${day}.${month}.${year}`;
-}
-
-/** YYYY-MM-DD, Europe/Kyiv calendar date — matches scan-sheet's own insertDocuments Date
- *  convention (src/modules/scan-sheet/index.ts's kyivTodayDateString, and its unit-test
- *  fixtures); computed via Intl.DateTimeFormat, not the host machine's local clock, so this test
- *  agrees with the module under test regardless of which timezone CI runs in
- *  (review-2026-09-22.md finding 6). */
-function todayAsIsoDate(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Kyiv",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
 }
 
 // Opt-in only, per CLAUDE.md: hits the real Nova Poshta API, skipped automatically when
@@ -88,7 +75,10 @@ describe.skipIf(!apiKey || !hasWaybillFixtures)(
           DateTime: todayAsSlashDate(),
           Weight: 0.1,
           SeatsAmount: 1,
-          Description: "scan-sheet integration smoke test — throwaway waybill",
+          // Nova Poshta validates this as a real cargo-content description, not free text — an
+          // arbitrary English sentence is rejected outright ("Description is not valid",
+          // errorCode 20000200151, confirmed against the live API 2026-09-23).
+          Description: "Документи",
           Cost: 100,
           CitySender: citySenderRef as string,
           Sender: senderRef as string,
@@ -110,9 +100,11 @@ describe.skipIf(!apiKey || !hasWaybillFixtures)(
         let scanSheetRef = "";
         try {
           // AC-01: no existing scan-sheet Ref supplied — Nova Poshta creates a new sheet.
+          // insertDocuments' Date wire field needs DD.MM.YYYY, not YYYY-MM-DD — confirmed live
+          // 2026-09-23 ("Невірний формат дати" / invalid date format on the ISO-ish form).
           const inserted = await scanSheet.insertDocuments({
             DocumentRefs: [waybillRef],
-            Date: todayAsIsoDate(),
+            Date: todayAsSlashDate(),
           });
           expect(Array.isArray(inserted)).toBe(true);
           const [insertedItem] = inserted;

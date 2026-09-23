@@ -1,5 +1,5 @@
 ---
-status: Draft
+status: Reviewed
 owner: "associate2coder"
 reviewers: ["Tech Lead"]
 updated_at: "2026-09-23"
@@ -65,6 +65,12 @@ Traceability: module boundaries follow the same convention every prior module se
 | 18 | `deleteAdditionalServiceOrder` | `delete` | `Ref` | `Number` |
 | 19 | `createReturnIfPossible` (convenience) | *(internally: `CheckPossibilityCreateReturn` then `save`/`orderCargoReturn`)* | `IntDocNumber` + the plain-return fields `createReturn` needs | same as `createReturn`, or the standard error if the check declines |
 
+> **Note on `checkWaybillEditPossible`'s flags vs `createWaybillEdit`'s fields:** 8 of the 11 `Can...` flags (everything but `CanChangeSender`, `CanChangeRecipient`, `CanChangePayerTypeOrPaymentMethod`) have no corresponding field on `createWaybillEdit`'s wire request — two independent, agreeing sources (`platx/go-nova-poshta`'s `SaveChangeEWReq`, `sirkostya009/go-novapost`'s `ChangeEWRequest`) both model the wire `save`/`orderChangeEW` request as accepting only sender/recipient/payer-type/payment-method fields. See §3 non-goals.
+>
+> **Note on `Ref` vs `OrderRef`:** `Ref` (returned by `save`, consumed by `update` and `deleteAdditionalServiceOrder`) and `OrderRef` (returned by the three `get*OrdersList` methods, and by `checkRedirectEditPossible`'s own request field) name the same additional-service order — different wire field names for the same identifier depending on which method you're calling, the same pattern this library already lives with for a waybill's `Ref`/`IntDocNumber`. `update`'s own request field is modeled here as `Ref` to match `delete`; §8 still tracks confirming that literal field name against a live call, since no cross-checked source's `update` struct was directly visible this session.
+>
+> **Note on `BeginDate`/`EndDate`:** typed as plain `string`, passed through unchanged — no client-side date parsing or comparison, matching this library's existing convention (every date-bearing field across every module is `string`) and deliberately avoiding a repeat of `scan-sheet`'s cross-format `DateTime`-ordering defect.
+
 ## 2. Goals
 
 - Give consuming developers a typed, discoverable way to manage the three post-creation shipment actions (return, redirect, waybill edit) that Nova Poshta's `AdditionalServiceGeneral` model exposes, closing the same hand-rolled-call gap every prior module already closed for its own slice of the API — and completing the library's full 7-domain target.
@@ -78,6 +84,7 @@ Traceability: module boundaries follow the same convention every prior module se
 - Enforcing that an `updateReturn`/`updateRedirect` payload carries forward every previously-set field. Reason: `update` is a full-replace call on the wire (confirmed by official docs' own examples); an omitted field is not carried forward, matching `internet-document`'s identical, already-shipped `update` semantics and its documented risk (AC-06) that an incomplete edit payload can clear a previously-set value, including a money-bearing one.
 - A typed `orderTermExtension` write method (storage-term extension). Reason: single, self-admittedly reverse-engineered source only, absent from official docs and every other cross-checked SDK (§1 Decision override) — below this project's sourcing bar.
 - A shared, branded `Ref` type distinguishing a return/redirect/waybill-edit order's `Ref` from any other module's `Ref`. Reason: matches `scan-sheet`'s explicit decision that this codebase inlines `Ref: string` everywhere rather than introducing type-level branding; the risk that a caller passes the wrong kind of `Ref` into `deleteAdditionalServiceOrder` is accepted and documented (§6.1) rather than solved with new shared infrastructure, which would also push this feature past its declared size.
+- Exposing the 8 of `checkWaybillEditPossible`'s 11 `Can...` flags concerning backward-delivery documents/money, cash-to-card, other backward-delivery, afterpayment type, lifting-on-floor (with/without elevator), or filling-warranty as fields on `createWaybillEdit`. Reason: two independent, agreeing sources (`platx/go-nova-poshta`'s `SaveChangeEWReq`, `sirkostya009/go-novapost`'s `ChangeEWRequest`) both model the wire `save`/`orderChangeEW` request as accepting only sender/recipient/payer-type/payment-method fields — Nova Poshta's own create call has no field for the other 8, so this module can't expose them regardless of scope; those flags stay informational-only in this module's surface (§8 tracks confirming this against a live call).
 
 ## 4. User stories
 
@@ -191,7 +198,7 @@ Traceability: module boundaries follow the same convention every prior module se
 
 **Given** a consuming developer is building a `createReturn` request
 **When** they select which destination variant they're using
-**Then** the system's typed contract only accepts the fields belonging to that one variant — supplying a second variant's fields on the same call is a compile-time type error, not a value this library forwards to Nova Poshta unresolved
+**Then** the system's typed contract only accepts the fields belonging to that one variant — each variant carries its own explicit discriminant tag (mirroring `internet-document`'s `ServiceType`/`CargoType` precedent), so supplying a second variant's fields together with the wrong tag is a compile-time type error even when the payload is assembled field-by-field in a variable, not just when it's a fresh object literal; the discriminant itself is stripped before the request reaches Nova Poshta, since the wire `save` call has no field for it
 
 ### AC-05 (US-03) — happy path
 
@@ -237,7 +244,7 @@ Traceability: module boundaries follow the same convention every prior module se
 
 ### AC-12 (US-08) — happy path
 
-**Given** a consuming developer holds an existing redirect request's own `OrderRef`
+**Given** a consuming developer holds an existing redirect request's own identifying value (`OrderRef` on `checkRedirectEditPossible`'s request, the same order `updateRedirect` addresses as `Ref` — see §1's naming note)
 **When** they call `checkRedirectEditPossible` and then `updateRedirect` with a corrected field
 **Then** the system applies the edit and returns the updated order as typed data
 
@@ -245,13 +252,13 @@ Traceability: module boundaries follow the same convention every prior module se
 
 **Given** a consuming developer's API key represents the shipment's recipient rather than its sender
 **When** they call `updateRedirect` on an existing redirect request
-**Then** Nova Poshta allows the call but may restrict which fields a recipient (as opposed to a sender) is permitted to change — the system passes through whatever subset Nova Poshta accepts, performing no client-side field-permission check of its own, and a rejected field surfaces as the standard error the same way any other decline does
+**Then** Nova Poshta allows the call but may restrict which fields a recipient (as opposed to a sender) is permitted to change — the system passes through whatever subset Nova Poshta accepts, performing no client-side field-permission check of its own, and a rejected field surfaces as the standard error the same way any other decline does; `updateRedirect`'s typed signature carries no role parameter of its own — two independent SDKs (`platx/go-nova-poshta`, `sirkostya009/go-novapost`) confirm Nova Poshta infers sender-vs-recipient solely from whose API key places the call, not from a request field this library would need to set
 
 ### AC-14 (US-09) — happy path
 
 **Given** a consuming developer holds a valid API key
 **When** they call `getRedirectionOrdersList`
-**Then** the system returns every matching redirect request as typed data, exactly as Nova Poshta responds with it
+**Then** the system returns the redirect requests matching the caller's `Page`/`Limit`/date filters as typed data, exactly as Nova Poshta responds with it — performing no client-side re-filtering, sorting, or pagination beyond what the caller explicitly passes through (same convention as AC-08)
 
 ### AC-15 (US-10) — happy path
 
@@ -269,7 +276,7 @@ Traceability: module boundaries follow the same convention every prior module se
 
 **Given** a consuming developer holds a valid API key
 **When** they call `getChangeEWOrdersList`
-**Then** the system returns every matching waybill-edit request as typed data, including each changed field's before/after value where Nova Poshta provides one
+**Then** the system returns the waybill-edit requests matching the caller's `Page`/`Limit`/date filters as typed data, including each changed field's before/after value where Nova Poshta provides one — performing no client-side re-filtering, sorting, or pagination beyond what the caller explicitly passes through (same convention as AC-08)
 
 ### AC-18 (US-12) — happy path
 
@@ -292,8 +299,8 @@ Traceability: module boundaries follow the same convention every prior module se
 ### AC-21 (US-14) — error
 
 **Given** a consuming developer calls any of this module's methods
-**When** Nova Poshta declines the request outright at the envelope level (`success: false`), or the response it returns isn't shaped as that method's documented data at all
-**Then** the system raises the standard error containing Nova Poshta's own explanation, rather than returning an empty or partial result that looks like a valid outcome
+**When** Nova Poshta declines the request outright at the envelope level (`success: false`), or the response body isn't even a navigable list of results (envelope-level malformation — e.g. `data` missing or not an array)
+**Then** the system raises the standard error containing Nova Poshta's own explanation, rather than returning an empty or partial result that looks like a valid outcome — matching every sibling module, this check stays at the envelope level only; a `success: true` response whose individual fields don't match a method's documented shape is not separately validated field-by-field
 
 ### AC-22 (US-14) — error
 
@@ -316,6 +323,7 @@ Traceability: module boundaries follow the same convention every prior module se
 | Method-surface completeness | 100% of the 18 raw methods + 1 convenience method have a corresponding typed method | unit test suite asserts all 19 are exported and callable |
 | Discriminant safety | 100% of `OrderType`/`OnlyGetPricing` values are set internally — 0 public method signatures accept either as a caller-settable field | static check in CI (public API surface review) |
 | Library-added overhead per call (18 raw methods only) | Median ≤ 5ms beyond the underlying network round-trip (no client-side caching, retries, or heavy parsing) — **does not apply to `createReturnIfPossible`**, which makes two network calls by design | median across ≥30 repeated single-item calls to a raw method, `fetch` stubbed to near-zero latency, always runs in CI |
+| Calculate/create isolation | 0 real return or redirect orders created by `calculateReturn`/`calculateRedirect` calls, verified at the layer each test suite can actually prove | unit test asserts the outgoing request carries `OnlyGetPricing: "1"` (network mocked, so this is the provable layer); the deeper server-side guarantee is Nova Poshta's own contract, additionally checked by the optional integration suite when `NOVA_POSHTA_TEST_API_KEY` is set |
 
 ## 6.1 Security / privacy
 
@@ -340,7 +348,8 @@ Traceability: module boundaries follow the same convention every prior module se
 
 ## 8. Open questions
 
+- [ ] **Blocks `createReturnIfPossible`'s implementation:** does `checkReturnPossible`'s per-option `Ref` field map directly onto `createReturn`'s `ReturnAddressRef`, or does `ReturnAddressRef` require a different reference (a third-party bug report found evidence `ReturnAddressRef` expects a counterparty-address reference rather than a warehouse/department one — suggesting it may *not* be the same value `checkReturnPossible` returns)? Default now: §1's decision override assumes they're the same and chains the check's first returned option straight into `ReturnAddressRef`, treating an empty option list as ineligible (no create call attempted). If this assumption is wrong, `createReturnIfPossible`'s design in §1/AC-20 needs to change before implementation. — owner: Tech Lead, due: before `design`/`api` stage — this one blocks, not just tracks
 - [ ] Does a waybill-edit (ChangeEW) request genuinely have no `update`/edit capability, or does one exist on a documentation page this session's capture missed? Default now: no `updateWaybillEdit` method shipped (§1 Decision override); amending one means delete-then-recreate, itself carrying a documented TOCTOU risk (§3, §6.1). — owner: Tech Lead, due: next live-API verification pass
 - [ ] Does the `orderTermExtension` order type (storage-term extension) genuinely exist as a real, callable Nova Poshta capability? Default now: excluded from this module's scope entirely — single, self-admittedly reverse-engineered source only, absent from official docs (§1 Decision override). — owner: Tech Lead, due: once official docs add it, or a 2nd agreeing source is found
-- [ ] Do Nova Poshta's dispatch rules for `CheckPossibilityCreateReturn` and `checkPossibilityForRedirecting` genuinely key off which properties are present (`Number` vs. `Ref`+`Address`, or `Number` vs. `OrderRef`+fields) the way this spec's four-way split (§1 Decision override) assumes, or could a malformed mixed request produce an ambiguous or wrong-shaped response neither this spec's typed functions nor its tests anticipate? — owner: Tech Lead, due: before integration tests run against a live key
-- [ ] Re-verify the full 19-method surface — every request/response field, plus the `checkReturnEditPossible`/`checkRedirectEditPossible` dual-shape split and the ChangeEW `update` asymmetry above — against Nova Poshta's live/official documentation once reachable by automated tooling, the same closing caveat every shipped spec in this repo already carries. — owner: Tech Lead, due: next live-API verification pass
+- [ ] Do Nova Poshta's dispatch rules for `CheckPossibilityCreateReturn` and `checkPossibilityForRedirecting` genuinely key off which properties are present (`Number` vs. `Ref`+`Address`, or `Number` vs. `OrderRef`+fields) the way this spec's four-way split (§1 Decision override) assumes, or could a malformed mixed request produce an ambiguous or wrong-shaped response neither this spec's typed functions nor its tests anticipate? This also covers enumerating the exact field lists for `checkReturnEditPossible` (`Ref, Address` — `Address`'s own shape unconfirmed: a `Ref` string or a structured object) and `checkRedirectEditPossible` (`OrderRef` + the specific address/recipient field names), currently modeled loosely in §1's table. — owner: Tech Lead, due: before integration tests run against a live key
+- [ ] Re-verify the full 19-method surface — every request/response field, plus the `checkReturnEditPossible`/`checkRedirectEditPossible` dual-shape split and the ChangeEW `update` asymmetry above, plus the exact literal request-field name `updateReturn`/`updateRedirect` expect (`Ref` as modeled here, vs. `OrderRef` — see §1's naming note; neither cross-checked SDK exposed `update`'s own struct directly this session) — against Nova Poshta's live/official documentation once reachable by automated tooling, the same closing caveat every shipped spec in this repo already carries. — owner: Tech Lead, due: next live-API verification pass

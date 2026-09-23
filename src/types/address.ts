@@ -66,7 +66,7 @@ export interface SettlementAddress extends AddressReferenceRecordBase {
 }
 
 /** A Nova Poshta area (oblast-level region) record, as returned by `Address.getAreas`. */
-export type Area = AddressReferenceRecordBase;
+export interface Area extends AddressReferenceRecordBase {} // eslint-disable-line @typescript-eslint/no-empty-object-type -- extends, not aliases, so TypeDoc renders its fields instead of a dangling name
 
 /** Scopes `Address.getStreet` to a city and, optionally, a search string or page/limit slice. */
 export interface GetStreetParams {
@@ -123,7 +123,7 @@ export interface Warehouse extends AddressReferenceRecordBase {
 }
 
 /** A Nova Poshta warehouse-type record, as returned by `Address.getWarehouseTypes`. */
-export type WarehouseType = AddressReferenceRecordBase;
+export interface WarehouseType extends AddressReferenceRecordBase {} // eslint-disable-line @typescript-eslint/no-empty-object-type -- extends, not aliases, so TypeDoc renders its fields instead of a dangling name
 
 /** Creates a saved address for a counterparty. Every field is required by the wire method
  *  (`Address.save`); there is no partial-create variant. */

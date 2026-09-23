@@ -81,6 +81,87 @@
       "acs": ["AC-01", "AC-05"],
       "dod": "a stable npm publish rebuilds and deploys the reference site within 5 minutes, never using NPM_TOKEN, without affecting the release job's own status on failure",
       "files_hint": [".github/workflows/release.yml"]
+    },
+    {
+      "id": "T10",
+      "title": "Fix Area/WarehouseType unbrowsable aliases",
+      "layer": "docs",
+      "deps": [],
+      "acs": ["AC-01", "AC-03"],
+      "dod": "Area and WarehouseType render their fields in the generated docs instead of a bare unlinked name, by extending their internal base type instead of aliasing it",
+      "files_hint": ["src/types/address.ts"]
+    },
+    {
+      "id": "T11",
+      "title": "Export ReferenceRecordBase and fix 8 unbrowsable common aliases; re-enable notExported",
+      "layer": "docs",
+      "deps": [],
+      "acs": ["AC-01"],
+      "dod": "ReferenceRecordBase is exported and documented, all 8 common.ts aliases of it extend it instead, and typedoc.json's validation.notExported is true again with 0 warnings",
+      "files_hint": ["src/types/common.ts", "typedoc.json", "test/unit/docs-hard-fail-enabled.test.ts"]
+    },
+    {
+      "id": "T12",
+      "title": "Export DeleteBatchInternetDocumentPayload from src/index.ts",
+      "layer": "docs",
+      "deps": [],
+      "acs": ["AC-01"],
+      "dod": "DeleteBatchInternetDocumentPayload is part of the public surface re-exported from src/index.ts",
+      "files_hint": ["src/index.ts"]
+    },
+    {
+      "id": "T13",
+      "title": "Add contents: read permission to docs-deploy job",
+      "layer": "wiring",
+      "deps": [],
+      "acs": ["AC-05"],
+      "dod": "the docs-deploy job's permissions block grants contents: read, matching what actions/checkout@v4 needs",
+      "files_hint": [".github/workflows/release.yml"]
+    },
+    {
+      "id": "T14",
+      "title": "Add enablement: true to configure-pages step",
+      "layer": "wiring",
+      "deps": [],
+      "acs": ["AC-05", "AC-01"],
+      "dod": "actions/configure-pages@v5 in docs-deploy carries enablement: true so the first real release doesn't fail waiting on a manually-enabled Pages site",
+      "files_hint": [".github/workflows/release.yml"]
+    },
+    {
+      "id": "T15",
+      "title": "Add an automated test for AC-02's exact-symbol-name behavior",
+      "layer": "tests",
+      "deps": [],
+      "acs": ["AC-02"],
+      "dod": "a vitest case spawns npx typedoc --emit none against a fixture with one undocumented export and asserts a non-zero exit code and the symbol's name in the output",
+      "files_hint": ["test/unit"]
+    },
+    {
+      "id": "T16",
+      "title": "Fix stale report-only test to match shipped hard-fail behavior",
+      "layer": "tests",
+      "deps": [],
+      "acs": ["AC-06"],
+      "dod": "test/unit/ci-docs-coverage-step.test.ts no longer asserts report-only (pre-T8) behavior; superseded assertions are removed or reworded to match the enforcing check",
+      "files_hint": ["test/unit/ci-docs-coverage-step.test.ts"]
+    },
+    {
+      "id": "T17",
+      "title": "Add docs:check npm script and use it from ci.yml",
+      "layer": "wiring",
+      "deps": [],
+      "acs": [],
+      "dod": "package.json declares a docs:check script running typedoc --emit none, and ci.yml's documentation-coverage step calls npm run docs:check instead of npx typedoc directly",
+      "files_hint": ["package.json", ".github/workflows/ci.yml", "test/unit/ci-docs-coverage-step.test.ts"]
+    },
+    {
+      "id": "T18",
+      "title": "Add includeVersion to typedoc.json",
+      "layer": "infra",
+      "deps": [],
+      "acs": ["AC-05"],
+      "dod": "typedoc.json sets includeVersion: true so the generated site's header reflects the published package version",
+      "files_hint": ["typedoc.json"]
     }
   ]
 }

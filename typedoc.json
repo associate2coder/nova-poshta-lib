@@ -11,5 +11,6 @@
     "notDocumented": true
   },
   "requiredToBeDocumented": ["Enum", "Variable", "Function", "Class", "Interface", "TypeAlias", "Method"],
-  "treatWarningsAsErrors": true
+  "treatWarningsAsErrors": true,
+  "includeVersion": true
 }

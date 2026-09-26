@@ -18,6 +18,13 @@ describe("ReferenceRecordBase is exported and its 8 aliases extend it (T11, AC-0
     expect(pattern.test(contents)).toBe(true);
   });
 
+  it("ReferenceRecordBase is re-exported from src/index.ts, since it's a shared shape, not nested-only plumbing", () => {
+    const indexContents = readFileSync(repoPath("src/index.ts"), "utf8");
+    const block = indexContents.match(/export type \{([\s\S]*?)\} from "\.\/types\/common\.js";/);
+    expect(block, "expected a common type export block in src/index.ts").not.toBeNull();
+    expect(block![1]).toMatch(/\bReferenceRecordBase\b/);
+  });
+
   it.each(["CargoType", "CargoDescription", "DocumentStatus", "Pallet", "ServiceType", "TireWheel", "Tray", "AlternativePayerType", "PayerTypeForRedelivery"])(
     "%s is declared as `export interface %s extends ReferenceRecordBase {}`, not a bare type alias",
     (name) => {

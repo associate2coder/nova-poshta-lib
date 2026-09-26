@@ -17,6 +17,7 @@ export type {
   PayerType,
   PayerTypeForRedelivery,
   PaymentForm,
+  ReferenceRecordBase,
   ServiceType,
   TimeInterval,
   TimeIntervalFilters,

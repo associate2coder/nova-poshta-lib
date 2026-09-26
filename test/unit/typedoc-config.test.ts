@@ -15,6 +15,13 @@ describe("typedoc config (T1)", () => {
     expect(config.excludeInternal).toBe(true);
   });
 
+  it("includes the package version in the generated site header, so AC-05's version claim is observable (T18)", () => {
+    const raw = readFileSync(repoPath("typedoc.json"), "utf8");
+    const config = JSON.parse(raw) as { includeVersion?: boolean };
+
+    expect(config.includeVersion).toBe(true);
+  });
+
   it("package.json declares a docs:build script that runs typedoc", () => {
     const raw = readFileSync(repoPath("package.json"), "utf8");
     const pkg = JSON.parse(raw) as { scripts?: Record<string, string>; devDependencies?: Record<string, string> };

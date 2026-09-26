@@ -1,6 +1,6 @@
 {
   "name": "nova-poshta-lib",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Typed TypeScript client for the Nova Poshta API",
   "type": "module",
   "main": "./dist/index.cjs",

@@ -20,12 +20,20 @@ import type {
   UpdateCounterpartyPayload,
 } from "../../types/counterparty.js";
 
+/** Nova Poshta's counterparty methods: sender/recipient/third-party records, their contact
+ *  persons, and the create/update/delete lifecycle for both. */
 export interface CounterpartyModule {
+  /** Lists counterparties, optionally narrowed by {@link GetCounterpartiesFilters}. */
   getCounterparties(filters?: GetCounterpartiesFilters): Promise<Counterparty[]>;
+  /** Lists counterparties from the catalog, narrowed by {@link GetCounterpartiesCatalogFilters}. */
   getCounterpartiesCatalog(filters: GetCounterpartiesCatalogFilters): Promise<Counterparty[]>;
+  /** Lists the contact persons attached to a counterparty. */
   getCounterpartyContactPersons(filters: GetCounterpartyContactPersonsFilters): Promise<ContactPerson[]>;
+  /** Lists a counterparty's saved addresses. */
   getCounterpartyAddresses(filters: GetCounterpartyAddressesFilters): Promise<SavedAddress[]>;
+  /** Lists a counterparty's configured options. */
   getCounterpartyOptions(filters: GetCounterpartyOptionsFilters): Promise<CounterpartyOptions[]>;
+  /** Creates a counterparty — the payload variant's `CounterpartyType` picks which fields apply. */
   save(payload: SaveCounterpartyPayload): Promise<Counterparty | undefined>;
   /**
    * Full-replace + discriminant guard (AC-05): every field the payload's own variant requires is
@@ -33,11 +41,14 @@ export interface CounterpartyModule {
    * type. An omitted key is never treated as "leave unchanged".
    */
   update(payload: UpdateCounterpartyPayload): Promise<Counterparty | undefined>;
+  /** Deletes a counterparty. */
   delete(payload: DeleteCounterpartyPayload): Promise<DeletedCounterparty | undefined>;
+  /** Creates a contact person on a counterparty. */
   saveContactPerson(payload: SaveContactPersonPayload): Promise<ContactPerson | undefined>;
   /** AC-09: every field ContactPerson documents, required and optional alike (incl. MiddleName), is
    *  mandatory — no partial update, no "leave unchanged". */
   updateContactPerson(payload: UpdateContactPersonPayload): Promise<ContactPerson | undefined>;
+  /** Deletes a contact person. */
   deleteContactPerson(payload: DeleteContactPersonPayload): Promise<DeletedContactPerson | undefined>;
   /** Narrows `getCounterparties` by `FindByString` (and an optional `CounterpartyProperty`) — one
    *  call, same shape `getCounterparties` returns, no post-call re-filtering (AC-11). */
@@ -54,6 +65,7 @@ async function firstOrUndefined<T>(
   return records[0];
 }
 
+/** Creates the {@link CounterpartyModule} bound to the given {@link NovaPoshtaClient}. */
 export function createCounterpartyModule(client: NovaPoshtaClient): CounterpartyModule {
   const module: CounterpartyModule = {
     getCounterparties: (filters?: GetCounterpartiesFilters) =>

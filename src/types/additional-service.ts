@@ -13,10 +13,12 @@ export type ReturnDestination = "SenderAddress" | "NewAddress" | "NewWarehouse";
 
 // --- 3.1 Return group ---
 
+/** Identifies the waybill `AdditionalService.checkReturnPossible` checks. */
 export interface CheckReturnPossiblePayload {
   Number: string; // waybill IntDocNumber
 }
 
+/** One destination choice from `AdditionalService.checkReturnPossible`. */
 export interface ReturnAddressOption {
   Ref: string; // official docs' own `save`/orderCargoReturn example uses this exact field name as
                // ReturnAddressRef's value source (spec.md §1 official-docs quote, 2026-09-23)
@@ -52,6 +54,7 @@ export interface ReturnEditOption {
   Ref: string;
 }
 
+/** The `info` half of {@link CheckReturnEditPossibleResult}. */
 export interface ReturnEditInfo {
   PayerTypeDefault: string;
   Number: string;
@@ -98,6 +101,8 @@ export interface CreateReturnToSenderAddressPayload extends CreateReturnCommonFi
   RecipientWarehouse?: never;
 }
 
+/** New-address variant of {@link CreateReturnPayload} — see {@link CreateReturnToSenderAddressPayload}
+ *  for the discriminant-guard rationale shared by all three variants. */
 export interface CreateReturnToNewAddressPayload extends CreateReturnCommonFields {
   Destination: "NewAddress";
   RecipientSettlement: string;
@@ -108,6 +113,9 @@ export interface CreateReturnToNewAddressPayload extends CreateReturnCommonField
   RecipientWarehouse?: never;
 }
 
+/** New-warehouse variant of {@link CreateReturnPayload} — see
+ *  {@link CreateReturnToSenderAddressPayload} for the discriminant-guard rationale shared by all
+ *  three variants. */
 export interface CreateReturnToNewWarehousePayload extends CreateReturnCommonFields {
   Destination: "NewWarehouse";
   RecipientWarehouse: string;
@@ -118,6 +126,7 @@ export interface CreateReturnToNewWarehousePayload extends CreateReturnCommonFie
   NoteAddressRecipient?: never;
 }
 
+/** Creates a return order — the payload variant's `Destination` picks which address fields apply. */
 export type CreateReturnPayload =
   | CreateReturnToSenderAddressPayload
   | CreateReturnToNewAddressPayload
@@ -131,6 +140,7 @@ export interface SavedReturnOrder {
   Ref: string;
 }
 
+/** The pricing estimate `calculateReturn`/`calculateRedirect` resolve to. */
 export interface OrderPricingEstimate {
   Pricing: {
     // per-service cost breakdown — confirmed by official docs' own calculateReturn/calculateRedirect
@@ -170,6 +180,8 @@ export interface UpdateReturnPayload {
   SubtypeReason?: string;
 }
 
+/** Narrows a return/redirect/waybill-edit order list by number, ref, date range, or page. Shared
+ *  shape across `getReturnOrdersList`/`getRedirectionOrdersList`/`getChangeEWOrdersList`. */
 export interface OrderListFilters {
   Number?: string;
   Ref?: string;
@@ -205,6 +217,7 @@ export interface ReturnReason {
   Description: string;
 }
 
+/** Scopes `getReturnReasonsSubtypes` to one parent reason. */
 export interface ReturnReasonSubtypeFilters {
   ReasonRef?: string;
 }
@@ -219,6 +232,7 @@ export interface ReturnReasonSubtype {
 
 // --- 3.2 Redirect group ---
 
+/** Identifies the waybill `AdditionalService.checkRedirectPossible` checks. */
 export interface CheckRedirectPossiblePayload {
   Number: string;
 }
@@ -343,6 +357,7 @@ export interface UpdateRedirectPayload {
   PayerType?: string;
 }
 
+/** One redirect order summary from `getRedirectionOrdersList`. */
 export interface RedirectOrderListItem {
   OrderRef: string;
   OrderNumber: string;
@@ -392,6 +407,7 @@ export interface WaybillEditPossibility {
   PaymentMethod: string;
 }
 
+/** Identifies the waybill `AdditionalService.checkWaybillEditPossible` checks. */
 export interface CheckWaybillEditPossiblePayload {
   IntDocNumber: string;
 }

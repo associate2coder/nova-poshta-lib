@@ -32,6 +32,8 @@ import type {
   WaybillEditPossibility,
 } from "../../types/additional-service.js";
 
+/** Nova Poshta's additional-service methods: return, redirect, and waybill-edit orders — check
+ *  feasibility, create/calculate, update, list, and delete, across all three order kinds. */
 export interface AdditionalServiceModule {
   /** public-api.md §3.1, AC-01/AC-02: delegates straight to client.request() — one destination
    *  choice per array element, NonCash returned as the JSON boolean official docs show (see types'
@@ -137,6 +139,7 @@ function buildCreateReturnMethodProperties(payload: CreateReturnPayload): Record
   return { ...rest, OrderType: "orderCargoReturn" };
 }
 
+/** Creates the {@link AdditionalServiceModule} bound to the given {@link NovaPoshtaClient}. */
 export function createAdditionalServiceModule(client: NovaPoshtaClient): AdditionalServiceModule {
   const module: AdditionalServiceModule = {
     checkReturnPossible: (payload: CheckReturnPossiblePayload) =>

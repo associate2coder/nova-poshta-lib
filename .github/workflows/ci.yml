@@ -20,3 +20,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run lint
+      # AC-02/AC-04: fails this step by name on any non-internal export missing a TSDoc comment.
+      # The T8 validation spike ran this in report-only mode first (typedoc.json's
+      # treatWarningsAsErrors off) against the whole existing codebase, confirmed zero missing
+      # (AC-06), then flipped treatWarningsAsErrors on — this is the now-enforcing check.
+      - run: npm run docs:check

@@ -2,7 +2,9 @@ import type { NovaPoshtaClient } from "../../client.js";
 import { NovaPoshtaApiError } from "../../client.js";
 import type { GetStatusDocumentsPayload, TrackingStatus } from "../../types/tracking-document.js";
 
+/** Nova Poshta's shipment-tracking method — look up one or many waybills' current status. */
 export interface TrackingDocumentModule {
+  /** Resolves the tracking status for a batch of waybills. */
   getStatusDocuments(payload: GetStatusDocumentsPayload): Promise<TrackingStatus[]>;
   /** sad.md §4 decision 3: makes exactly one call carrying a single-item Documents array, then
    *  matches the response by the returned record's own Number field against the requested
@@ -13,6 +15,7 @@ export interface TrackingDocumentModule {
   getDocumentStatus(documentNumber: string, phone?: string): Promise<TrackingStatus | undefined>;
 }
 
+/** Creates the {@link TrackingDocumentModule} bound to the given {@link NovaPoshtaClient}. */
 export function createTrackingDocumentModule(client: NovaPoshtaClient): TrackingDocumentModule {
   return {
     getStatusDocuments: (payload: GetStatusDocumentsPayload) =>

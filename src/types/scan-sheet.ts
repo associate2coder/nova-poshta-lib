@@ -9,6 +9,7 @@ export interface InsertDocumentsPayload {
   Date: string;
 }
 
+/** One outcome from `ScanSheet.insertDocuments` — the sheet a document was inserted into. */
 export interface InsertDocumentsItem {
   Ref: string;
   Number: string;
@@ -24,6 +25,7 @@ export interface GetScanSheetPayload {
   CounterpartyRef: string;
 }
 
+/** A scan sheet's full detail, as returned by `ScanSheet.getScanSheet`. */
 export interface ScanSheetDetail {
   Ref: string;
   Number: string;
@@ -37,6 +39,7 @@ export interface ScanSheetDetail {
   Sender: string;
 }
 
+/** One scan sheet summary from `ScanSheet.getScanSheetList`. */
 export interface ScanSheetListItem {
   Ref: string;
   Number: string;
@@ -44,10 +47,12 @@ export interface ScanSheetListItem {
   Printed: string;
 }
 
+/** Identifies the scan sheets `ScanSheet.deleteScanSheet` removes. */
 export interface DeleteScanSheetPayload {
   ScanSheetRefs: string[];
 }
 
+/** One outcome from `ScanSheet.deleteScanSheet` — `Error` is `""` for a successful item. */
 export interface DeleteScanSheetItem {
   Ref: string;
   Number: string;
@@ -62,6 +67,7 @@ export interface RemoveDocumentsPayload {
   Ref: string;
 }
 
+/** One outcome from `ScanSheet.removeDocuments` — `Error` is `""` for a successful item. */
 export interface RemoveDocumentsItem {
   Ref: string;
   Number: string;

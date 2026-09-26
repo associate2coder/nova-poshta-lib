@@ -1,5 +1,7 @@
 import type { OpenEnum } from "./common.js";
 
+/** @internal Base shape extended by the public address types — never itself a standalone public
+ * signature. */
 export interface AddressReferenceRecordBase {
   Ref?: string;
   Description?: string;
@@ -12,12 +14,14 @@ export interface SearchWrapper<T> {
   Addresses?: T[];
 }
 
+/** Narrows `Address.getCities` to a specific city `Ref`, a search string, or a page/limit slice. */
 export interface GetCitiesFilters {
   Ref?: string;
   FindByString?: string;
   Page?: number;
   Limit?: number;
 }
+/** A Nova Poshta city record, as returned by `Address.getCities`. */
 export interface City extends AddressReferenceRecordBase {
   DescriptionRu?: string;
   Area?: string;
@@ -26,6 +30,8 @@ export interface City extends AddressReferenceRecordBase {
   CityID?: string;
 }
 
+/** Narrows `Address.getSettlements` to an area, a specific settlement `Ref`, warehouse
+ *  availability, a search string, or a page/limit slice. */
 export interface GetSettlementsFilters {
   AreaRef?: string;
   Ref?: string;
@@ -34,6 +40,8 @@ export interface GetSettlementsFilters {
   Page?: number;
   Limit?: number;
 }
+/** A Nova Poshta settlement record, as returned by `Address.getSettlements` — broader than
+ *  {@link City}, covering villages and other populated places. */
 export interface Settlement extends AddressReferenceRecordBase {
   DescriptionRu?: string;
   Area?: string;
@@ -41,10 +49,12 @@ export interface Settlement extends AddressReferenceRecordBase {
   SettlementTypeDescription?: string;
 }
 
+/** Scopes `Address.searchSettlements` to settlements matching a city name. */
 export interface SearchSettlementsParams {
   CityName: string;
   Limit?: number;
 }
+/** One settlement match from `Address.searchSettlements`, wrapped in {@link SearchWrapper}. */
 export interface SettlementAddress extends AddressReferenceRecordBase {
   DeliveryCity?: string;
   StreetsAvailability?: boolean;
@@ -55,25 +65,30 @@ export interface SettlementAddress extends AddressReferenceRecordBase {
   Present?: string;
 }
 
-export type Area = AddressReferenceRecordBase;
+/** A Nova Poshta area (oblast-level region) record, as returned by `Address.getAreas`. */
+export interface Area extends AddressReferenceRecordBase {} // eslint-disable-line @typescript-eslint/no-empty-object-type -- extends, not aliases, so TypeDoc renders its fields instead of a dangling name
 
+/** Scopes `Address.getStreet` to a city and, optionally, a search string or page/limit slice. */
 export interface GetStreetParams {
   CityRef: string;
   FindByString?: string;
   Page?: number;
   Limit?: number;
 }
+/** A Nova Poshta street record, as returned by `Address.getStreet`. */
 export interface Street extends AddressReferenceRecordBase {
   StreetsType?: string;
   StreetsTypeDescription?: string;
   Location?: { lat?: string; lon?: string };
 }
 
+/** Scopes `Address.searchSettlementStreets` to a street name within a specific settlement. */
 export interface SearchSettlementStreetsParams {
   StreetName: string;
   SettlementRef: string;
   Limit?: number;
 }
+/** One street match from `Address.searchSettlementStreets`, wrapped in {@link SearchWrapper}. */
 export interface StreetAddress extends AddressReferenceRecordBase {
   SettlementRef?: string;
   SettlementStreetRef?: string;
@@ -82,6 +97,8 @@ export interface StreetAddress extends AddressReferenceRecordBase {
   Present?: string;
 }
 
+/** Narrows `Address.getWarehouses` by city, warehouse type, a search string, or a page/limit
+ *  slice; `Language` selects the response's language. */
 export interface GetWarehousesFilters {
   CityName?: string;
   CityRef?: string;
@@ -92,6 +109,7 @@ export interface GetWarehousesFilters {
   WarehouseId?: string;
   FindByString?: string;
 }
+/** A Nova Poshta warehouse (branch/locker) record, as returned by `Address.getWarehouses`. */
 export interface Warehouse extends AddressReferenceRecordBase {
   Number?: string;
   CityRef?: string;
@@ -104,8 +122,11 @@ export interface Warehouse extends AddressReferenceRecordBase {
   Schedule?: Record<string, string>;
 }
 
-export type WarehouseType = AddressReferenceRecordBase;
+/** A Nova Poshta warehouse-type record, as returned by `Address.getWarehouseTypes`. */
+export interface WarehouseType extends AddressReferenceRecordBase {} // eslint-disable-line @typescript-eslint/no-empty-object-type -- extends, not aliases, so TypeDoc renders its fields instead of a dangling name
 
+/** Creates a saved address for a counterparty. Every field is required by the wire method
+ *  (`Address.save`); there is no partial-create variant. */
 export interface SaveAddressPayload {
   CounterpartyRef: string;
   StreetRef: string;
@@ -113,6 +134,7 @@ export interface SaveAddressPayload {
   Flat?: string;
   Note?: string;
 }
+/** The address record `Address.save`/`update` resolve to. */
 export interface SavedAddress {
   Ref: string;
   Description?: string;
@@ -130,9 +152,11 @@ export type UpdateAddressPayload = Required<Omit<SaveAddressPayload, "Counterpar
   CounterpartyRef: string;
 };
 
+/** Identifies the saved address `Address.delete` removes. */
 export interface DeleteAddressPayload {
   Ref: string;
 }
+/** Confirms which saved address `Address.delete` removed. */
 export interface DeletedAddress {
   Ref: string;
 }

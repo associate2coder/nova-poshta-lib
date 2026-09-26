@@ -30,6 +30,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
+    "docs:build": "typedoc",
+    "docs:check": "typedoc --emit none",
     "format": "prettier --write .",
     "changeset": "changeset",
     "release": "changeset publish"
@@ -38,10 +40,12 @@
   "devDependencies": {
     "@changesets/cli": "^2.27.0",
     "@eslint/js": "^9.9.0",
+    "@types/node": "^18.19.130",
     "eslint": "^9.9.0",
     "eslint-config-prettier": "^9.1.0",
     "prettier": "^3.3.0",
     "tsup": "^8.2.0",
+    "typedoc": "^0.28.20",
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.0.0",
     "vitest": "^2.0.0"

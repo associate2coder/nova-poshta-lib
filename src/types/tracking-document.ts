@@ -1,8 +1,11 @@
+/** One waybill lookup key for `TrackingDocument.getStatusDocuments` — the recipient's phone
+ *  narrows the match on Nova Poshta's side. */
 export interface TrackingDocumentFilter {
   DocumentNumber: string;
   Phone: string;
 }
 
+/** A batch of waybill lookups for `TrackingDocument.getStatusDocuments`. */
 export interface GetStatusDocumentsPayload {
   Documents: TrackingDocumentFilter[];
 }

@@ -7,6 +7,6 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   eslintConfigPrettier,
   {
-    ignores: ["dist/**"],
+    ignores: ["dist/**", "docs-site/**"],
   },
 );

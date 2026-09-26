@@ -34,7 +34,7 @@
     "docs:check": "typedoc --emit none",
     "format": "prettier --write .",
     "changeset": "changeset",
-    "release": "changeset publish"
+    "release": "node scripts/stage-publish.mjs"
   },
   "license": "MIT",
   "devDependencies": {

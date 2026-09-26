@@ -1,17 +1,24 @@
 ---
-status: Accepted
+status: "Superseded by 0002"
 owner: "associate2coder"
 reviewers: []
-updated_at: "2026-09-23"
+updated_at: "2026-09-26"
 feature_size: "S"
 ticket: "docs/features/documentation/spec.md"
 ---
 
 # 0001 — Gate the docs-deploy job on the changesets publish output
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0002](0002-manual-docs-deploy-trigger-under-npm-staged-publishing.md)
 - **Date:** 2026-09-23
 - **Deciders:** associate2coder (during the `design` Socratic walk)
+
+> **2026-09-26 update:** this ADR's premise — that `changesets/action`'s `published` output reliably
+> means "the version is now live on npm" — broke when the release pipeline moved to npm's OIDC
+> trusted-publishing + staged-publishing flow (ADR-0002). Staging a publish for review is not the
+> same event as a maintainer later approving it, and GitHub Actions has no built-in signal for the
+> approval. The mechanics below (job-level credential isolation, the `published`-output gate) are
+> preserved for history; they no longer describe the running pipeline.
 
 ## Context
 

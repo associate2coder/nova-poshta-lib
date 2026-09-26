@@ -24,4 +24,4 @@ jobs:
       # The T8 validation spike ran this in report-only mode first (typedoc.json's
       # treatWarningsAsErrors off) against the whole existing codebase, confirmed zero missing
       # (AC-06), then flipped treatWarningsAsErrors on — this is the now-enforcing check.
-      - run: npx typedoc --emit none
+      - run: npm run docs:check

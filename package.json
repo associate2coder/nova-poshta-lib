@@ -31,6 +31,7 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "docs:build": "typedoc",
+    "docs:check": "typedoc --emit none",
     "format": "prettier --write .",
     "changeset": "changeset",
     "release": "changeset publish"

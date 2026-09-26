@@ -6,22 +6,28 @@ function repoPath(relativePath: string): string {
   return fileURLToPath(new URL(`../../${relativePath}`, import.meta.url));
 }
 
-describe("ci.yml documentation-coverage step (T7, AC-06)", () => {
+describe("ci.yml documentation-coverage step (T7/T17, AC-06)", () => {
   const contents = readFileSync(repoPath(".github/workflows/ci.yml"), "utf8");
 
-  it("runs typedoc's validation against the existing build-test-lint job", () => {
-    expect(contents).toMatch(/run:\s*npx typedoc --emit none/);
-  });
-
-  it("does not yet pass --treatWarningsAsErrors to the CLI invocation (report-only until T8's spike confirms zero missing)", () => {
-    expect(contents).not.toMatch(/typedoc[^\n]*--treatWarningsAsErrors/);
+  it("runs typedoc's validation via the docs:check script, following the repo's npm run convention", () => {
+    expect(contents).toMatch(/run:\s*npm run docs:check/);
   });
 
   it("the step appears after the existing lint step, in the same job", () => {
     const lintIndex = contents.indexOf("npm run lint");
-    const docsStepIndex = contents.indexOf("npx typedoc --emit none");
+    const docsStepIndex = contents.indexOf("npm run docs:check");
     expect(lintIndex).toBeGreaterThan(-1);
     expect(docsStepIndex).toBeGreaterThan(lintIndex);
+  });
+});
+
+describe("package.json docs:check script (T17)", () => {
+  it("runs typedoc in validation-only mode", () => {
+    const pkg = JSON.parse(readFileSync(repoPath("package.json"), "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(pkg.scripts?.["docs:check"]).toBe("typedoc --emit none");
   });
 });
 

@@ -17,14 +17,14 @@
 | T10 | Fix `Area`/`WarehouseType` unbrowsable aliases | docs | associate2coder | XS | — | done |
 | T11 | Export `ReferenceRecordBase`, fix 9 unbrowsable common aliases (found a 9th beyond the review's 8: `PayerTypeForRedelivery`), re-enable `notExported` | docs | associate2coder | S | — | done |
 | T12 | Export `DeleteBatchInternetDocumentPayload` from `src/index.ts` | docs | associate2coder | XS | — | done |
-| T13 | Add `contents: read` to `docs-deploy` job | wiring | associate2coder | XS | — | todo |
-| T14 | Add `enablement: true` to `configure-pages` step | wiring | associate2coder | XS | — | todo |
-| T15 | Automated test for AC-02's exact-symbol-name behavior | tests | associate2coder | S | — | todo |
-| T16 | Fix stale report-only test | tests | associate2coder | XS | — | todo |
-| T17 | Add `docs:check` script, use it from `ci.yml` | wiring | associate2coder | XS | — | todo |
-| T18 | Add `includeVersion` to `typedoc.json` | infra | associate2coder | XS | — | todo |
+| T13 | Add `contents: read` to `docs-deploy` job | wiring | associate2coder | XS | — | done |
+| T14 | Add `enablement: true` to `configure-pages` step | wiring | associate2coder | XS | — | done |
+| T15 | Automated test for AC-02's exact-symbol-name behavior | tests | associate2coder | S | — | done |
+| T16 | Fix stale report-only test | tests | associate2coder | XS | — | done |
+| T17 | Add `docs:check` script, use it from `ci.yml` | wiring | associate2coder | XS | — | done |
+| T18 | Add `includeVersion` to `typedoc.json` | infra | associate2coder | XS | — | done |
 
-**Total:** 9 tasks, ~7 person-days, +9 follow-up tasks from `_review/review-2026-09-23.md` (CHANGES REQUESTED).
+**Total:** 9 tasks, ~7 person-days, +9 follow-up tasks from `_review/review-2026-09-23.md` (CHANGES REQUESTED) — all resolved.
 
 \* T9: structural DoD verified; the live end-to-end check (actual npm publish → site update ≤5min)
 is not verifiable in an implementation session — confirm against the first 3 real releases (spec §7 KPI).

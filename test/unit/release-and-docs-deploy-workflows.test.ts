@@ -55,10 +55,10 @@ describe("docs-deploy.yml (AC-05, ADR-0002)", () => {
     expect(contents).toMatch(/contents:\s*read/);
   });
 
-  it("enables GitHub Pages via configure-pages's enablement flag, since Pages isn't yet on for this repo", () => {
+  it("uses configure-pages without enablement:true — GITHUB_TOKEN can never create a Pages site (needs administration:write); Pages must already be enabled manually (repo Settings → Pages → Source: GitHub Actions)", () => {
     const configurePagesIndex = contents.indexOf("actions/configure-pages@");
     expect(configurePagesIndex).toBeGreaterThan(-1);
     const configurePagesStep = contents.slice(configurePagesIndex, configurePagesIndex + 100);
-    expect(configurePagesStep).toMatch(/enablement:\s*true/);
+    expect(configurePagesStep).not.toMatch(/enablement:\s*true/);
   });
 });

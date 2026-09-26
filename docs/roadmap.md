@@ -28,7 +28,7 @@ available as a typed, tested, documented module in `nova-poshta-lib`, published 
 | 5 | tracking-document — typed module (1 raw method + 1 single-waybill convenience) for tracking a shipment by waybill number + optional phone, independent of internet-document and `common` | [`docs/features/tracking-document/spec.md`](features/tracking-document/spec.md) | S | shipped |
 | 6 | scan-sheet — typed module (5 raw methods + `addToTodaysScanSheet` convenience) for batching waybills into a scan sheet for courier handoff | [`docs/features/scan-sheet/spec.md`](features/scan-sheet/spec.md) | S | shipped |
 | 7 | additional-service — typed module (18 raw methods + `createReturnIfPossible` convenience) for post-creation shipment actions: returns, redirections, waybill edits | [`docs/features/additional-service/spec.md`](features/additional-service/spec.md) | M | shipped |
-| 8 | documentation — TSDoc comments on every exported symbol across all modules + TypeDoc-generated static API reference, wired into CI/publish | [`docs/features/documentation/spec.md`](features/documentation/spec.md) | S | spec'd |
+| 8 | documentation — TSDoc comments on every exported symbol across all modules + TypeDoc-generated static API reference, wired into CI/publish | [`docs/features/documentation/spec.md`](features/documentation/spec.md) | S | shipped |
 
 Sizing note: 4 and 7 are called **M** rather than **S** like their shipped precedents because each
 has a genuinely broader method surface than `common`/`address`/`counterparty` — 4 adds
@@ -129,3 +129,4 @@ picture, not a headless graph.
 | tracking-document | 2026-09-22 | [PR #9](https://github.com/associate2coder/nova-poshta-lib/pull/9) |
 | scan-sheet | 2026-09-22 | [PR #10](https://github.com/associate2coder/nova-poshta-lib/pull/10) |
 | additional-service | 2026-09-23 | [PR #11](https://github.com/associate2coder/nova-poshta-lib/pull/11) |
+| documentation | 2026-09-26 | PR link to be added after creation |

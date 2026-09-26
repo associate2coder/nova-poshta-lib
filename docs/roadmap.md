@@ -129,4 +129,4 @@ picture, not a headless graph.
 | tracking-document | 2026-09-22 | [PR #9](https://github.com/associate2coder/nova-poshta-lib/pull/9) |
 | scan-sheet | 2026-09-22 | [PR #10](https://github.com/associate2coder/nova-poshta-lib/pull/10) |
 | additional-service | 2026-09-23 | [PR #11](https://github.com/associate2coder/nova-poshta-lib/pull/11) |
-| documentation | 2026-09-26 | PR link to be added after creation |
+| documentation | 2026-09-26 | [PR #13](https://github.com/associate2coder/nova-poshta-lib/pull/13) |

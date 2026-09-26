@@ -45,6 +45,7 @@ jobs:
     if: needs.release.outputs.published == 'true'
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       id-token: write
       pages: write
     environment:
@@ -59,6 +60,8 @@ jobs:
       - run: npm ci
       - run: npm run docs:build
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs-site

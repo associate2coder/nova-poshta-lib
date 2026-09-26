@@ -37,4 +37,19 @@ describe("release.yml docs-deploy job (T9, AC-01, AC-05, ADR-0001)", () => {
     const docsDeploySection = contents.slice(docsDeployIndex);
     expect(docsDeploySection).toMatch(/npm run docs:build/);
   });
+
+  it("declares contents: read for actions/checkout, since permissions: zeroes every unlisted scope (T13)", () => {
+    const docsDeployIndex = contents.indexOf("docs-deploy:");
+    const docsDeploySection = contents.slice(docsDeployIndex);
+    expect(docsDeploySection).toMatch(/contents:\s*read/);
+  });
+
+  it("enables GitHub Pages via configure-pages's enablement flag, since Pages isn't yet on for this repo (T14)", () => {
+    const docsDeployIndex = contents.indexOf("docs-deploy:");
+    const docsDeploySection = contents.slice(docsDeployIndex);
+    const configurePagesIndex = docsDeploySection.indexOf("actions/configure-pages@");
+    expect(configurePagesIndex).toBeGreaterThan(-1);
+    const configurePagesStep = docsDeploySection.slice(configurePagesIndex, configurePagesIndex + 100);
+    expect(configurePagesStep).toMatch(/enablement:\s*true/);
+  });
 });

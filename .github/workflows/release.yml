@@ -17,12 +17,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # ADR-0002: npm's OIDC trusted-publisher flow needs npm CLI >= 11.15.0, which in turn
+      # requires Node >= 20.17 — newer than this repo's own published Node >=18 support floor
+      # (package.json engines), so this job alone runs on a newer Node than the rest of CI.
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
           cache: npm
-      # ADR-0002: npm's OIDC trusted-publisher flow (used below via id-token: write) needs
-      # npm CLI >= 11.15.0; Node 18's bundled npm predates it.
       - run: npm install -g npm@^11.15.0
       - run: npm ci
       - run: npm run build

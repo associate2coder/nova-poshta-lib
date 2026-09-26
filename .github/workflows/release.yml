@@ -13,8 +13,6 @@ jobs:
       contents: write
       pull-requests: write
       id-token: write
-    outputs:
-      published: ${{ steps.changesets.outputs.published }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,47 +21,16 @@ jobs:
         with:
           node-version: 18
           cache: npm
+      # ADR-0002: npm's OIDC trusted-publisher flow (used below via id-token: write) needs
+      # npm CLI >= 11.15.0; Node 18's bundled npm predates it.
+      - run: npm install -g npm@^11.15.0
       - run: npm ci
       - run: npm run build
       - run: npm test
-      - name: Create release PR or publish to npm
+      - name: Create release PR, or stage a publish for review
         id: changesets
         uses: changesets/action@v1
         with:
           publish: npm run release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  # ADR-0001: a same-workflow job gated on changesets/action's own `published` output, rather than
-  # a separate workflow_run-triggered file. GitHub Actions treats jobs within one run as
-  # independent DAG nodes — this job's failure can never retroactively change the already-completed
-  # `release` job's status, satisfying AC-05's non-blocking guarantee without extra plumbing. It
-  # receives only the short-lived Pages OIDC token (id-token: write) — never NPM_TOKEN.
-  docs-deploy:
-    needs: release
-    if: needs.release.outputs.published == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-      pages: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: npm
-      - run: npm ci
-      - run: npm run docs:build
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs-site
-      - id: deployment
-        uses: actions/deploy-pages@v4

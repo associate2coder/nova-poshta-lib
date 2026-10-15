@@ -3,6 +3,15 @@
 Typed TypeScript client library for the Nova Poshta API. No framework, no database — a stateless
 library wrapping `fetch` calls to `https://api.novaposhta.ua/v2.0/json/`.
 
+## In-progress release branch
+
+`release/0.1.1-rc.0` holds fixes not yet fully verified (full test coverage, incl. a live-API
+integration check, is still pending) — currently the `additional-service` waybill-edit field-
+optionality fix and `internetDocument.update()`/`additionalService.createWaybillEdit` cross-ref
+docs. Until that branch is merged to `main` and published, base further related work on it rather
+than on `main`, so these changes don't ship half-tested and so unrelated work doesn't conflict with
+them. Remove this note once `release/0.1.1-rc.0` merges.
+
 ## Layout
 
 - `src/client.ts` — core client: builds the `apiKey`/`modelName`/`calledMethod`/`methodProperties`

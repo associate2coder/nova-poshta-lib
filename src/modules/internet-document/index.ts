@@ -27,6 +27,12 @@ export interface InternetDocumentModule {
    * (BackwardDeliveryData, and — for a Doors-ending leg — SenderFlat/RecipientFlat): each of these
    * stays optional by design, and omitting it clears it — it is never carried forward from a
    * previous version.
+   *
+   * Only works while Nova Poshta still considers the waybill editable this way — typically until
+   * it's accepted/processed. Once Nova Poshta declines this call for that reason (a
+   * NovaPoshtaApiError), the correction path is `additionalService`'s waybill-edit pair —
+   * `checkWaybillEditPossible` / `createWaybillEdit` (wire `OrderType: "orderChangeEW"`) — a
+   * separate Nova Poshta "additional service" request, not a retry of this method.
    */
   update(payload: UpdateInternetDocumentPayload): Promise<SavedInternetDocument | undefined>;
   /** ADR-0005: exactly one Ref per call — Nova Poshta's `delete` is not confirmed batch-capable

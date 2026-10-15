@@ -83,6 +83,52 @@ if (waybill) {
 await internetDocument.delete({ Ref: "<waybill ref>" });
 await internetDocument.deleteBatch({ Documents: ["<waybill ref 1>", "<waybill ref 2>"] });
 
+// update() only works while Nova Poshta still considers the waybill editable this way — typically
+// until it's accepted/processed. It's also a full-replace call (AC-06): every field below is
+// required, and omitting an optional one (e.g. BackwardDeliveryData) clears it rather than keeping
+// its previous value.
+try {
+  await internetDocument.update({
+    Ref: waybill!.Ref,
+    ServiceType: "WarehouseWarehouse",
+    CargoType: "Parcel",
+    PayerType: "Sender",
+    PaymentMethod: "Cash",
+    DateTime: "21.09.2026",
+    Weight: 1,
+    SeatsAmount: 1,
+    Description: "Books",
+    Cost: 500,
+    CitySender: "<city ref>",
+    Sender: "<sender counterparty ref>",
+    SenderAddress: "<sender warehouse ref>",
+    ContactSender: "<contact person ref>",
+    SendersPhone: "380501234567",
+    CityRecipient: "<city ref>",
+    Recipient: recipient.Ref,
+    ContactRecipient: "<recipient contact person ref>",
+    RecipientsPhone: "380501234567",
+    RecipientAddress: "<new recipient warehouse ref>",
+  });
+} catch {
+  // Nova Poshta declined the direct edit — typically because it already accepted/processed the
+  // waybill. From here on, correcting it is additionalService's waybill-edit pair, a separate
+  // Nova Poshta "additional service" request (OrderType: "orderChangeEW"), not a retry of update().
+  const canEdit = await additionalService.checkWaybillEditPossible({ IntDocNumber: waybill!.IntDocNumber });
+  if (canEdit.CanChangeRecipient) {
+    await additionalService.createWaybillEdit({
+      IntDocNumber: waybill!.IntDocNumber,
+      PaymentMethod: "Cash",
+      SenderContactName: "<sender contact name>",
+      SenderPhone: "380501234567",
+      Recipient: "<new recipient counterparty ref>",
+      RecipientContactName: "<new recipient contact name>",
+      RecipientPhone: "380509876543",
+      PayerType: "Sender",
+    });
+  }
+}
+
 // tracking-document works for any waybill number — one this library created, one imported from
 // Nova Poshta's own portal, or one a third party shipped — with no dependency on internet-document.
 const status = await trackingDocument.getDocumentStatus("20400048799000");

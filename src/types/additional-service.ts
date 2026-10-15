@@ -426,16 +426,25 @@ export interface CheckWaybillEditPossiblePayload {
  *  instead of "orderChangeEW", and includes Reason/SubtypeReason fields absent from the real docs
  *  page) — neither SDK was ever a reliable source for this shape. The other 8 Can... flags have no
  *  corresponding field here regardless of what checkWaybillEditPossible just reported (AC-16).
- *  OrderType: "orderChangeEW" is set internally. */
+ *  OrderType: "orderChangeEW" is set internally.
+ *
+ *  **Required/optional corrected (live re-capture of the same page, 2026-10-15):** the page's own
+ *  request-field table marks required parameters with `*` — only `IntDocNumber*` and `OrderType*`
+ *  carry it; `PaymentMethod`, `SenderContactName`, `SenderPhone`, `Recipient`, `RecipientContactName`,
+ *  `RecipientPhone`, and `PayerType` are all unmarked (optional). The field list itself was already
+ *  correct — only their mandatory/optional status was wrong, every field having been shipped required
+ *  (the round-4 capture quoted the JSON example, which shows one value per field either way, not the
+ *  table's own `*` column). `OrderType` stays internal-only regardless, so it never appears on this
+ *  caller-facing type. */
 export interface CreateWaybillEditPayload {
   IntDocNumber: string;
-  PaymentMethod: PaymentMethod;
-  SenderContactName: string;
-  SenderPhone: string;
-  Recipient: string;
-  RecipientContactName: string;
-  RecipientPhone: string;
-  PayerType: string;
+  PaymentMethod?: PaymentMethod;
+  SenderContactName?: string;
+  SenderPhone?: string;
+  Recipient?: string;
+  RecipientContactName?: string;
+  RecipientPhone?: string;
+  PayerType?: string;
 }
 
 /** {Number, Ref} confirmed verbatim by official docs' own save/orderChangeEW response example

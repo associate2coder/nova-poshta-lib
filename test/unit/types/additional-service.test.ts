@@ -270,6 +270,13 @@ describe("additional-service domain types (T1)", () => {
       // wire's own (misspelled) field name — not a typo in this test, see public-api.md §3.3.
       expect(listItem.AfterChangeChangeSenderCounterparty).toBe("new-sender-counterparty-ref");
     });
+
+    it("CreateWaybillEditPayload: only IntDocNumber is required, per the live docs page's own `*` column (2026-10-15 re-capture) — every other field is optional", () => {
+      const minimalPayload: CreateWaybillEditPayload = { IntDocNumber: "waybill-9" };
+
+      expect(minimalPayload.IntDocNumber).toBe("waybill-9");
+      expect(minimalPayload.PaymentMethod).toBeUndefined();
+    });
   });
 
   describe("public-api.md §10's items — resolved by the 2026-09-23 official-docs capture (review round 1), except item 5", () => {

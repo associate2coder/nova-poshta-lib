@@ -508,6 +508,18 @@ agreeing struct (`ChangeEWRequest`) is actually that SDK's list-filter struct fo
 shape — only the docs page itself, now genuinely quoted, resolves it. `SavedWaybillEditOrder.{Number,
 Ref}` now genuinely quoted too.
 
+**Correction (live re-capture of the same page, 2026-10-15): required/optional was wrong, not just
+unconfirmed.** The round-4 capture above only quoted the page's JSON example, never its own
+request-field table — the table itself marks required parameters with `*`, and only `IntDocNumber*`
+and `OrderType*` carry it; `PaymentMethod`, `SenderContactName`, `SenderPhone`, `Recipient`,
+`RecipientContactName`, `RecipientPhone`, and `PayerType` are all unmarked. `CreateWaybillEditPayload`
+had shipped all 8 fields as TypeScript-required, over-constraining callers relative to what Nova
+Poshta's own docs document as mandatory. Fixed: only `IntDocNumber` stays required; the other 7 are
+now optional. The field *names* and *shapes* were never wrong — only their required/optional status.
+Still unconfirmed: whether omitting an optional field leaves that value unchanged or clears it
+server-side (the docs page states neither) — `createWaybillEdit`'s own doc comment now says so
+explicitly rather than assuming full-replace like `updateReturn`/`updateRedirect`.
+
 **`PaymentMethod`'s `"NonCash"` member — resolved, not carried over from another module.** The
 field-description column reads "Форма розрахунку (Cash/NonCash)" verbatim on the return-save,
 redirect-save, and redirect-calculate pages alike — three independent explicit enumerations of the same

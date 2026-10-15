@@ -101,12 +101,24 @@ export interface AdditionalServiceModule {
   getRedirectionOrdersList(filters?: OrderListFilters): Promise<RedirectOrderListItem[]>;
   /** public-api.md §3.3/§5, AC-15/AC-16: resolves ONE typed WaybillEditPossibility record via
    *  client.requestFirst() — all 11 Can... flags are returned to the caller untouched, purely
-   *  informational (AC-16); this module performs no client-side gating on them. */
+   *  informational (AC-16); this module performs no client-side gating on them.
+   *
+   *  This is the post-acceptance counterpart to `internetDocument.update()`: once Nova Poshta no
+   *  longer accepts that direct `update` call (typically once the waybill is accepted/processed),
+   *  this check — and `createWaybillEdit` below — is the correction path instead, not a retry of
+   *  `update`. */
   checkWaybillEditPossible(payload: CheckWaybillEditPossiblePayload): Promise<WaybillEditPossibility>;
   /** public-api.md §3.3/§5, AC-15/AC-16: forwarded to save/orderChangeEW via client.requestFirst()
    *  as-is — OrderType: "orderChangeEW" set internally, never caller-settable. No client-side gating
    *  against checkWaybillEditPossible's Can... flags (AC-16); Nova Poshta's own accept/decline is the
-   *  sole outcome. */
+   *  sole outcome. See checkWaybillEditPossible's doc comment above for how this relates to
+   *  `internetDocument.update()`.
+   *
+   *  **Not confirmed full-replace:** unlike `internetDocument.update()`/`updateReturn`/`updateRedirect`
+   *  (each confirmed full-replace by official docs' own examples), only `IntDocNumber` is required
+   *  here (see CreateWaybillEditPayload's doc comment) — the docs page never states whether an omitted
+   *  optional field is left unchanged or cleared server-side, so this library makes no claim either
+   *  way; treat it as undetermined until confirmed by a live call. */
   createWaybillEdit(payload: CreateWaybillEditPayload): Promise<SavedWaybillEditOrder>;
   /** public-api.md §3.3/§5, AC-17: thin pass-through to client.request() — same OrderListFilters
    *  shape as the other list methods; resolves ChangeEWOrderListItem[] including the wire's own
